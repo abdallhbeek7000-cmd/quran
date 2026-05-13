@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -53,6 +54,13 @@ if (!userDoc.exists) {
 final role = userDoc['role'];
 if (rememberMe) {
 
+  final prefs =
+      await SharedPreferences.getInstance();
+
+  await prefs.setBool(
+    'isLoggedIn',
+    true,
+  );
 }
 
       Navigator.pushReplacementNamed(
