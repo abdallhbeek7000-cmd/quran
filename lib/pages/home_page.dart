@@ -12,7 +12,9 @@ import '../services/cycle_service.dart';
 import 'statistics_page.dart';
 import 'honor_board_page.dart';
 import 'dashboard_page.dart';
+import 'daily_stats_page.dart';
 import 'supervisor_page.dart';
+
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -260,6 +262,26 @@ SizedBox(
     ),
   ),
 ),
+const SizedBox(height: 10),
+
+SizedBox(
+  width: double.infinity,
+  child: ElevatedButton(
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              const DailyStatsPage(),
+        ),
+      );
+    },
+    child: const Text(
+      "الإحصائيات اليومية",
+    ),
+  ),
+),
+
 const SizedBox(height: 10),
 
 SizedBox(
