@@ -180,7 +180,7 @@ body: Column(
   ),
 ),
 
-    Expanded(
+    Flexible(
       child: StreamBuilder(        stream: query.snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
@@ -237,8 +237,9 @@ if (!(matchesSearch &&
                 margin:
                     const EdgeInsets.all(10),
                 child: ListTile(
+                  isThreeLine: true,
                   leading: CircleAvatar(
-  radius: 28,
+  radius: 22,
   backgroundColor:
       AppColors.primary,
   child: Text(
