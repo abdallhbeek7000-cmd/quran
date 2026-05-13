@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'add_session_page.dart';
 import '../models/cycle_model.dart';
-import 'student_sessions_page.dart';
 import '../utils/app_colors.dart';
 import 'add_student_page.dart';
 import 'edit_student_page.dart';
+import 'add_session_page.dart';
+import 'student_sessions_page.dart';
 
 class StudentsPage extends StatefulWidget {
   final CycleModel cycle;
@@ -328,114 +328,107 @@ FutureBuilder(
     );
   },
 ),
-                    ],
-                  ),
 
-                  
-                  trailing: Row(
-  mainAxisSize: MainAxisSize.min,
+const SizedBox(height: 10),
+
+Wrap(
+
+  spacing: 8,
+  runSpacing: 8,
+
   children: [
+
     ElevatedButton(
+
       onPressed: () {
+
         Navigator.push(
+
           context,
+
           MaterialPageRoute(
-            builder: (_) => AddSessionPage(
+            builder: (_) =>
+                AddSessionPage(
+
               studentId: student.id,
-              studentName: data['name'],
+
+              studentName:
+                  data['name'],
+
               supervisorId:
                   data['supervisorId'],
+
               supervisorName:
                   data['supervisorName'],
             ),
           ),
         );
       },
-      child: const Text("جلسة"),
+
+      child: const Text(
+        "جلسة",
+      ),
     ),
 
-    const SizedBox(width: 5),
-
     ElevatedButton(
+
       onPressed: () {
+
         Navigator.push(
+
           context,
+
           MaterialPageRoute(
             builder: (_) =>
                 StudentSessionsPage(
+
               studentId: student.id,
-              studentName: data['name'],
+
+              studentName:
+                  data['name'],
+
               role: role,
             ),
           ),
         );
       },
-      child: const Text("السجل"),
-    ),
 
-    IconButton(
-  icon: const Icon(Icons.edit),
-
-  onPressed: () {
-
-    Navigator.push(
-      context,
-
-      MaterialPageRoute(
-        builder: (_) => EditStudentPage(
-          student: student,
-        ),
+      child: const Text(
+        "السجل",
       ),
-    );
-  },
+    ),
+  ],
 ),
+                    ],
+                  ),
+
+                  
+                  trailing: Column(
+
+  mainAxisSize:
+      MainAxisSize.min,
+
+  children: [
 
     IconButton(
-  icon: const Icon(
-    Icons.delete,
-    color: Colors.red,
-  ),
-  onPressed: () async {
-    final confirm = await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('تأكيد الحذف'),
-          content: const Text(
-            'هل أنت متأكد من حذف الطالب؟',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context, false);
-              },
-              child: const Text('إلغاء'),
-            ),
+      icon: const Icon(
+        Icons.edit,
+      ),
 
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context, true);
-              },
-              child: const Text(
-                'حذف',
-                style: TextStyle(
-                  color: Colors.red,
-                ),
-              ),
+      onPressed: () {
+
+        Navigator.push(
+          context,
+
+          MaterialPageRoute(
+            builder: (_) =>
+                EditStudentPage(
+              student: student,
             ),
-          ],
+          ),
         );
       },
-    );
-
-    if (confirm == true) {
-      await FirebaseFirestore.instance
-          .collection('students')
-          .doc(student.id)
-          .delete();
-    }
-  },
-),
+    ),
   ],
 ),
                 ),
