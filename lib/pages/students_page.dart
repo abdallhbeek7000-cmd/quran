@@ -24,16 +24,19 @@ class StudentsPage extends StatefulWidget {
 
 class _StudentsPageState extends State<StudentsPage> {
   String search = '';
-  String selectedSupervisor = '';
+  // تغيير الفلتر ليعتمد على الـ ID بدلاً من الاسم لضمان التطابق
+  String selectedSupervisorId = ''; 
   final Color primaryColor = const Color(0xff425c75);
 
   @override
   Widget build(BuildContext context) {
+    // بناء الاستعلام الأساسي
     Query query = FirebaseFirestore.instance
         .collection('students')
         .where('cycleId', isEqualTo: widget.cycle.id)
         .where('archived', isEqualTo: false);
 
+    // إذا كان المستخدم مشرفاً، نعرض طلابه فقط بشكل إجباري
     if (widget.role == "supervisor") {
       query = query.where('supervisorId', isEqualTo: widget.uid);
     }
@@ -55,7 +58,7 @@ class _StudentsPageState extends State<StudentsPage> {
           : null,
       body: Column(
         children: [
-          // قسم البحث والفلترة
+          // قسم البحث والفلترة المطور
           Container(
             padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
@@ -83,21 +86,29 @@ class _StudentsPageState extends State<StudentsPage> {
             ),
           ),
 
-          // قائمة الطلاب
+          // قائمة الطلاب مع الفلترة البرمجية الصحيحة
           Expanded(
-            child: StreamBuilder(
+            child: StreamBuilder<QuerySnapshot>(
               stream: query.snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                if (!snapshot.hasData) return _buildEmptyState("لا توجد بيانات حالياً");
+
+                // الفلترة البرمجية (Client-side filtering) للبحث والاسم والمشرف
                 final docs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
+                  
+                  // 1. فلترة البحث بالاسم
                   final nameMatches = data['name'].toString().toLowerCase().contains(search);
-                  final supervisorMatches = selectedSupervisor.isEmpty || data['supervisorName'] == selectedSupervisor;
+                  
+                  // 2. فلترة المشرف (تتم عبر الـ ID لأنه فريد ولا يتغير)
+                  final supervisorMatches = selectedSupervisorId.isEmpty || 
+                                           (data['supervisorId'] != null && data['supervisorId'] == selectedSupervisorId);
+                  
                   return nameMatches && supervisorMatches;
                 }).toList();
 
-                if (docs.isEmpty) return _buildEmptyState();
+                if (docs.isEmpty) return _buildEmptyState("لم نجد نتائج تطابق بحثك");
 
                 return ListView.builder(
                   padding: const EdgeInsets.all(15),
@@ -112,7 +123,42 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  // تصميم بطاقة الطالب
+  // ويدجت اختيار المشرف (الفلتر) المطور
+  Widget _buildSupervisorFilter() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox();
+        final supervisors = snapshot.data!.docs;
+        
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          width: double.infinity,
+          decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: selectedSupervisorId.isEmpty ? null : selectedSupervisorId,
+              hint: const Text("كل المشرفين", style: TextStyle(color: Colors.white70, fontSize: 14)),
+              dropdownColor: primaryColor,
+              icon: const Icon(Icons.filter_list, color: Colors.white),
+              items: [
+                const DropdownMenuItem(value: '', child: Text("كل المشرفين", style: TextStyle(color: Colors.white))),
+                ...supervisors.map((sup) {
+                  // نستخدم الـ ID الخاص بالوثيقة كقيمة للفلتر
+                  return DropdownMenuItem(
+                    value: sup.id, 
+                    child: Text(sup['name'], style: const TextStyle(color: Colors.white)),
+                  );
+                }),
+              ],
+              onChanged: (v) => setState(() => selectedSupervisorId = v!),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildStudentCard(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return Container(
@@ -130,16 +176,16 @@ class _StudentsPageState extends State<StudentsPage> {
               radius: 25,
               backgroundColor: primaryColor.withOpacity(0.1),
               child: Text(
-                data['name'].toString().substring(0, 1),
+                data['name'].toString().isNotEmpty ? data['name'].toString().substring(0, 1) : "?",
                 style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20),
               ),
             ),
-            title: Text(data['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            title: Text(data['name'] ?? 'بدون اسم', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 5),
-                Text("الرقم: ${data['serial']}", style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                 Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: primaryColor, fontSize: 13)),
               ],
             ),
@@ -181,44 +227,14 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  Widget _buildSupervisorFilter() {
-    return StreamBuilder(
-      stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox();
-        final supervisors = snapshot.data!.docs;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedSupervisor.isEmpty ? null : selectedSupervisor,
-              hint: const Text("فلترة بالمشرف", style: TextStyle(color: Colors.white70, fontSize: 14)),
-              dropdownColor: primaryColor,
-              icon: const Icon(Icons.filter_list, color: Colors.white),
-              items: [
-                const DropdownMenuItem(value: '', child: Text("كل المشرفين", style: TextStyle(color: Colors.white))),
-                ...supervisors.map((sup) => DropdownMenuItem(
-                  value: sup['name'],
-                  child: Text(sup['name'], style: const TextStyle(color: Colors.white)),
-                )),
-              ],
-              onChanged: (v) => setState(() => selectedSupervisor = v!),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(String msg) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.person_search, size: 80, color: Colors.grey[400]),
           const SizedBox(height: 10),
-          Text("لم نجد أي طلاب بهذا الاسم", style: TextStyle(color: Colors.grey[600])),
+          Text(msg, style: TextStyle(color: Colors.grey[600])),
         ],
       ),
     );

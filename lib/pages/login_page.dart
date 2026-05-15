@@ -18,7 +18,7 @@ class _LoginPageState extends State<LoginPage> {
   bool isPasswordVisible = false;
 
   // اللون المعتمد من تصاميمك الجرافيكية
-  final Color primaryColor = const Color(0x425c75); 
+  final Color primaryColor = const Color(0xff425c75);
 
   login() async {
     if (emailController.text.isEmpty || passwordController.text.isEmpty) {
@@ -50,8 +50,11 @@ class _LoginPageState extends State<LoginPage> {
       if (rememberMe) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isLoggedIn', true);
+        await prefs.setString('userRole', role); // حفظ الرتبة (manager)
+        await prefs.setString('userId', uid);    // حفظ الـ ID
       }
 
+      if (!mounted) return;
       Navigator.pushReplacementNamed(
         context,
         '/home',
@@ -76,43 +79,47 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // لوجو التطبيق أو أيقونة تعبيرية
-              // مكان شعار المعهد بالخط
-Column(
-  children: [
-    Text(
-      "معهد الشيخ سعيد العبدالله", // اسم المعهد
-      style: TextStyle(
-        fontSize: 40,
-        fontWeight: FontWeight.w900,
-        color: const Color(0xff425c75), // لونك المعتمد
-        letterSpacing: 1.5,
-        shadows: [
-          Shadow(
-            blurRadius: 10.0,
-            color: Colors.black.withOpacity(0.1),
-            offset: const Offset(2, 2),
-          ),
-        ],
-      ),
-    ),
-    Container(
-      height: 4,
-      width: 60,
-      margin: const EdgeInsets.only(top: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xff425c75).withOpacity(0.3),
-        borderRadius: BorderRadius.circular(2),
-      ),
-    ),
-  ],
-),
+              // شعار المعهد
+              Column(
+                children: [
+                  Text(
+                    "معهد الشيخ سعيد العبدالله",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      color: primaryColor,
+                      letterSpacing: 1.5,
+                      shadows: [
+                        Shadow(
+                          blurRadius: 10.0,
+                          color: Colors.black.withOpacity(0.1),
+                          offset: const Offset(2, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    height: 4,
+                    width: 60,
+                    margin: const EdgeInsets.only(top: 8),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 30),
               Text(
                 "أهلاً بك مجدداً",
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: primaryColor),
+                style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: primaryColor),
               ),
-              const Text("سجل دخولك للمتابعة", style: TextStyle(color: Colors.grey)),
+              const Text("سجل دخولك للمتابعة",
+                  style: TextStyle(color: Colors.grey)),
               const SizedBox(height: 40),
 
               // حقل الإيميل
@@ -122,7 +129,8 @@ Column(
                 decoration: InputDecoration(
                   labelText: "الإيميل",
                   prefixIcon: Icon(Icons.email_outlined, color: primaryColor),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15)),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
                     borderSide: BorderSide(color: Colors.grey.shade300),
@@ -137,19 +145,26 @@ Column(
                 obscureText: !isPasswordVisible,
                 decoration: InputDecoration(
                   labelText: "كلمة المرور",
-                  prefixIcon: Icon(Icons.lock_outline_rounded, color: primaryColor),
+                  prefixIcon:
+                      Icon(Icons.lock_outline_rounded, color: primaryColor),
                   suffixIcon: IconButton(
-                    icon: Icon(isPasswordVisible ? Icons.visibility : Icons.visibility_off, color: Colors.grey),
-                    onPressed: () => setState(() => isPasswordVisible = !isPasswordVisible),
+                    icon: Icon(
+                        isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: Colors.grey),
+                    onPressed: () =>
+                        setState(() => isPasswordVisible = !isPasswordVisible),
                   ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15)),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
                     borderSide: BorderSide(color: Colors.grey.shade300),
                   ),
                 ),
               ),
-              
+
               // خيار البقاء مسجلاً
               Row(
                 children: [
@@ -158,7 +173,8 @@ Column(
                     value: rememberMe,
                     onChanged: (v) => setState(() => rememberMe = v!),
                   ),
-                  const Text("البقاء مسجل الدخول", style: TextStyle(fontSize: 14)),
+                  const Text("البقاء مسجل الدخول",
+                      style: TextStyle(fontSize: 14)),
                 ],
               ),
               const SizedBox(height: 30),
@@ -172,12 +188,15 @@ Column(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15)),
                     elevation: 2,
                   ),
                   child: loading
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("دخول", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      : const Text("دخول",
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
