@@ -116,7 +116,7 @@ class DashboardPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text("نظرة عامة", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                      Text("إليك ملخص أداء المعهد لليوم", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      Text("إليك ملخص أداء المعهد لهذه الدورة", style: TextStyle(color: Colors.white70, fontSize: 14)),
                     ],
                   ),
                 ),

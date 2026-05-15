@@ -189,7 +189,7 @@ class HonorBoardPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text("فرسان الحلقة", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                          Text("الطلاب الأكثر تميزاً وإنجازاً لهذا الموسم", style: TextStyle(color: Colors.white70, fontSize: 13)),
+                          Text("الطلاب الأكثر تميزاً وإنجازاً لهذا الاسبوع", style: TextStyle(color: Colors.white70, fontSize: 13)),
                         ],
                       ),
                     ),
@@ -199,11 +199,11 @@ class HonorBoardPage extends StatelessWidget {
               
               const SizedBox(height: 10),
 
-              buildSection("المتميزون الجدد", Colors.blue, Icons.auto_awesome, newStudents),
+              buildSection("الطلاب الجدد", Colors.blue, Icons.auto_awesome, newStudents),
               const SizedBox(height: 20),
-              buildSection("أوفياء المعهد", Colors.orange, Icons.history_edu, oldStudents),
+              buildSection("الطلاب القدماء", Colors.orange, Icons.history_edu, oldStudents),
               const SizedBox(height: 20),
-              buildSection("نخبة الخاتمين", Colors.green, Icons.verified, completedStudents),
+              buildSection("الطلاب الخاتمين", Colors.green, Icons.verified, completedStudents),
               
               const SizedBox(height: 40),
             ],

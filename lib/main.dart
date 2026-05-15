@@ -4,7 +4,6 @@ import 'firebase_options.dart';
 import 'utils/app_colors.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
-import 'pages/admin_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
@@ -61,9 +60,7 @@ class _MyAppState extends State<MyApp> {
       ),
       // العودة للنظام القديم في فحص الدخول
       home: isLoggedIn
-          ? (userRole == 'manager' 
-              ? const AdminPage() 
-              : HomePage(uid: userId, role: userRole))
+          ? HomePage(uid: userId, role: userRole) 
           : const LoginPage(),
       routes: {
         '/home': (context) {

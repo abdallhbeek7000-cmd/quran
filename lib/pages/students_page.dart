@@ -1,5 +1,9 @@
+import 'dart:io'; // ضروري للتعامل مع الملفات
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:excel/excel.dart'; // مكتبة الإكسل
+import 'package:path_provider/path_provider.dart'; // لتحديد مكان الحفظ
+import 'package:share_plus/share_plus.dart'; // للمشاركة عبر الواتساب
 import '../models/cycle_model.dart';
 import 'add_student_page.dart';
 import 'edit_student_page.dart';
@@ -24,19 +28,76 @@ class StudentsPage extends StatefulWidget {
 
 class _StudentsPageState extends State<StudentsPage> {
   String search = '';
-  // تغيير الفلتر ليعتمد على الـ ID بدلاً من الاسم لضمان التطابق
-  String selectedSupervisorId = ''; 
+  String selectedSupervisor = '';
   final Color primaryColor = const Color(0xff425c75);
+
+  // دالة تصدير ملف الإكسل
+  Future<void> exportToExcel() async {
+    try {
+      // 1. جلب بيانات الطلاب من فايربيز لهذه الدورة حصراً
+      final snapshot = await FirebaseFirestore.instance
+          .collection('students')
+          .where('cycleId', isEqualTo: widget.cycle.id)
+          .where('archived', isEqualTo: false)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("لا يوجد طلاب لتصديرهم")),
+        );
+        return;
+      }
+
+      // 2. إنشاء ملف الإكسل وتجهيز الصفحة
+      var excel = Excel.createExcel();
+      Sheet sheetObject = excel['الطلاب'];
+      excel.delete('Sheet1'); 
+
+      // 3. إضافة العناوين (Headers)
+      sheetObject.appendRow([
+        TextCellValue('التسلسلي'),
+        TextCellValue('اسم الطالب'),
+        TextCellValue('اسم الأب'),
+        TextCellValue('اسم الأم'),
+        TextCellValue('المشرف'),
+      ]);
+
+      // 4. تعبئة البيانات من الداتابيز
+      for (var doc in snapshot.docs) {
+        var data = doc.data();
+        sheetObject.appendRow([
+          TextCellValue(data['serial']?.toString() ?? ''),
+          TextCellValue(data['name']?.toString() ?? ''),
+          TextCellValue(data['fatherName']?.toString() ?? ''),
+          TextCellValue(data['motherName']?.toString() ?? ''),
+          TextCellValue(data['supervisorName'] ?? 'غير موزع'),
+        ]);
+      }
+
+      // 5. حفظ الملف في الذاكرة المؤقتة للهاتف
+      var fileBytes = excel.save();
+      final directory = await getTemporaryDirectory();
+      final filePath = '${directory.path}/طلاب_${widget.cycle.name}.xlsx';
+      final file = File(filePath);
+      await file.writeAsBytes(fileBytes!);
+
+      // 6. فتح قائمة المشاركة (واتساب، إيميل...)
+      await Share.shareXFiles([XFile(filePath)], text: 'قائمة طلاب: ${widget.cycle.name}');
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("حدث خطأ أثناء التصدير: $e")),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // بناء الاستعلام الأساسي
     Query query = FirebaseFirestore.instance
         .collection('students')
         .where('cycleId', isEqualTo: widget.cycle.id)
         .where('archived', isEqualTo: false);
 
-    // إذا كان المستخدم مشرفاً، نعرض طلابه فقط بشكل إجباري
     if (widget.role == "supervisor") {
       query = query.where('supervisorId', isEqualTo: widget.uid);
     }
@@ -48,6 +109,15 @@ class _StudentsPageState extends State<StudentsPage> {
         backgroundColor: primaryColor,
         title: const Text("قائمة الطلاب", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          // إضافة زر التصدير في الـ AppBar
+          if (widget.role == "manager") // نظهره للمدير فقط
+            IconButton(
+              icon: const Icon(Icons.file_download),
+              tooltip: "تصدير Excel",
+              onPressed: exportToExcel,
+            ),
+        ],
       ),
       floatingActionButton: widget.role == "manager"
           ? FloatingActionButton(
@@ -58,7 +128,7 @@ class _StudentsPageState extends State<StudentsPage> {
           : null,
       body: Column(
         children: [
-          // قسم البحث والفلترة المطور
+          // قسم البحث والفلترة
           Container(
             padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
@@ -86,29 +156,21 @@ class _StudentsPageState extends State<StudentsPage> {
             ),
           ),
 
-          // قائمة الطلاب مع الفلترة البرمجية الصحيحة
+          // قائمة الطلاب
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: query.snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                if (!snapshot.hasData) return _buildEmptyState("لا توجد بيانات حالياً");
-
-                // الفلترة البرمجية (Client-side filtering) للبحث والاسم والمشرف
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                
                 final docs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  
-                  // 1. فلترة البحث بالاسم
                   final nameMatches = data['name'].toString().toLowerCase().contains(search);
-                  
-                  // 2. فلترة المشرف (تتم عبر الـ ID لأنه فريد ولا يتغير)
-                  final supervisorMatches = selectedSupervisorId.isEmpty || 
-                                           (data['supervisorId'] != null && data['supervisorId'] == selectedSupervisorId);
-                  
+                  final supervisorMatches = selectedSupervisor.isEmpty || data['supervisorName'] == selectedSupervisor;
                   return nameMatches && supervisorMatches;
                 }).toList();
 
-                if (docs.isEmpty) return _buildEmptyState("لم نجد نتائج تطابق بحثك");
+                if (docs.isEmpty) return _buildEmptyState();
 
                 return ListView.builder(
                   padding: const EdgeInsets.all(15),
@@ -123,42 +185,9 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  // ويدجت اختيار المشرف (الفلتر) المطور
-  Widget _buildSupervisorFilter() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox();
-        final supervisors = snapshot.data!.docs;
-        
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          width: double.infinity,
-          decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedSupervisorId.isEmpty ? null : selectedSupervisorId,
-              hint: const Text("كل المشرفين", style: TextStyle(color: Colors.white70, fontSize: 14)),
-              dropdownColor: primaryColor,
-              icon: const Icon(Icons.filter_list, color: Colors.white),
-              items: [
-                const DropdownMenuItem(value: '', child: Text("كل المشرفين", style: TextStyle(color: Colors.white))),
-                ...supervisors.map((sup) {
-                  // نستخدم الـ ID الخاص بالوثيقة كقيمة للفلتر
-                  return DropdownMenuItem(
-                    value: sup.id, 
-                    child: Text(sup['name'], style: const TextStyle(color: Colors.white)),
-                  );
-                }),
-              ],
-              onChanged: (v) => setState(() => selectedSupervisorId = v!),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
+  // ... (باقي الودجتات _buildStudentCard و _buildSupervisorFilter كما هي في كودك الأصلي) ...
+  // ملاحظة: تأكد من إبقاء الدوال الأخرى موجودة في ملفك.
+  
   Widget _buildStudentCard(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return Container(
@@ -227,14 +256,44 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  Widget _buildEmptyState(String msg) {
+  Widget _buildSupervisorFilter() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox();
+        final supervisors = snapshot.data!.docs;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: selectedSupervisor.isEmpty ? null : selectedSupervisor,
+              hint: const Text("فلترة بالمشرف", style: TextStyle(color: Colors.white70, fontSize: 14)),
+              dropdownColor: primaryColor,
+              icon: const Icon(Icons.filter_list, color: Colors.white),
+              items: [
+                const DropdownMenuItem(value: '', child: Text("كل المشرفين", style: TextStyle(color: Colors.white))),
+                ...supervisors.map((sup) => DropdownMenuItem(
+                  value: sup['name'],
+                  child: Text(sup['name'], style: const TextStyle(color: Colors.white)),
+                )),
+              ],
+              onChanged: (v) => setState(() => selectedSupervisor = v!),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.person_search, size: 80, color: Colors.grey[400]),
           const SizedBox(height: 10),
-          Text(msg, style: TextStyle(color: Colors.grey[600])),
+          Text("لم نجد أي طلاب بهذا الاسم", style: TextStyle(color: Colors.grey[600])),
         ],
       ),
     );

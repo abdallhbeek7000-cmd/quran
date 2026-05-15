@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:excel/excel.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'edit_session_page.dart';
 import '../services/session_service.dart';
 
@@ -17,6 +21,71 @@ class StudentSessionsPage extends StatelessWidget {
 
   final Color primaryColor = const Color(0xff425c75);
 
+  Future<void> exportSessionsToExcel(BuildContext context) async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("جاري تجهيز سجل الجلسات...")),
+      );
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('sessions')
+          .where('studentId', isEqualTo: studentId)
+          .orderBy('date', descending: true)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("لا يوجد جلسات لتصديرها")),
+        );
+        return;
+      }
+
+      var excel = Excel.createExcel();
+      Sheet sheetObject = excel['سجل التسميع'];
+      excel.delete('Sheet1');
+
+      sheetObject.appendRow([
+        TextCellValue('التاريخ'),
+        TextCellValue('الحالة'),
+        TextCellValue('التقييم'),
+        TextCellValue('الحفظ الجديد'),
+        TextCellValue('المراجعة'),
+        TextCellValue('الواجب'),
+        TextCellValue('حالة الطالب'),
+        TextCellValue('ملاحظات'),
+      ]);
+
+      for (var doc in snapshot.docs) {
+        var data = doc.data();
+        bool isAbsent = data['absent'] ?? false;
+        
+        sheetObject.appendRow([
+          TextCellValue(data['date']?.toString() ?? ''),
+          TextCellValue(isAbsent ? 'غائب' : 'حاضر'),
+          TextCellValue(isAbsent ? '---' : (data['rating'] ?? '')),
+          TextCellValue(isAbsent ? '---' : (data['newMemorization'] ?? '')),
+          TextCellValue(isAbsent ? '---' : (data['review'] ?? '')),
+          TextCellValue(isAbsent ? '---' : (data['homework'] ?? '')),
+          TextCellValue(isAbsent ? '---' : (data['studentStatus'] ?? '')),
+          TextCellValue(data['notes']?.toString() ?? ''),
+        ]);
+      }
+
+      var fileBytes = excel.save();
+      final directory = await getTemporaryDirectory();
+      final filePath = '${directory.path}/سجل_$studentName.xlsx';
+      final file = File(filePath);
+      await file.writeAsBytes(fileBytes!);
+
+      await Share.shareXFiles([XFile(filePath)], text: 'سجل الطالب: $studentName');
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("حدث خطأ أثناء التصدير: $e")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessionService = SessionService();
@@ -28,6 +97,12 @@ class StudentSessionsPage extends StatelessWidget {
         backgroundColor: primaryColor,
         title: Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            onPressed: () => exportSessionsToExcel(context),
+          ),
+        ],
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: sessionService.getStudentSessions(studentId),
@@ -35,12 +110,8 @@ class StudentSessionsPage extends StatelessWidget {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-
           final sessions = snapshot.data!.docs;
-
-          if (sessions.isEmpty) {
-            return _buildEmptyState();
-          }
+          if (sessions.isEmpty) return _buildEmptyState();
 
           return ListView.builder(
             padding: const EdgeInsets.all(15),
@@ -48,7 +119,6 @@ class StudentSessionsPage extends StatelessWidget {
             itemBuilder: (context, index) {
               final session = sessions[index];
               final data = session.data() as Map<String, dynamic>;
-
               return _buildSessionTimelineItem(context, session.id, data);
             },
           );
@@ -66,16 +136,24 @@ class StudentSessionsPage extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 5))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
+        ],
       ),
       child: Column(
         children: [
-          // رأس الكرت (التاريخ والتقييم)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
             decoration: BoxDecoration(
-              color: isAbsent ? Colors.red[50] : primaryColor.withOpacity(0.05),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+              color: isAbsent ? Colors.red.withOpacity(0.1) : primaryColor.withOpacity(0.05),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -84,17 +162,13 @@ class StudentSessionsPage extends StatelessWidget {
                   children: [
                     Icon(Icons.calendar_today, size: 16, color: isAbsent ? Colors.red : primaryColor),
                     const SizedBox(width: 8),
-                    Text(data['date'], style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.red : primaryColor)),
+                    Text(data['date'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.red : primaryColor)),
                   ],
                 ),
-                if (isAbsent)
-                  _buildBadge("غائب", Colors.red)
-                else
-                  _buildBadge(data['rating'], ratingColor),
+                if (isAbsent) _buildBadge("غائب", Colors.red) else _buildBadge(data['rating'] ?? "غير مقيم", ratingColor),
               ],
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(15),
             child: Column(
@@ -109,20 +183,30 @@ class StudentSessionsPage extends StatelessWidget {
                   const Divider(height: 20),
                   _buildInfoRow(Icons.mood, "حالة الطالب", data['studentStatus']),
                 ],
-                
                 if (data['notes'] != null && data['notes'].toString().isNotEmpty) ...[
                   const SizedBox(height: 10),
+                  // تم استبدال الـ Border بـ Shadow خفيف لحل مشكلة اللون الأحمر للأبد
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[200]!)),
-                    child: Text("ملاحظات: ${data['notes']}", style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: Colors.black87)),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          spreadRadius: 1,
+                          blurRadius: 1,
+                        )
+                      ],
+                    ),
+                    child: Text(
+                      "ملاحظات: ${data['notes']}",
+                      style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: Colors.black87),
+                    ),
                   ),
                 ],
-
                 const SizedBox(height: 10),
-
-                // أزرار التحكم
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -150,10 +234,10 @@ class StudentSessionsPage extends StatelessWidget {
   Widget _buildInfoRow(IconData icon, String label, dynamic value) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: Colors.grey[600]),
+        Icon(icon, size: 18, color: Colors.grey),
         const SizedBox(width: 10),
         Text("$label: ", style: const TextStyle(color: Colors.grey, fontSize: 13)),
-        Expanded(child: Text(value.toString(), style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14))),
+        Expanded(child: Text(value?.toString() ?? "---", style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14))),
       ],
     );
   }
@@ -171,7 +255,7 @@ class StudentSessionsPage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.history_toggle_off, size: 80, color: Colors.grey[300]),
+          Icon(Icons.history_toggle_off, size: 80, color: Colors.grey.withOpacity(0.3)),
           const SizedBox(height: 10),
           const Text("لا يوجد سجل جلسات لهذا الطالب"),
         ],
@@ -195,7 +279,6 @@ class StudentSessionsPage extends StatelessWidget {
   void _deleteSession(BuildContext context, String id) async {
     final service = SessionService();
     await service.deleteSession(id);
-    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الجلسة")));
   }
 }
