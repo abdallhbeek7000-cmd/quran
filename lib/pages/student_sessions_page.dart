@@ -21,6 +21,7 @@ class StudentSessionsPage extends StatelessWidget {
 
   final Color primaryColor = const Color(0xff425c75);
 
+  // دالة التصدير للإكسل (محدثة لتشمل الحقول الجديدة)
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -33,13 +34,6 @@ class StudentSessionsPage extends StatelessWidget {
           .orderBy('date', descending: true)
           .get();
 
-      if (snapshot.docs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("لا يوجد جلسات لتصديرها")),
-        );
-        return;
-      }
-
       var excel = Excel.createExcel();
       Sheet sheetObject = excel['سجل التسميع'];
       excel.delete('Sheet1');
@@ -49,24 +43,23 @@ class StudentSessionsPage extends StatelessWidget {
         TextCellValue('الحالة'),
         TextCellValue('التقييم'),
         TextCellValue('الحفظ الجديد'),
-        TextCellValue('المراجعة'),
+        TextCellValue('مراجعة قريبة'),
+        TextCellValue('مراجعة بعيدة'),
         TextCellValue('الواجب'),
-        TextCellValue('حالة الطالب'),
         TextCellValue('ملاحظات'),
       ]);
 
       for (var doc in snapshot.docs) {
         var data = doc.data();
         bool isAbsent = data['absent'] ?? false;
-        
         sheetObject.appendRow([
           TextCellValue(data['date']?.toString() ?? ''),
           TextCellValue(isAbsent ? 'غائب' : 'حاضر'),
           TextCellValue(isAbsent ? '---' : (data['rating'] ?? '')),
           TextCellValue(isAbsent ? '---' : (data['newMemorization'] ?? '')),
-          TextCellValue(isAbsent ? '---' : (data['review'] ?? '')),
+          TextCellValue(isAbsent ? '---' : (data['nearReview'] ?? '')),
+          TextCellValue(isAbsent ? '---' : (data['farReview'] ?? '')),
           TextCellValue(isAbsent ? '---' : (data['homework'] ?? '')),
-          TextCellValue(isAbsent ? '---' : (data['studentStatus'] ?? '')),
           TextCellValue(data['notes']?.toString() ?? ''),
         ]);
       }
@@ -76,13 +69,9 @@ class StudentSessionsPage extends StatelessWidget {
       final filePath = '${directory.path}/سجل_$studentName.xlsx';
       final file = File(filePath);
       await file.writeAsBytes(fileBytes!);
-
       await Share.shareXFiles([XFile(filePath)], text: 'سجل الطالب: $studentName');
-
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("حدث خطأ أثناء التصدير: $e")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e")));
     }
   }
 
@@ -107,9 +96,7 @@ class StudentSessionsPage extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: sessionService.getStudentSessions(studentId),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final sessions = snapshot.data!.docs;
           if (sessions.isEmpty) return _buildEmptyState();
 
@@ -136,24 +123,16 @@ class StudentSessionsPage extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          )
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
       ),
       child: Column(
         children: [
+          // رأس الكرت (التاريخ والتقييم)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
             decoration: BoxDecoration(
               color: isAbsent ? Colors.red.withOpacity(0.1) : primaryColor.withOpacity(0.05),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -169,60 +148,29 @@ class StudentSessionsPage extends StatelessWidget {
               ],
             ),
           ),
+          
+          // تفاصيل الجلسة (عرض الحقول الجديدة هنا)
           Padding(
             padding: const EdgeInsets.all(15),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!isAbsent) ...[
                   _buildInfoRow(Icons.star, "الحفظ الجديد", data['newMemorization']),
-                  const Divider(height: 20),
-                  _buildInfoRow(Icons.auto_stories, "المراجعة", data['review']),
-                  const Divider(height: 20),
+                  const Divider(),
+                  _buildInfoRow(Icons.menu_book, "مراجعة جديد", data['nearReview']),
+                  const Divider(),
+                  _buildInfoRow(Icons.history_edu, "مراجعة قديم", data['farReview']),
+                  const Divider(),
                   _buildInfoRow(Icons.edit_note, "الواجب", data['homework']),
-                  const Divider(height: 20),
+                  const Divider(),
                   _buildInfoRow(Icons.mood, "حالة الطالب", data['studentStatus']),
                 ],
                 if (data['notes'] != null && data['notes'].toString().isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  // تم استبدال الـ Border بـ Shadow خفيف لحل مشكلة اللون الأحمر للأبد
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          spreadRadius: 1,
-                          blurRadius: 1,
-                        )
-                      ],
-                    ),
-                    child: Text(
-                      "ملاحظات: ${data['notes']}",
-                      style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: Colors.black87),
-                    ),
-                  ),
+                  _buildNotesBox(data['notes']),
                 ],
                 const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      onPressed: () => _navToEdit(context, sessionId, data),
-                      icon: const Icon(Icons.edit, size: 16),
-                      label: const Text("تعديل"),
-                    ),
-                    if (role == "manager")
-                      TextButton.icon(
-                        onPressed: () => _deleteSession(context, sessionId),
-                        icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                        label: const Text("حذف", style: TextStyle(color: Colors.red)),
-                      ),
-                  ],
-                )
+                _buildActionButtons(context, sessionId, data),
               ],
             ),
           ),
@@ -232,12 +180,50 @@ class StudentSessionsPage extends StatelessWidget {
   }
 
   Widget _buildInfoRow(IconData icon, String label, dynamic value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: primaryColor),
+          const SizedBox(width: 10),
+          Text("$label: ", style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          Expanded(child: Text(value?.toString() ?? "---", style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotesBox(String notes) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 1)],
+      ),
+      child: Text("ملاحظات: $notes", style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
+    );
+  }
+
+  Widget _buildActionButtons(BuildContext context, String id, Map<String, dynamic> data) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Icon(icon, size: 18, color: Colors.grey),
-        const SizedBox(width: 10),
-        Text("$label: ", style: const TextStyle(color: Colors.grey, fontSize: 13)),
-        Expanded(child: Text(value?.toString() ?? "---", style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14))),
+        TextButton.icon(
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditSessionPage(sessionId: id, data: data))),
+          icon: const Icon(Icons.edit, size: 16),
+          label: const Text("تعديل"),
+        ),
+        if (role == "manager")
+          TextButton.icon(
+            onPressed: () async {
+              await SessionService().deleteSession(id);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الجلسة")));
+            },
+            icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+            label: const Text("حذف", style: TextStyle(color: Colors.red)),
+          ),
       ],
     );
   }
@@ -251,16 +237,7 @@ class StudentSessionsPage extends StatelessWidget {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.history_toggle_off, size: 80, color: Colors.grey.withOpacity(0.3)),
-          const SizedBox(height: 10),
-          const Text("لا يوجد سجل جلسات لهذا الطالب"),
-        ],
-      ),
-    );
+    return const Center(child: Text("لا يوجد سجل جلسات لهذا الطالب"));
   }
 
   Color _getRatingColor(String? rating) {
@@ -270,15 +247,5 @@ class StudentSessionsPage extends StatelessWidget {
       case "سيء": return Colors.red;
       default: return Colors.blue;
     }
-  }
-
-  void _navToEdit(BuildContext context, String id, Map<String, dynamic> data) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => EditSessionPage(sessionId: id, data: data)));
-  }
-
-  void _deleteSession(BuildContext context, String id) async {
-    final service = SessionService();
-    await service.deleteSession(id);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الجلسة")));
   }
 }

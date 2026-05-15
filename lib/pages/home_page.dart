@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart'; // مكتبة الـ Provider
 
 import 'login_page.dart';
 import 'create_cycle_page.dart';
@@ -9,6 +10,7 @@ import 'students_page.dart';
 import 'assign_students_page.dart';
 import '../models/cycle_model.dart';
 import '../services/cycle_service.dart';
+import '../services/theme_provider.dart'; // استدعاء الـ ThemeProvider
 import 'statistics_page.dart';
 import 'honor_board_page.dart';
 import 'dashboard_page.dart';
@@ -63,20 +65,35 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // مراقبة حالة الوضع الليلي من الـ Provider لتغيير أيقونة الزر
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      // جعل الخلفية تتبع ثيم النظام الحالي تلقائياً
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: primaryColor,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
         title: Text(
           widget.role == "manager" ? "لوحة المدير" : "لوحة المشرف",
           style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         actions: [
+          // زر قلب الوضع الليلي / الفاتح بشكل اختياري
+          IconButton(
+            icon: Icon(
+              themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+              color: Colors.white,
+            ),
+            tooltip: "تغيير المظهر",
+            onPressed: () {
+              themeProvider.toggleTheme();
+            },
+          ),
           IconButton(
             onPressed: logout,
             icon: const Icon(Icons.logout, color: Colors.white),
-          )
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -87,7 +104,7 @@ class _HomePageState extends State<HomePage> {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: primaryColor,
+                color: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
@@ -110,19 +127,25 @@ class _HomePageState extends State<HomePage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: themeProvider.isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
                       borderRadius: BorderRadius.circular(15),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.calendar_month, color: primaryColor),
+                        Icon(Icons.calendar_month, color: themeProvider.isDarkMode ? Colors.orange : primaryColor),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text("الدورة الحالية", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                              Text(currentCycle, style: TextStyle(fontWeight: FontWeight.bold, color: primaryColor)),
+                              Text(
+                                currentCycle, 
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold, 
+                                  color: themeProvider.isDarkMode ? Colors.white : primaryColor,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -145,23 +168,23 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   // Manager Only Actions
                   if (widget.role == "manager") ...[
-                    _buildMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage())),
-                    _buildMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage())),
-                    _buildMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage())),
+                    _buildMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), themeProvider.isDarkMode),
+                    _buildMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), themeProvider.isDarkMode),
+                    _buildMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), themeProvider.isDarkMode),
                     if (currentCycleModel != null)
-                      _buildMenuCard(Icons.person_add_alt_1, "إضافة طالب", () => _nav(AddStudentPage(cycle: currentCycleModel!))),
-                    _buildMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage())),
+                      _buildMenuCard(Icons.person_add_alt_1, "إضافة طالب", () => _nav(AddStudentPage(cycle: currentCycleModel!)), themeProvider.isDarkMode),
+                    _buildMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage()), themeProvider.isDarkMode),
                     if (currentCycleModel != null)
-                      _buildMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!))),
+                      _buildMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), themeProvider.isDarkMode),
                   ],
 
                   // Common Actions
                   if (currentCycleModel != null)
-                    _buildMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid))),
+                    _buildMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), themeProvider.isDarkMode),
                   
-                  _buildMenuCard(Icons.bar_chart, "الإحصائيات", () => _nav(const StatisticsPage())),
-                  _buildMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage())),
-                  _buildMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(const HonorBoardPage())),
+                  _buildMenuCard(Icons.bar_chart, "الإحصائيات", () => _nav(const StatisticsPage()), themeProvider.isDarkMode),
+                  _buildMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), themeProvider.isDarkMode),
+                  _buildMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), themeProvider.isDarkMode),
                 ],
               ),
             ),
@@ -171,32 +194,43 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Helper function for Navigation
   void _nav(Widget page) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
-  // Modern Card Builder
-  Widget _buildMenuCard(IconData icon, String title, VoidCallback onTap) {
+  // تعديل الـ Card Builder ليستقبل حالة الـ Dark Mode ويغير ألوانه تلقائياً
+  Widget _buildMenuCard(IconData icon, String title, VoidCallback onTap, bool isDarkMode) {
     return InkWell(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5)),
+            BoxShadow(
+              color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.05), 
+              blurRadius: 10, 
+              offset: const Offset(0, 5),
+            ),
           ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 35, color: primaryColor),
+            Icon(
+              icon, 
+              size: 35, 
+              color: isDarkMode ? Colors.orange : primaryColor,
+            ),
             const SizedBox(height: 10),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryColor),
+              style: TextStyle(
+                fontSize: 14, 
+                fontWeight: FontWeight.bold, 
+                color: isDarkMode ? Colors.white : primaryColor,
+              ),
             ),
           ],
         ),

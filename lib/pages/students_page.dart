@@ -1,9 +1,9 @@
-import 'dart:io'; // ضروري للتعامل مع الملفات
+import 'dart:io'; 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:excel/excel.dart'; // مكتبة الإكسل
-import 'package:path_provider/path_provider.dart'; // لتحديد مكان الحفظ
-import 'package:share_plus/share_plus.dart'; // للمشاركة عبر الواتساب
+import 'package:excel/excel.dart'; 
+import 'package:path_provider/path_provider.dart'; 
+import 'package:share_plus/share_plus.dart'; 
 import '../models/cycle_model.dart';
 import 'add_student_page.dart';
 import 'edit_student_page.dart';
@@ -31,10 +31,12 @@ class _StudentsPageState extends State<StudentsPage> {
   String selectedSupervisor = '';
   final Color primaryColor = const Color(0xff425c75);
 
-  // دالة تصدير ملف الإكسل
   Future<void> exportToExcel() async {
     try {
-      // 1. جلب بيانات الطلاب من فايربيز لهذه الدورة حصراً
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("جاري تجهيز ملف الإكسل...")),
+      );
+
       final snapshot = await FirebaseFirestore.instance
           .collection('students')
           .where('cycleId', isEqualTo: widget.cycle.id)
@@ -48,12 +50,10 @@ class _StudentsPageState extends State<StudentsPage> {
         return;
       }
 
-      // 2. إنشاء ملف الإكسل وتجهيز الصفحة
       var excel = Excel.createExcel();
       Sheet sheetObject = excel['الطلاب'];
       excel.delete('Sheet1'); 
 
-      // 3. إضافة العناوين (Headers)
       sheetObject.appendRow([
         TextCellValue('التسلسلي'),
         TextCellValue('اسم الطالب'),
@@ -62,7 +62,6 @@ class _StudentsPageState extends State<StudentsPage> {
         TextCellValue('المشرف'),
       ]);
 
-      // 4. تعبئة البيانات من الداتابيز
       for (var doc in snapshot.docs) {
         var data = doc.data();
         sheetObject.appendRow([
@@ -74,14 +73,12 @@ class _StudentsPageState extends State<StudentsPage> {
         ]);
       }
 
-      // 5. حفظ الملف في الذاكرة المؤقتة للهاتف
       var fileBytes = excel.save();
       final directory = await getTemporaryDirectory();
       final filePath = '${directory.path}/طلاب_${widget.cycle.name}.xlsx';
       final file = File(filePath);
       await file.writeAsBytes(fileBytes!);
 
-      // 6. فتح قائمة المشاركة (واتساب، إيميل...)
       await Share.shareXFiles([XFile(filePath)], text: 'قائمة طلاب: ${widget.cycle.name}');
 
     } catch (e) {
@@ -110,8 +107,7 @@ class _StudentsPageState extends State<StudentsPage> {
         title: const Text("قائمة الطلاب", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          // إضافة زر التصدير في الـ AppBar
-          if (widget.role == "manager") // نظهره للمدير فقط
+          if (widget.role == "manager") 
             IconButton(
               icon: const Icon(Icons.file_download),
               tooltip: "تصدير Excel",
@@ -128,7 +124,6 @@ class _StudentsPageState extends State<StudentsPage> {
           : null,
       body: Column(
         children: [
-          // قسم البحث والفلترة
           Container(
             padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
@@ -146,7 +141,7 @@ class _StudentsPageState extends State<StudentsPage> {
                     fillColor: Colors.white,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
                   ),
-                  onChanged: (v) => setState(() => search = v.toLowerCase()),
+                  onChanged: (v) => setState(() => search = v.trim().toLowerCase()),
                 ),
                 if (widget.role == "manager") ...[
                   const SizedBox(height: 10),
@@ -156,7 +151,6 @@ class _StudentsPageState extends State<StudentsPage> {
             ),
           ),
 
-          // قائمة الطلاب
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: query.snapshots(),
@@ -165,8 +159,21 @@ class _StudentsPageState extends State<StudentsPage> {
                 
                 final docs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  final nameMatches = data['name'].toString().toLowerCase().contains(search);
-                  final supervisorMatches = selectedSupervisor.isEmpty || data['supervisorName'] == selectedSupervisor;
+                  
+                  // 1. فلترة البحث بالاسم
+                  final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
+                  final nameMatches = studentName.contains(search);
+                  
+                  // 2. فلترة المشرف الذكية والجذرية
+                  bool supervisorMatches = true;
+                  
+                  if (selectedSupervisor.isNotEmpty) {
+                    final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
+                    final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
+                    
+                    supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
+                  }
+                  
                   return nameMatches && supervisorMatches;
                 }).toList();
 
@@ -185,9 +192,6 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  // ... (باقي الودجتات _buildStudentCard و _buildSupervisorFilter كما هي في كودك الأصلي) ...
-  // ملاحظة: تأكد من إبقاء الدوال الأخرى موجودة في ملفك.
-  
   Widget _buildStudentCard(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return Container(
@@ -205,7 +209,7 @@ class _StudentsPageState extends State<StudentsPage> {
               radius: 25,
               backgroundColor: primaryColor.withOpacity(0.1),
               child: Text(
-                data['name'].toString().isNotEmpty ? data['name'].toString().substring(0, 1) : "?",
+                data['name'].toString().isNotEmpty ? data['name'].toString().trim().substring(0, 1) : "?",
                 style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20),
               ),
             ),
@@ -274,7 +278,7 @@ class _StudentsPageState extends State<StudentsPage> {
               items: [
                 const DropdownMenuItem(value: '', child: Text("كل المشرفين", style: TextStyle(color: Colors.white))),
                 ...supervisors.map((sup) => DropdownMenuItem(
-                  value: sup['name'],
+                  value: sup['name'].toString(), 
                   child: Text(sup['name'], style: const TextStyle(color: Colors.white)),
                 )),
               ],
