@@ -30,6 +30,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
   final newReview = TextEditingController(); 
   final oldReview = TextEditingController(); 
   final homework = TextEditingController();
+  final readingBySight = TextEditingController(); // الحقل الجديد للقراءة نظراً من المصحف
   final religiousActivities = TextEditingController();
   final notes = TextEditingController();
   final absenceReasonController = TextEditingController(); 
@@ -87,6 +88,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
       'nearReview': finalNearReview, 
       'farReview': finalFarReview,   
       'homework': session.homework,
+      'readingBySight': absent ? '' : readingBySight.text.trim(), // حفظ خانة القراءة نظراً بفايربيز
       'rating': session.rating,
       'studentStatus': session.studentStatus,
       'religiousActivities': session.religiousActivities,
@@ -156,6 +158,8 @@ class _AddSessionPageState extends State<AddSessionPage> {
                           TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newReview, decoration: _inputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode)),
                           const SizedBox(height: 15),
                           TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: oldReview, decoration: _inputDecoration("مراجعة قديم", Icons.history_outlined, isDarkMode)),
+                          const SizedBox(height: 15),
+                          TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: readingBySight, decoration: _inputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
                           const SizedBox(height: 15),
                           TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: homework, decoration: _inputDecoration("الواجب", Icons.edit_note, isDarkMode)),
                         ],

@@ -1,4 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:provider/provider.dart';
+import '../services/theme_provider.dart';
 import '../models/cycle_model.dart';
 import '../models/student_model.dart';
 import '../services/student_service.dart';
@@ -31,7 +36,41 @@ class _AddStudentPageState extends State<AddStudentPage> {
   bool loading = false;
   String studentType = "new";
 
+  File? _selectedImage; 
+  final ImagePicker _picker = ImagePicker();
+
   final Color primaryColor = const Color(0xff425c75);
+
+  // دالة فتح المعرض واختيار الصورة
+  Future<void> _pickImage() async {
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70, 
+    );
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImage = File(pickedFile.path);
+      });
+    }
+  }
+
+  // دالة رفع الصورة الذكية باسم الطالب لمنع تضارب الأنواع
+  Future<String> _uploadStudentImage(String studentName) async {
+    if (_selectedImage == null) return '';
+    try {
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('students_images')
+          .child('student_${studentName}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      
+      final uploadTask = await storageRef.putFile(_selectedImage!);
+      final String downloadUrl = await uploadTask.ref.getDownloadURL();
+      return downloadUrl;
+    } catch (e) {
+      debugPrint("خطأ أثناء رفع الصورة: $e");
+      return '';
+    }
+  }
 
   addStudent() async {
     if (name.text.isEmpty || phone.text.isEmpty) {
@@ -48,6 +87,12 @@ class _AddStudentPageState extends State<AddStudentPage> {
         year: widget.cycle.year,
         cycleNumber: widget.cycle.cycleNumber,
       );
+
+      // تمرير الاسم النصي مباشرة لرفع الصورة بدون خطأ أحمر
+      String finalImageUrl = '';
+      if (_selectedImage != null) {
+        finalImageUrl = await _uploadStudentImage(name.text.trim());
+      }
 
       final student = StudentModel(
         id: '',
@@ -67,7 +112,7 @@ class _AddStudentPageState extends State<AddStudentPage> {
         cycleName: widget.cycle.name,
         startMemorization: startDate?.toString() ?? '',
         memorizedPages: double.tryParse(memorizedPages.text) ?? 0,
-        imageUrl: '',
+        imageUrl: finalImageUrl, 
         archived: false,
         createdAt: DateTime.now().toString(),
       );
@@ -80,21 +125,24 @@ class _AddStudentPageState extends State<AddStudentPage> {
       );
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(backgroundColor: Colors.red, content: Text("خطأ: $e")),
       );
     } finally {
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: primaryColor,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
         title: const Text("إضافة طالب جديد", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -102,13 +150,46 @@ class _AddStudentPageState extends State<AddStudentPage> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // قسم نوع الطالب
+            // معاينة الصورة العلوية
+            Center(
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 55,
+                    backgroundColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+                    backgroundImage: _selectedImage != null ? FileImage(_selectedImage!) : null,
+                    child: _selectedImage == null
+                        ? Icon(Icons.account_circle, size: 110, color: Colors.grey[400])
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 4,
+                    child: CircleAvatar(
+                      backgroundColor: isDarkMode ? Colors.orange : primaryColor,
+                      radius: 18,
+                      child: IconButton(
+                        icon: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                        onPressed: _pickImage,
+                        tooltip: "اختيار صورة للطالب",
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 25),
+
+            // معلومات التسجيل
             _buildSectionCard(
               title: "معلومات التسجيل",
               icon: Icons.app_registration,
+              isDarkMode: isDarkMode,
               child: DropdownButtonFormField<String>(
                 value: studentType,
-                decoration: _inputDecoration("نوع الطالب", Icons.category_outlined),
+                dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                decoration: _inputDecoration("نوع الطالب", Icons.category_outlined, isDarkMode),
                 items: const [
                   DropdownMenuItem(value: "new", child: Text("طالب جديد")),
                   DropdownMenuItem(value: "old", child: Text("طالب قديم")),
@@ -120,57 +201,61 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
             const SizedBox(height: 15),
 
-            // قسم المعلومات الشخصية
+            // المعلومات الشخصية
             _buildSectionCard(
               title: "المعلومات الشخصية",
               icon: Icons.person_outline,
+              isDarkMode: isDarkMode,
               child: Column(
                 children: [
-                  TextField(controller: name, decoration: _inputDecoration("اسم الطالب الكامل", Icons.person)),
+                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: name, decoration: _inputDecoration("اسم الطالب الكامل", Icons.person, isDarkMode)),
                   const SizedBox(height: 15),
                   Row(
                     children: [
-                      Expanded(child: TextField(controller: fatherName, decoration: _inputDecoration("اسم الأب", Icons.man))),
+                      Expanded(child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: fatherName, decoration: _inputDecoration("اسم الأب", Icons.man, isDarkMode))),
                       const SizedBox(width: 10),
-                      Expanded(child: TextField(controller: motherName, decoration: _inputDecoration("اسم الأم", Icons.woman))),
+                      Expanded(child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: motherName, decoration: _inputDecoration("اسم الأم", Icons.woman, isDarkMode))),
                     ],
                   ),
                   const SizedBox(height: 15),
-                  TextField(controller: phone, keyboardType: TextInputType.phone, decoration: _inputDecoration("رقم الهاتف", Icons.phone)),
+                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: phone, keyboardType: TextInputType.phone, decoration: _inputDecoration("رقم الهاتف", Icons.phone, isDarkMode)),
                 ],
               ),
             ),
 
             const SizedBox(height: 15),
 
-            // قسم الدراسة والسكن
+            // تفاصيل إضافية
             _buildSectionCard(
               title: "تفاصيل إضافية",
               icon: Icons.info_outline,
+              isDarkMode: isDarkMode,
               child: Column(
                 children: [
-                  TextField(controller: address, decoration: _inputDecoration("مكان السكن", Icons.location_on_outlined)),
+                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: address, decoration: _inputDecoration("مكان السكن", Icons.location_on_outlined, isDarkMode)),
                   const SizedBox(height: 15),
-                  TextField(controller: schoolGrade, decoration: _inputDecoration("الصف الدراسي", Icons.school_outlined)),
+                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: schoolGrade, decoration: _inputDecoration("الصف الدراسي", Icons.school_outlined, isDarkMode)),
                   const SizedBox(height: 15),
-                  TextField(controller: fatherJob, decoration: _inputDecoration("عمل الأب", Icons.work_outline)),
+                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: fatherJob, decoration: _inputDecoration("عمل الأب", Icons.work_outline, isDarkMode)),
                 ],
               ),
             ),
 
             const SizedBox(height: 15),
 
-            // قسم التواريخ والحفظ
+            // التواريخ والحفظ
             _buildSectionCard(
               title: "التواريخ والحفظ",
               icon: Icons.history_edu,
+              isDarkMode: isDarkMode,
               child: Column(
                 children: [
                   if (studentType != "new") ...[
                     TextField(
+                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
                       controller: memorizedPages,
                       keyboardType: TextInputType.number,
-                      decoration: _inputDecoration("عدد الصفحات المحفوظة", Icons.auto_stories_outlined),
+                      decoration: _inputDecoration("عدد الصفحات المحفوظة", Icons.auto_stories_outlined, isDarkMode),
                     ),
                     const SizedBox(height: 15),
                   ],
@@ -179,8 +264,9 @@ class _AddStudentPageState extends State<AddStudentPage> {
                       Expanded(child: _buildDatePicker(
                         label: birthDate == null ? "تاريخ الميلاد" : birthDate.toString().split(" ")[0],
                         icon: Icons.cake_outlined,
+                        isDarkMode: isDarkMode,
                         onTap: () async {
-                          final picked = await _selectDate(context, DateTime(2000));
+                          final picked = await _selectDate(context, DateTime(1990), isDarkMode);
                           if (picked != null) setState(() => birthDate = picked);
                         },
                       )),
@@ -188,8 +274,9 @@ class _AddStudentPageState extends State<AddStudentPage> {
                       Expanded(child: _buildDatePicker(
                         label: startDate == null ? "بدء الحفظ" : startDate.toString().split(" ")[0],
                         icon: Icons.play_arrow_outlined,
+                        isDarkMode: isDarkMode,
                         onTap: () async {
-                          final picked = await _selectDate(context, DateTime(2000));
+                          final picked = await _selectDate(context, DateTime(2010), isDarkMode);
                           if (picked != null) setState(() => startDate = picked);
                         },
                       )),
@@ -201,14 +288,14 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
             const SizedBox(height: 30),
 
-            // زر الإضافة
+            // زر الحفظ
             SizedBox(
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
                 onPressed: loading ? null : addStudent,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
+                  backgroundColor: isDarkMode ? Colors.orange : primaryColor,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   elevation: 2,
                 ),
@@ -224,66 +311,65 @@ class _AddStudentPageState extends State<AddStudentPage> {
     );
   }
 
-  // مساعد لتنسيق الحقول
-  InputDecoration _inputDecoration(String label, IconData icon) {
+  InputDecoration _inputDecoration(String label, IconData icon, bool isDarkMode) {
     return InputDecoration(
       labelText: label,
-      prefixIcon: Icon(icon, color: primaryColor, size: 20),
+      labelStyle: TextStyle(color: isDarkMode ? Colors.grey[400] : Colors.grey[700]),
+      prefixIcon: Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 20),
       filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+      fillColor: isDarkMode ? const Color(0xff2b2b2b) : Colors.white,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade300)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade200)),
     );
   }
 
-  // كرت لتنظيم الأقسام
-  Widget _buildSectionCard({required String title, required IconData icon, required Widget child}) {
+  Widget _buildSectionCard({required String title, required IconData icon, required Widget child, required bool isDarkMode}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 5))],
+        boxShadow: [BoxShadow(color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 5))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: primaryColor, size: 18),
+              Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 18),
               const SizedBox(width: 8),
-              Text(title, style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(title, style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
-          const Divider(height: 25),
+          Divider(height: 25, color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
           child,
         ],
       ),
     );
   }
 
-  // تصميم زر اختيار التاريخ
-  Widget _buildDatePicker({required String label, required IconData icon, required VoidCallback onTap}) {
+  Widget _buildDatePicker({required String label, required IconData icon, required bool isDarkMode, required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
+          color: isDarkMode ? const Color(0xff2b2b2b) : Colors.white,
+          border: Border.all(color: isDarkMode ? Colors.transparent : Colors.grey.shade300),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: primaryColor),
+            Icon(icon, size: 20, color: isDarkMode ? Colors.orange : primaryColor),
             const SizedBox(width: 8),
-            Expanded(child: Text(label, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+            Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: isDarkMode ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis)),
           ],
         ),
       ),
     );
   }
 
-  Future<DateTime?> _selectDate(BuildContext context, DateTime initial) async {
+  Future<DateTime?> _selectDate(BuildContext context, DateTime initial, bool isDarkMode) async {
     return await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
@@ -292,7 +378,13 @@ class _AddStudentPageState extends State<AddStudentPage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(primary: primaryColor),
+            colorScheme: ColorScheme.light(
+              primary: isDarkMode ? Colors.orange : primaryColor,
+              onPrimary: Colors.white,
+              surface: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+              onSurface: isDarkMode ? Colors.white : Colors.black,
+            ),
+            dialogBackgroundColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
           ),
           child: child!,
         );

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:provider/provider.dart'; // مكتبة الـ provider
+import 'package:firebase_storage/firebase_storage.dart'; // استيراد مكتبة الاستورج الجديدة
+import 'package:provider/provider.dart'; 
 import 'firebase_options.dart';
 import 'utils/app_colors.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
-import 'services/theme_provider.dart'; // تأكد من إنشاء هذا الملف كما بالأسفل
+import 'services/theme_provider.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
@@ -13,6 +14,9 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // 🔥 إجبار التطبيق على الاتصال بالـ Storage وتفعيله برابط المشروع لتخطي تعليق الموقع
+  FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
   
   runApp(
     // تغليف التطبيق بالـ Provider لتمرير حالة الثيم لكل الصفحات

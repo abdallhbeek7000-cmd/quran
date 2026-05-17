@@ -5,9 +5,9 @@ import '../services/theme_provider.dart';
 import 'manage_honor_board_page.dart'; 
 
 class HonorBoardPage extends StatelessWidget {
-  final String role; // <-- تأكد أن هذا السطر موجود هنا
+  final String role; 
 
-  const HonorBoardPage({super.key, required this.role}); // <-- وتأكد من الـ Constructor هنا
+  const HonorBoardPage({super.key, required this.role}); 
 
   final Color primaryColor = const Color(0xff425c75);
   final Color goldColor = const Color(0xffD4AF37); 
@@ -110,6 +110,7 @@ class HonorBoardPage extends StatelessWidget {
 
                 Color medalColor = index == 0 ? goldColor : (index == 1 ? silverColor : bronzeColor);
                 bool isFirst = index == 0;
+                String? imageUrl = student['imageUrl']; // جلب رابط الصورة المخزن ببيانات الفارس
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
@@ -122,6 +123,7 @@ class HonorBoardPage extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
+                      // قسم الميدالية والترتيب
                       Stack(
                         alignment: Alignment.center,
                         children: [
@@ -129,7 +131,22 @@ class HonorBoardPage extends StatelessWidget {
                           Text("${index + 1}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                         ],
                       ),
+                      const SizedBox(width: 12),
+
+                      // إضافة صورة الطالب الدائرية
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: isDarkMode ? const Color(0xff2b2b2b) : Colors.grey[200],
+                        backgroundImage: (imageUrl != null && imageUrl.isNotEmpty)
+                            ? NetworkImage(imageUrl)
+                            : null,
+                        child: (imageUrl == null || imageUrl.isEmpty)
+                            ? Icon(Icons.person, size: 26, color: isDarkMode ? Colors.grey[500] : Colors.grey[400])
+                            : null,
+                      ),
                       const SizedBox(width: 15),
+
+                      // بيانات الطالب
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

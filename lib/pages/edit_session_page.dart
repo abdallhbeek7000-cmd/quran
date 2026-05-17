@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/session_service.dart';
+import '../services/theme_provider.dart';
 
 class EditSessionPage extends StatefulWidget {
   final String sessionId;
@@ -18,9 +20,10 @@ class EditSessionPage extends StatefulWidget {
 class _EditSessionPageState extends State<EditSessionPage> {
   final sessionService = SessionService();
   late TextEditingController newMemorization;
-  late TextEditingController newReview; // الحقل المطور
-  late TextEditingController oldReview; // الحقل المطور
+  late TextEditingController newReview; 
+  late TextEditingController oldReview; 
   late TextEditingController homework;
+  late TextEditingController readingBySight; // الحقل الجديد المطور للتعديل
   late TextEditingController religiousActivities;
   late TextEditingController notes;
 
@@ -42,7 +45,6 @@ class _EditSessionPageState extends State<EditSessionPage> {
 
     newMemorization = TextEditingController(text: data['newMemorization']);
     
-    // فك دمج المراجعة (إذا كانت محفوظة بصيغة جديد | قديم)
     String fullReview = data['review'] ?? '';
     if (fullReview.contains('|')) {
       var parts = fullReview.split('|');
@@ -54,8 +56,21 @@ class _EditSessionPageState extends State<EditSessionPage> {
     }
 
     homework = TextEditingController(text: data['homework']);
+    readingBySight = TextEditingController(text: data['readingBySight'] ?? ''); // قراءة القيمة القديمة من فايربيز إن وجدت
     religiousActivities = TextEditingController(text: data['religiousActivities']);
     notes = TextEditingController(text: data['notes']);
+  }
+
+  @override
+  void dispose() {
+    newMemorization.dispose();
+    newReview.dispose();
+    oldReview.dispose();
+    homework.dispose();
+    readingBySight.dispose();
+    religiousActivities.dispose();
+    notes.dispose();
+    super.dispose();
   }
 
   save() async {
@@ -68,6 +83,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
         'newMemorization': absent ? '' : newMemorization.text.trim(),
         'review': absent ? '' : "${newReview.text.trim()} | ${oldReview.text.trim()}",
         'homework': absent ? '' : homework.text.trim(),
+        'readingBySight': absent ? '' : readingBySight.text.trim(), // رفع التعديل الجديد إلى فايربيز
         'rating': absent ? '' : rating,
         'studentStatus': absent ? '' : studentStatus,
         'religiousActivities': absent ? '' : religiousActivities.text.trim(),
@@ -87,22 +103,23 @@ class _EditSessionPageState extends State<EditSessionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: primaryColor,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
         title: const Text("تعديل بيانات الجلسة", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Header التعديل
             Container(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
               decoration: BoxDecoration(
-                color: primaryColor,
+                color: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
                 borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
               ),
               child: Card(
@@ -126,15 +143,18 @@ class _EditSessionPageState extends State<EditSessionPage> {
                     _buildSectionCard(
                       title: "تعديل الإنجاز",
                       icon: Icons.edit_calendar,
+                      isDarkMode: isDarkMode,
                       child: Column(
                         children: [
-                          TextField(controller: newMemorization, decoration: _inputDecoration("الحفظ الجديد", Icons.star_border)),
+                          TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newMemorization, decoration: _inputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode)),
                           const SizedBox(height: 15),
-                          TextField(controller: newReview, decoration: _inputDecoration("مراجعة جديد", Icons.auto_stories_outlined)),
+                          TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newReview, decoration: _inputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode)),
                           const SizedBox(height: 15),
-                          TextField(controller: oldReview, decoration: _inputDecoration("مراجعة قديم", Icons.history_outlined)),
+                          TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: oldReview, decoration: _inputDecoration("مراجعة قديم", Icons.history_outlined, isDarkMode)),
                           const SizedBox(height: 15),
-                          TextField(controller: homework, decoration: _inputDecoration("الواجب", Icons.edit_note)),
+                          TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: readingBySight, decoration: _inputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
+                          const SizedBox(height: 15),
+                          TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: homework, decoration: _inputDecoration("الواجب", Icons.edit_note, isDarkMode)),
                         ],
                       ),
                     ),
@@ -142,18 +162,23 @@ class _EditSessionPageState extends State<EditSessionPage> {
                     _buildSectionCard(
                       title: "تعديل السلوك والتقييم",
                       icon: Icons.thumbs_up_down_outlined,
+                      isDarkMode: isDarkMode,
                       child: Column(
                         children: [
                           DropdownButtonFormField<String>(
                             value: rating,
-                            decoration: _inputDecoration("التقييم", Icons.grade),
+                            dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                            decoration: _inputDecoration("التقييم", Icons.grade, isDarkMode),
                             items: ["ممتاز", "جيد", "سيء"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
                             onChanged: (v) => setState(() => rating = v!),
                           ),
                           const SizedBox(height: 15),
                           DropdownButtonFormField<String>(
                             value: studentStatus,
-                            decoration: _inputDecoration("حالة الطالب", Icons.mood),
+                            dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                            decoration: _inputDecoration("حالة الطالب", Icons.mood, isDarkMode),
                             items: ["مهذب", "منضبط", "مشاغب", "كثير الحركة"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
                             onChanged: (v) => setState(() => studentStatus = v!),
                           ),
@@ -165,11 +190,12 @@ class _EditSessionPageState extends State<EditSessionPage> {
                   _buildSectionCard(
                     title: "ملاحظات إضافية",
                     icon: Icons.comment_bank_outlined,
+                    isDarkMode: isDarkMode,
                     child: Column(
                       children: [
-                        if (!absent) TextField(controller: religiousActivities, decoration: _inputDecoration("نشاطات دينية", Icons.mosque_outlined)),
-                        const SizedBox(height: 15),
-                        TextField(controller: notes, maxLines: 3, decoration: _inputDecoration("الملاحظات العامة", Icons.comment)),
+                        if (!absent) TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: religiousActivities, decoration: _inputDecoration("نشاطات دينية", Icons.mosque_outlined, isDarkMode)),
+                        if (!absent) const SizedBox(height: 15),
+                        TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: notes, maxLines: 3, decoration: _inputDecoration("الملاحظات العامة", Icons.comment, isDarkMode)),
                       ],
                     ),
                   ),
@@ -180,7 +206,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                     child: ElevatedButton(
                       onPressed: loading ? null : save,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: absent ? Colors.orange : primaryColor,
+                        backgroundColor: absent ? Colors.orange : (isDarkMode ? Colors.orange : primaryColor),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                       ),
                       child: loading
@@ -197,36 +223,43 @@ class _EditSessionPageState extends State<EditSessionPage> {
     );
   }
 
-  InputDecoration _inputDecoration(String label, IconData icon) {
+  InputDecoration _inputDecoration(String label, IconData icon, bool isDarkMode) {
     return InputDecoration(
       labelText: label,
-      prefixIcon: Icon(icon, color: primaryColor, size: 20),
+      labelStyle: TextStyle(color: isDarkMode ? Colors.grey[400] : Colors.grey[700]),
+      prefixIcon: Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 20),
       filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+      fillColor: isDarkMode ? const Color(0xff2b2b2b) : Colors.white,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade300)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade200)),
     );
   }
 
-  Widget _buildSectionCard({required String title, required IconData icon, required Widget child}) {
+  Widget _buildSectionCard({required String title, required IconData icon, required Widget child, required bool isDarkMode}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 5))],
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: primaryColor, size: 18),
+              Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 18),
               const SizedBox(width: 8),
-              Text(title, style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(title, style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
-          const Divider(height: 25),
+          Divider(height: 25, color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
           child,
         ],
       ),

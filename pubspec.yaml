@@ -41,6 +41,9 @@ dependencies:
   uuid: ^4.5.3
   shared_preferences: ^2.2.3
 
+  image_picker: ^1.1.2
+  firebase_storage: ^12.1.2
+
   excel: ^4.0.3
   path_provider: ^2.1.2
   share_plus: ^7.2.2
