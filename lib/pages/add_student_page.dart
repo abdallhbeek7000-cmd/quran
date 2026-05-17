@@ -1,8 +1,8 @@
 import 'dart:io';
-import 'dart:convert'; // مكتبة تحويل البيانات المضافة حديثاً
+import 'dart:convert'; 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http; // استبدال الفايربيز بمكتبة الـ http للرفع المباشر
+import 'package:http/http.dart' as http; 
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 import '../models/cycle_model.dart';
@@ -38,13 +38,12 @@ class _AddStudentPageState extends State<AddStudentPage> {
   String studentType = "new";
 
   File? _selectedImage; 
-  XFile? _pickerFile; // 🔥 أضف هذا السطر هنا تماماً
+  XFile? _pickerFile; 
   final ImagePicker _picker = ImagePicker();
 
   final Color primaryColor = const Color(0xff425c75);
 
-  // دالة فتح المعرض واختيار الصورة
-  // دالة فتح المعرض واختيار الصورة المحدثة
+  // دالة فتح المعرض واختيار الصورة المحدثة الشاملة
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -52,51 +51,46 @@ class _AddStudentPageState extends State<AddStudentPage> {
     );
     if (pickedFile != null) {
       setState(() {
-        _pickerFile = pickedFile; // 🔥 أضفنا هذا السطر لحفظ الملف الشامل
+        _pickerFile = pickedFile; 
         _selectedImage = File(pickedFile.path); 
       });
     }
   }
 
-  // 🔥 دالة الرفع السحرية الجديدة إلى سيرفر Cloudinary الاقتصادي والسريع
-  // 🔥 دالة الرفع المباشر بالبايتات إلى سيرفر Cloudinary الخاص بك
-  // 🔥 دالة الرفع الحرة والسريعة بدون حسابات وبدون قيود (تشتغل ويب وموبايل 100%)
-Future<String> _uploadStudentImageToTelegraph() async {
-  if (_pickerFile == null) return '';
-  try {
-    var url = Uri.parse('https://telegra.ph/upload');
-    
-    final bytes = await _pickerFile!.readAsBytes();
-    
-    var request = http.MultipartRequest('POST', url)
-      ..files.add(http.MultipartFile.fromBytes(
-        'file',
-        bytes,
-        filename: _pickerFile!.name,
-      ));
-
-    var response = await request.send();
-    
-    if (response.statusCode == 200) {
-      var responseData = await response.stream.toBytes();
-      var responseString = String.fromCharCodes(responseData);
-      var jsonList = jsonDecode(responseString);
+  // 🔥 دالة الرفع المباشر بالبايتات المربوطة بسيرفر Cloudinary الخاص بك
+  Future<String> _uploadStudentImageToCloudinary() async {
+    if (_pickerFile == null) return '';
+    try {
+      var url = Uri.parse('https://api.cloudinary.com/v1_1/dqsrrej2b/image/upload');
       
-      // السيرفر يعيد قائمة، نأخذ منها مسار الصورة المباشر ونربطه برابط الموقع الأساسي
-      if (jsonList is List && jsonList.isNotEmpty) {
-        String path = jsonList[0]['src'];
-        return 'https://telegra.ph$path'; // هذا هو الرابط الصريح المباشر للصورة!
+      // قراءة بايتات الصورة لضمان استقرار الرفع وسرعته على الموبايل
+      final bytes = await _pickerFile!.readAsBytes();
+      
+      var request = http.MultipartRequest('POST', url)
+        ..fields['upload_preset'] = 'rhjrrtqz'
+        ..files.add(http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: _pickerFile!.name,
+        ));
+
+      var response = await request.send();
+      
+      if (response.statusCode == 200) {
+        var responseData = await response.stream.toBytes();
+        var responseString = String.fromCharCodes(responseData);
+        var jsonMap = jsonDecode(responseString);
+        
+        return jsonMap['secure_url'] ?? '';
+      } else {
+        debugPrint("فشل الرفع إلى سيرفر الصور. كود الخطأ: ${response.statusCode}");
+        return '';
       }
-      return '';
-    } else {
-      debugPrint("فشل الرفع للسيرفر السريع. كود الخطأ: ${response.statusCode}");
+    } catch (e) {
+      debugPrint("خطأ أثناء رفع الصورة إلى Cloudinary: $e");
       return '';
     }
-  } catch (e) {
-    debugPrint("خطأ أثناء رفع الصورة: $e");
-    return '';
   }
-}
 
   addStudent() async {
     if (name.text.isEmpty || phone.text.isEmpty) {
@@ -114,11 +108,11 @@ Future<String> _uploadStudentImageToTelegraph() async {
         cycleNumber: widget.cycle.cycleNumber,
       );
 
-      // الرفع عبر السيرفر الجديد واستلام الرابط المباشر
+      // استدعاء دالة الرفع الجديدة واستلام رابط الويب المباشر لتخزينه في فايربوست
       String finalImageUrl = '';
-if (_selectedImage != null) {
-  finalImageUrl = await _uploadStudentImageToTelegraph(); // استدعاء الدالة الجديدة السريعة
-}
+      if (_pickerFile != null) {
+        finalImageUrl = await _uploadStudentImageToCloudinary();
+      }
 
       final student = StudentModel(
         id: '',

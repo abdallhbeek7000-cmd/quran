@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart'; 
 import '../services/theme_provider.dart';
 import 'manage_honor_board_page.dart'; 
 
@@ -110,61 +111,113 @@ class HonorBoardPage extends StatelessWidget {
 
                 Color medalColor = index == 0 ? goldColor : (index == 1 ? silverColor : bronzeColor);
                 bool isFirst = index == 0;
-                String? imageUrl = student['imageUrl']; // جلب رابط الصورة المخزن ببيانات الفارس
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xff1e1e1e) : (isFirst ? goldColor.withOpacity(0.08) : Colors.white),
-                    borderRadius: BorderRadius.circular(20),
-                    border: isFirst ? Border.all(color: goldColor, width: 1.2) : null,
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8)],
-                  ),
-                  child: Row(
-                    children: [
-                      // قسم الميدالية والترتيب
-                      Stack(
-                        alignment: Alignment.center,
+                // 1️⃣ قراءة الرقم التسلسلي بأمان بجميع حالاته (نص أو رقم) لمنع الشاشة الحمراء
+                final dynamic rawSerial = student['serial'];
+                final int serialNumber = rawSerial is int 
+                    ? rawSerial 
+                    : (int.tryParse(rawSerial?.toString() ?? '') ?? 0);
+
+                // 2️⃣ جلب بيانات الطالب الأصلية وصورته من الكولكشن الأساسي بأمان التام
+                return FutureBuilder<QuerySnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('students')
+                      .where('serial', whereIn: [serialNumber, serialNumber.toString()])
+                      .limit(1)
+                      .get(),
+                  builder: (context, studentSnapshot) {
+                    String imageUrl = '';
+                    if (studentSnapshot.hasData && studentSnapshot.data!.docs.isNotEmpty) {
+                      var studentData = studentSnapshot.data!.docs.first.data() as Map<String, dynamic>;
+                      imageUrl = studentData['imageUrl'] ?? '';
+                    }
+
+                    final String studentName = student['name'] ?? '';
+                    final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? const Color(0xff1e1e1e) : (isFirst ? goldColor.withOpacity(0.08) : Colors.white),
+                        borderRadius: BorderRadius.circular(20),
+                        border: isFirst ? Border.all(color: goldColor, width: 1.2) : null,
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8)],
+                      ),
+                      child: Row(
                         children: [
-                          Icon(Icons.workspace_premium, color: medalColor, size: 45),
-                          Text("${index + 1}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(width: 12),
+                          // قسم الميدالية والترتيب
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Icon(Icons.workspace_premium, color: medalColor, size: 45),
+                              Text("${index + 1}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          const SizedBox(width: 12),
 
-                      // إضافة صورة الطالب الدائرية
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: isDarkMode ? const Color(0xff2b2b2b) : Colors.grey[200],
-                        backgroundImage: (imageUrl != null && imageUrl.isNotEmpty)
-                            ? NetworkImage(imageUrl)
-                            : null,
-                        child: (imageUrl == null || imageUrl.isEmpty)
-                            ? Icon(Icons.person, size: 26, color: isDarkMode ? Colors.grey[500] : Colors.grey[400])
-                            : null,
-                      ),
-                      const SizedBox(width: 15),
-
-                      // بيانات الطالب
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              student['name'] ?? '',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold, 
-                                fontSize: 15, 
-                                color: isFirst ? goldColor : (isDarkMode ? Colors.white : Colors.black87)
+                          // عرض صورة الفارس باستخدام الكاش السريع أو الحرف الافتراضي
+                          Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isFirst ? goldColor : (isDarkMode ? Colors.grey[800]! : Colors.grey[300]!),
+                                width: isFirst ? 2 : 1,
                               ),
                             ),
-                            Text("الرقم التسلسلي: ${student['serial'] ?? '---'}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                          ],
-                        ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(25),
+                              child: imageUrl.isNotEmpty
+                                  ? CachedNetworkImage(
+                                      imageUrl: imageUrl,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) => const Center(
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) => Center(
+                                        child: Text(
+                                          firstLetter,
+                                          style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 18),
+                                        ),
+                                      ),
+                                    )
+                                  : Center(
+                                      child: Text(
+                                        firstLetter,
+                                        style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 18),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+
+                          // بيانات الطالب
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  studentName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold, 
+                                    fontSize: 15, 
+                                    color: isFirst ? goldColor : (isDarkMode ? Colors.white : Colors.black87)
+                                  ),
+                                ),
+                                Text("الرقم التسلسلي: $serialNumber", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  }
                 );
               }),
             );

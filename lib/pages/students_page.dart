@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart'; 
 import 'package:path_provider/path_provider.dart'; 
 import 'package:share_plus/share_plus.dart'; 
+import 'package:cached_network_image/cached_network_image.dart'; // استيراد حزمة الكاش الذكية للصور
 import '../models/cycle_model.dart';
 import 'add_student_page.dart';
 import 'edit_student_page.dart';
@@ -160,11 +161,9 @@ class _StudentsPageState extends State<StudentsPage> {
                 final docs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   
-                  // 1. فلترة البحث بالاسم
                   final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
                   final nameMatches = studentName.contains(search);
                   
-                  // 2. فلترة المشرف الذكية والجذرية
                   bool supervisorMatches = true;
                   
                   if (selectedSupervisor.isNotEmpty) {
@@ -192,8 +191,13 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
+  // 🔥 دالة بناء كرت الطالب المحدثة لعرض الصور من الكلاوديناري بكفاءة عالية
   Widget _buildStudentCard(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    final String imageUrl = data['imageUrl'] ?? '';
+    final String studentName = data['name'] ?? 'بدون اسم';
+    final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
+
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
@@ -205,15 +209,43 @@ class _StudentsPageState extends State<StudentsPage> {
         children: [
           ListTile(
             contentPadding: const EdgeInsets.all(15),
-            leading: CircleAvatar(
-              radius: 25,
-              backgroundColor: primaryColor.withOpacity(0.1),
-              child: Text(
-                data['name'].toString().isNotEmpty ? data['name'].toString().trim().substring(0, 1) : "?",
-                style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20),
+            // 🔥 تعديل قسم الـ leading ليعرض الصورة المرفوعة بكاش ذكي أو يعود للحرف الافتراضي
+            leading: Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: primaryColor.withOpacity(0.1),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(25),
+                child: imageUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Center(
+                          child: Text(
+                            firstLetter,
+                            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20),
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Text(
+                          firstLetter,
+                          style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20),
+                        ),
+                      ),
               ),
             ),
-            title: Text(data['name'] ?? 'بدون اسم', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            title: Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

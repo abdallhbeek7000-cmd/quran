@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart'; // استيراد حزمة الكاش الذكية للصور
 import '../models/cycle_model.dart';
 import '../services/student_service.dart';
 
@@ -92,7 +93,7 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
                           items: supervisors.map((s) {
                             return DropdownMenuItem(
                               value: s.id,
-                              child: Text(s['name'] ?? s['email']), // عرض الاسم وإذا مو موجود الإيميل
+                              child: Text(s['name'] ?? s['email']), 
                             );
                           }).toList(),
                           onChanged: (v) {
@@ -129,7 +130,10 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
                   itemCount: docs.length,
                   itemBuilder: (context, index) {
                     final student = docs[index];
-                    final data = student.data();
+                    final data = student.data() as Map<String, dynamic>;
+                    final String imageUrl = data['imageUrl'] ?? '';
+                    final String studentName = data['name'] ?? 'بدون اسم';
+                    final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -140,15 +144,46 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                        leading: CircleAvatar(
-                          backgroundColor: primaryColor.withOpacity(0.1),
-                          child: Text(data['name'].toString().substring(0, 1),
-                              style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold)),
+                        // 🔥 تحديث الـ leading ليعرض صورة الطالب المرفوعة بكاش ذكي أو يعود للحرف الافتراضي
+                        leading: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: primaryColor.withOpacity(0.1),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(25),
+                            child: imageUrl.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: imageUrl,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => const Center(
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                    ),
+                                    errorWidget: (context, url, error) => Center(
+                                      child: Text(
+                                        firstLetter,
+                                        style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 18),
+                                      ),
+                                    ),
+                                  )
+                                : Center(
+                                    child: Text(
+                                      firstLetter,
+                                      style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 18),
+                                    ),
+                                  ),
+                          ),
                         ),
-                        title: Text(data['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
-                          data['supervisorName'] == '' ? 'غير موزع' : "المشرف: ${data['supervisorName']}",
-                          style: TextStyle(color: data['supervisorName'] == '' ? Colors.orange : Colors.green),
+                          data['supervisorName'] == '' || data['supervisorName'] == null ? 'غير موزع' : "المشرف: ${data['supervisorName']}",
+                          style: TextStyle(color: data['supervisorName'] == '' || data['supervisorName'] == null ? Colors.orange : Colors.green),
                         ),
                         trailing: ElevatedButton(
                           style: ElevatedButton.styleFrom(
