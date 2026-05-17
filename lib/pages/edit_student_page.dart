@@ -1,8 +1,9 @@
 import 'dart:io';
+import 'dart:convert'; // استيراد مكتبة تحويل البيانات لمعالجة رد السيرفر
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:http/http.dart' as http; // استبدال الفايربيز ستورج بـ http للرفع المباشر
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 
@@ -28,9 +29,9 @@ class _EditStudentPageState extends State<EditStudentPage> {
   String? selectedSupervisorId;
   String? selectedSupervisorName;
   String? studentType;
-  String? currentImageUrl; // لتخزين رابط الصورة الحالي القادم من الفايربيز
+  String? currentImageUrl; 
 
-  File? _newSelectedImage; // لتخزين ملف الصورة الجديد في حال اختار المدير تغييرها
+  File? _newSelectedImage; 
   final ImagePicker _picker = ImagePicker();
 
   final Color primaryColor = const Color(0xff425c75);
@@ -50,7 +51,7 @@ class _EditStudentPageState extends State<EditStudentPage> {
     selectedSupervisorId = data['supervisorId'];
     selectedSupervisorName = data['supervisorName'];
     studentType = data['studentType'] ?? 'new';
-    currentImageUrl = data['imageUrl']; // قراءة رابط الصورة الحالي
+    currentImageUrl = data['imageUrl']; 
 
     nameController.addListener(() => setState(() {}));
     serialController.addListener(() => setState(() {}));
@@ -66,7 +67,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
     super.dispose();
   }
 
-  // دالة اختيار صورة جديدة من المعرض
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -79,20 +79,30 @@ class _EditStudentPageState extends State<EditStudentPage> {
     }
   }
 
-  // دالة رفع الصورة الجديدة لـ Firebase Storage
-  Future<String> _uploadNewImage(String studentName) async {
+  // 🔥 دالة الرفع المباشر الجديدة المدمجة ببيانات السيرفر الخاص بك dqsrrej2b
+  Future<String> _uploadNewImageToCloudinary() async {
     if (_newSelectedImage == null) return currentImageUrl ?? '';
     try {
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('students_images')
-          .child('student_${studentName}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      var url = Uri.parse('https://api.cloudinary.com/v1_1/dqsrrej2b/image/upload');
       
-      final uploadTask = await storageRef.putFile(_newSelectedImage!);
-      final String downloadUrl = await uploadTask.ref.getDownloadURL();
-      return downloadUrl;
+      var request = http.MultipartRequest('POST', url)
+        ..fields['upload_preset'] = 'rhjrrtqz'
+        ..files.add(await http.MultipartFile.fromPath('file', _newSelectedImage!.path));
+
+      var response = await request.send();
+      
+      if (response.statusCode == 200) {
+        var responseData = await response.stream.toBytes();
+        var responseString = String.fromCharCodes(responseData);
+        var jsonMap = jsonDecode(responseString);
+        
+        return jsonMap['secure_url'] ?? currentImageUrl ?? '';
+      } else {
+        debugPrint("فشل الرفع إلى سيرفر الصور. كود الخطأ: ${response.statusCode}");
+        return currentImageUrl ?? '';
+      }
     } catch (e) {
-      debugPrint("خطأ أثناء رفع الصورة الجديدة: $e");
+      debugPrint("خطأ أثناء رفع الصورة الجديدة إلى Cloudinary: $e");
       return currentImageUrl ?? '';
     }
   }
@@ -107,10 +117,10 @@ class _EditStudentPageState extends State<EditStudentPage> {
 
     setState(() => _isLoading = true);
     try {
-      // رفع الصورة الجديدة أولاً إذا اختار المدير صورة جديدة، وإلا سيبقى الرابط القديم كما هو
+      // رفع الصورة الجديدة إلى Cloudinary إذا تم اختيارها، وإلا الحفاظ على الرابط القديم
       String finalImageUrl = currentImageUrl ?? '';
       if (_newSelectedImage != null) {
-        finalImageUrl = await _uploadNewImage(nameController.text.trim());
+        finalImageUrl = await _uploadNewImageToCloudinary();
       }
 
       await FirebaseFirestore.instance
@@ -125,7 +135,7 @@ class _EditStudentPageState extends State<EditStudentPage> {
         'supervisorId': selectedSupervisorId ?? '',
         'supervisorName': selectedSupervisorName ?? 'غير موزع',
         'studentType': studentType,
-        'imageUrl': finalImageUrl, // تحديث حقل الصورة بفايربيز
+        'imageUrl': finalImageUrl, 
       });
 
       if (!mounted) return;
@@ -157,7 +167,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // قسم المعاينة العلوية الفخم مع دعم عرض صورة الطالب الحالية أو الجديدة
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 20),
@@ -172,7 +181,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
                       CircleAvatar(
                         radius: 45,
                         backgroundColor: Colors.white.withOpacity(0.2),
-                        // تدرج العرض: إذا تم اختيار صورة جديدة محلياً يعرضها، وإذا كان لديه صورة قديمة بفايربيز يعرضها، وإلا يعرض الأيقونة الافتراضية
                         backgroundImage: _newSelectedImage != null 
                             ? FileImage(_newSelectedImage!) 
                             : (currentImageUrl != null && currentImageUrl!.isNotEmpty 
@@ -230,7 +238,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // حقل الاسم
                     TextField(
                       controller: nameController,
                       style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
@@ -238,7 +245,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // حقل الرقم التسلسلي
                     TextField(
                       controller: serialController,
                       keyboardType: TextInputType.number,
@@ -247,7 +253,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // حقل اسم الأب
                     TextField(
                       controller: fatherNameController,
                       style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
@@ -255,7 +260,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // حقل اسم الأم
                     TextField(
                       controller: motherNameController,
                       style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
@@ -263,7 +267,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // حقل رقم الهاتف
                     TextField(
                       controller: phoneController,
                       keyboardType: TextInputType.phone,
@@ -272,7 +275,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // فئة الطالب
                     DropdownButtonFormField<String>(
                       value: studentType,
                       dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
@@ -287,7 +289,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // قائمة المشرفين
                     StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
                       builder: (context, snapshot) {
@@ -331,7 +332,6 @@ class _EditStudentPageState extends State<EditStudentPage> {
 
                     const SizedBox(height: 30),
 
-                    // زر الحفظ النهائي
                     SizedBox(
                       width: double.infinity,
                       height: 55,

@@ -1,7 +1,8 @@
 import 'dart:io';
+import 'dart:convert'; // مكتبة تحويل البيانات المضافة حديثاً
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:http/http.dart' as http; // استبدال الفايربيز بمكتبة الـ http للرفع المباشر
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 import '../models/cycle_model.dart';
@@ -37,11 +38,13 @@ class _AddStudentPageState extends State<AddStudentPage> {
   String studentType = "new";
 
   File? _selectedImage; 
+  XFile? _pickerFile; // 🔥 أضف هذا السطر هنا تماماً
   final ImagePicker _picker = ImagePicker();
 
   final Color primaryColor = const Color(0xff425c75);
 
   // دالة فتح المعرض واختيار الصورة
+  // دالة فتح المعرض واختيار الصورة المحدثة
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -49,28 +52,51 @@ class _AddStudentPageState extends State<AddStudentPage> {
     );
     if (pickedFile != null) {
       setState(() {
-        _selectedImage = File(pickedFile.path);
+        _pickerFile = pickedFile; // 🔥 أضفنا هذا السطر لحفظ الملف الشامل
+        _selectedImage = File(pickedFile.path); 
       });
     }
   }
 
-  // دالة رفع الصورة الذكية باسم الطالب لمنع تضارب الأنواع
-  Future<String> _uploadStudentImage(String studentName) async {
-    if (_selectedImage == null) return '';
-    try {
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('students_images')
-          .child('student_${studentName}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+  // 🔥 دالة الرفع السحرية الجديدة إلى سيرفر Cloudinary الاقتصادي والسريع
+  // 🔥 دالة الرفع المباشر بالبايتات إلى سيرفر Cloudinary الخاص بك
+  // 🔥 دالة الرفع الحرة والسريعة بدون حسابات وبدون قيود (تشتغل ويب وموبايل 100%)
+Future<String> _uploadStudentImageToTelegraph() async {
+  if (_pickerFile == null) return '';
+  try {
+    var url = Uri.parse('https://telegra.ph/upload');
+    
+    final bytes = await _pickerFile!.readAsBytes();
+    
+    var request = http.MultipartRequest('POST', url)
+      ..files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: _pickerFile!.name,
+      ));
+
+    var response = await request.send();
+    
+    if (response.statusCode == 200) {
+      var responseData = await response.stream.toBytes();
+      var responseString = String.fromCharCodes(responseData);
+      var jsonList = jsonDecode(responseString);
       
-      final uploadTask = await storageRef.putFile(_selectedImage!);
-      final String downloadUrl = await uploadTask.ref.getDownloadURL();
-      return downloadUrl;
-    } catch (e) {
-      debugPrint("خطأ أثناء رفع الصورة: $e");
+      // السيرفر يعيد قائمة، نأخذ منها مسار الصورة المباشر ونربطه برابط الموقع الأساسي
+      if (jsonList is List && jsonList.isNotEmpty) {
+        String path = jsonList[0]['src'];
+        return 'https://telegra.ph$path'; // هذا هو الرابط الصريح المباشر للصورة!
+      }
+      return '';
+    } else {
+      debugPrint("فشل الرفع للسيرفر السريع. كود الخطأ: ${response.statusCode}");
       return '';
     }
+  } catch (e) {
+    debugPrint("خطأ أثناء رفع الصورة: $e");
+    return '';
   }
+}
 
   addStudent() async {
     if (name.text.isEmpty || phone.text.isEmpty) {
@@ -88,11 +114,11 @@ class _AddStudentPageState extends State<AddStudentPage> {
         cycleNumber: widget.cycle.cycleNumber,
       );
 
-      // تمرير الاسم النصي مباشرة لرفع الصورة بدون خطأ أحمر
+      // الرفع عبر السيرفر الجديد واستلام الرابط المباشر
       String finalImageUrl = '';
-      if (_selectedImage != null) {
-        finalImageUrl = await _uploadStudentImage(name.text.trim());
-      }
+if (_selectedImage != null) {
+  finalImageUrl = await _uploadStudentImageToTelegraph(); // استدعاء الدالة الجديدة السريعة
+}
 
       final student = StudentModel(
         id: '',
