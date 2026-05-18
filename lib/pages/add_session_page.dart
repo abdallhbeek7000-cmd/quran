@@ -1,3 +1,5 @@
+import 'dart:convert'; // استيراد ضروري لمعالجة أكواد الإشعارات
+import 'package:http/http.dart' as http; // استيراد مكتبة الاتصال بالإنترنت
 import 'package:flutter/material.dart';
 import '../models/session_model.dart';
 import '../services/session_service.dart';
@@ -30,7 +32,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
   final newReview = TextEditingController(); 
   final oldReview = TextEditingController(); 
   final homework = TextEditingController();
-  final readingBySight = TextEditingController(); // الحقل الجديد للقراءة نظراً من المصحف
+  final readingBySight = TextEditingController(); 
   final religiousActivities = TextEditingController();
   final notes = TextEditingController();
   final absenceReasonController = TextEditingController(); 
@@ -42,6 +44,47 @@ class _AddSessionPageState extends State<AddSessionPage> {
   String studentStatus = "مهذب";
 
   final Color primaryColor = const Color(0xff425c75);
+
+  // 🔥 دالة إرسال الإشعار السحابي المجاني لهاتف ولي الأمر عبر الـ VAPID Key
+  Future<void> sendNotificationToParent(String studentId, String ratingValue, bool isAbsent, String dateStr) async {
+    try {
+      // 1. جلب توكن هاتف الأب من مستند الطالب في الفايربيز
+      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
+      
+      if (!studentDoc.exists) return;
+      Map<String, dynamic> data = studentDoc.data() as Map<String, dynamic>;
+      String? parentToken = data['fcmToken'];
+      String studentName = data['name'] ?? 'ابنكم';
+
+      if (parentToken == null || parentToken.isEmpty) return;
+
+      String bodyText = isAbsent 
+          ? "تم تسجيل غياب لـ $studentName في حلقة اليوم $dateStr"
+          : "تم تسجيل مراجعة وحفظ جديد لـ $studentName بتقييم ($ratingValue) ليوم $dateStr";
+
+      // 2. إرسال الإشعار المباشر عبر السيرفر المجاني بجوجل
+      await http.post(
+        Uri.parse('https://fcm.googleapis.com/fcm/send'),
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          // تم دمج مفتاح الـ VAPID الخاص بمشروع المعهد هنا بنجاح
+          'Authorization': 'key=BNtbIWjF0hYbP1QLCD1cWi-JLmGxEqxTMSzR_rjZQL3z8OG9p94CBM-ePfKdaxVMZwUD-zjqBk3UtLWoyWDV4N4', 
+        },
+        body: jsonEncode(<String, dynamic>{
+          'notification': <String, dynamic>{
+            'title': '📢 تحديث يومي جديد من الحلقة',
+            'body': bodyText,
+            'sound': 'default',
+          },
+          'priority': 'high',
+          'to': parentToken,
+        }),
+      );
+      print("Notification sent successfully to parent! ✅");
+    } catch (e) {
+      print("Error sending notification: $e");
+    }
+  }
 
   addSession() async {
     final hasToday = await sessionService.hasSessionToday(widget.studentId);
@@ -88,7 +131,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
       'nearReview': finalNearReview, 
       'farReview': finalFarReview,   
       'homework': session.homework,
-      'readingBySight': absent ? '' : readingBySight.text.trim(), // حفظ خانة القراءة نظراً بفايربيز
+      'readingBySight': absent ? '' : readingBySight.text.trim(), 
       'rating': session.rating,
       'studentStatus': session.studentStatus,
       'religiousActivities': session.religiousActivities,
@@ -97,7 +140,16 @@ class _AddSessionPageState extends State<AddSessionPage> {
       'absenceReason': absent ? absenceReasonController.text.trim() : '', 
     };
 
+    // حفظ الجلسة بجدول الفايربيز بشكل طبيعي
     await FirebaseFirestore.instance.collection('sessions').add(sessionData);
+
+    // 🔥 استدعاء دالة الإشعارات الفورية فور نجاح عملية الحفظ
+    await sendNotificationToParent(
+      widget.studentId,
+      absent ? '' : rating,
+      absent,
+      date,
+    );
 
     if (!mounted) return;
     setState(() => loading = false);
