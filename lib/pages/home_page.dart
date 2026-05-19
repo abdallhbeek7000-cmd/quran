@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart'; // مكتبة الـ Provider
+import 'package:cloud_firestore/cloud_firestore.dart'; // مكتبة الفايرستور
+import 'package:quran_habal/services/cloudinary_helper.dart';
 
 import 'login_page.dart';
 import 'create_cycle_page.dart';
@@ -16,6 +18,7 @@ import 'honor_board_page.dart';
 import 'dashboard_page.dart';
 import 'daily_stats_page.dart';
 import 'supervisor_page.dart';
+
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -37,6 +40,7 @@ class _HomePageState extends State<HomePage> {
   CycleModel? currentCycleModel;
 
   final Color primaryColor = const Color(0xff425c75);
+  bool _isUploadingManagerImage = false; // لمؤشر تحميل رفع صورة المدير
 
   @override
   void initState() {
@@ -63,13 +67,37 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // دالة مخصصة للمدير لرفع وتحديث صورته الشخصية
+  Future<void> _updateManagerImage() async {
+    setState(() => _isUploadingManagerImage = true);
+    try {
+      String? url = await CloudinaryHelper.pickAndUploadProfileImage();
+      if (url != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.uid)
+            .set({'imageUrl': url}, SetOptions(merge: true)); // حفظ أو دمج الحقل في مستند المدير
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث صورتك الشخصية بنجاح 🎉")),
+        );
+      }
+    } catch (e) {
+      print("خطأ في رفع صورة المدير: $e");
+    } finally {
+      setState(() => _isUploadingManagerImage = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // مراقبة حالة الوضع الليلي من الـ Provider لتغيير أيقونة الزر
     final themeProvider = Provider.of<ThemeProvider>(context);
 
+    // تحديد الـ Collection والمسار بناءً على دور المستخدم الحالي بشكل ديناميكي
+    final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
+
     return Scaffold(
-      // جعل الخلفية تتبع ثيم النظام الحالي تلقائياً
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
@@ -79,7 +107,6 @@ class _HomePageState extends State<HomePage> {
           style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         actions: [
-          // زر قلب الوضع الليلي / الفاتح بشكل اختياري
           IconButton(
             icon: Icon(
               themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
@@ -99,7 +126,7 @@ class _HomePageState extends State<HomePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Header Section
+            // Header Section المعدل بالكامل لدعم الـ Streams والصور الشخصية
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -112,10 +139,59 @@ class _HomePageState extends State<HomePage> {
               ),
               child: Column(
                 children: [
-                  const CircleAvatar(
-                    radius: 35,
-                    backgroundColor: Colors.white24,
-                    child: Icon(Icons.person, size: 40, color: Colors.white),
+                  // استخدام StreamBuilder لسحب وعرض الصورة فوراً وبشكل لحظي
+                  StreamBuilder<DocumentSnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection(currentCollection)
+                        .doc(widget.uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      String? imageUrl;
+                      if (snapshot.hasData && snapshot.data!.exists) {
+                        var userData = snapshot.data!.data() as Map<String, dynamic>?;
+                        imageUrl = userData?['imageUrl'];
+                      }
+
+                      return GestureDetector(
+                        // التفعيل للمدير فقط، وتعطيله للمشرف
+                        onTap: widget.role == "manager" && !_isUploadingManagerImage
+                            ? _updateManagerImage
+                            : null,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            CircleAvatar(
+                              radius: 40,
+                              backgroundColor: Colors.white24,
+                              backgroundImage: imageUrl != null && imageUrl.isNotEmpty
+                                  ? NetworkImage(imageUrl)
+                                  : null,
+                              child: (imageUrl == null || imageUrl.isEmpty) && !_isUploadingManagerImage
+                                  ? const Icon(Icons.person, size: 45, color: Colors.white)
+                                  : null,
+                            ),
+                            if (_isUploadingManagerImage)
+                              const Positioned.fill(
+                                child: Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: CircularProgressIndicator(color: Colors.white),
+                                ),
+                              ),
+                            // أيقونة الكاميرا الصغيرة لإعلام المدير بإمكانية التعديل
+                            if (widget.role == "manager" && !_isUploadingManagerImage)
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: CircleAvatar(
+                                  radius: 12,
+                                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                                  child: Icon(Icons.camera_alt, size: 14, color: primaryColor),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 10),
                   Text(
@@ -123,6 +199,7 @@ class _HomePageState extends State<HomePage> {
                     style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 15),
+                  
                   // Current Cycle Card
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
@@ -198,7 +275,6 @@ class _HomePageState extends State<HomePage> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
-  // تعديل الـ Card Builder ليستقبل حالة الـ Dark Mode ويغير ألوانه تلقائياً
   Widget _buildMenuCard(IconData icon, String title, VoidCallback onTap, bool isDarkMode) {
     return InkWell(
       onTap: onTap,

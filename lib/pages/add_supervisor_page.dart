@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:quran_habal/services/cloudinary_helper.dart';
+// تأكد من تعديل مسار الـ import بالأسفل ليتوافق مع مجلدات مشروعك
 
 class AddSupervisorPage extends StatefulWidget {
   const AddSupervisorPage({super.key});
@@ -15,8 +17,32 @@ class _AddSupervisorPageState extends State<AddSupervisorPage> {
   final TextEditingController passwordController = TextEditingController();
 
   final Color primaryColor = const Color(0xff425c75);
-  bool _obscurePassword = true; // للتحكم بظهور كلمة السر
+  bool _obscurePassword = true; 
   bool _loading = false;
+  
+  // متغيرات جديدة للتحكم بالصورة المرفوعة
+  String? _uploadedImageUrl;
+  bool _uploadingImage = false;
+
+  // دالة اختيار ورفع الصورة عبر الـ Helper
+  Future<void> _pickAndUploadImage() async {
+    setState(() => _uploadingImage = true);
+    try {
+      String? url = await CloudinaryHelper.pickAndUploadProfileImage();
+      if (url != null) {
+        setState(() {
+          _uploadedImageUrl = url;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: Colors.green, content: Text("تم رفع الصورة بنجاح 🎉")),
+        );
+      }
+    } catch (e) {
+      print("خطأ في الرفع: $e");
+    } finally {
+      setState(() => _uploadingImage = false);
+    }
+  }
 
   Future<void> _createSupervisor() async {
     if (nameController.text.isEmpty || emailController.text.isEmpty || passwordController.text.isEmpty) {
@@ -35,7 +61,7 @@ class _AddSupervisorPageState extends State<AddSupervisorPage> {
         password: passwordController.text.trim(),
       );
 
-      // 2. تخزين بيانات المشرف في Firestore
+      // 2. تخزين بيانات المشرف في Firestore (مع حقل الصورة الجديد)
       await FirebaseFirestore.instance
           .collection('supervisors')
           .doc(credential.user!.uid)
@@ -44,6 +70,7 @@ class _AddSupervisorPageState extends State<AddSupervisorPage> {
         'email': emailController.text.trim(),
         'uid': credential.user!.uid,
         'role': 'supervisor',
+        'imageUrl': _uploadedImageUrl ?? '', // رابط الصورة أو نص فارغ إذا لم يرفع
         'createdAt': DateTime.now().toString(),
       });
 
@@ -75,7 +102,7 @@ class _AddSupervisorPageState extends State<AddSupervisorPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Header جذاب
+            // Header التفاعلي لاختيار الصورة الشخصية للمشرف
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
@@ -86,18 +113,38 @@ class _AddSupervisorPageState extends State<AddSupervisorPage> {
                   bottomRight: Radius.circular(30),
                 ),
               ),
-              child: const Column(
+              child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.white24,
-                    child: Icon(Icons.admin_panel_settings, size: 45, color: Colors.white),
+                  GestureDetector(
+                    onTap: _uploadingImage ? null : _pickAndUploadImage,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: Colors.white24,
+                          backgroundImage: _uploadedImageUrl != null
+                              ? NetworkImage(_uploadedImageUrl!)
+                              : null,
+                          child: _uploadedImageUrl == null && !_uploadingImage
+                              ? const Icon(Icons.add_a_photo_outlined, size: 40, color: Colors.white)
+                              : null,
+                        ),
+                        if (_uploadingImage)
+                          const Positioned.fill(
+                            child: Padding(
+                              padding: EdgeInsets.all(10.0),
+                              child: CircularProgressIndicator(color: Colors.white),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 15),
                   Text(
-                    "إنشاء حساب لمشرف جديد في المعهد",
+                    _uploadedImageUrl == null ? "اضغط لإضافة صورة شخصية للمشرف" : "تم اختيار الصورة بنجاح ✨",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
                   ),
                 ],
               ),
