@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:excel/excel.dart' as pkg_excel; // 👈 عزلنا مكتبة الإكسل هنا لإنهاء التضارب
+import 'package:excel/excel.dart' as pkg_excel;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
@@ -23,7 +23,7 @@ class StudentSessionsPage extends StatelessWidget {
 
   final Color primaryColor = const Color(0xff425c75);
 
-  // دالة التصدير للإكسل (محدثة لدعم خانة درجات الاختبار ومصلحة بالملي)
+  // دالة التصدير للإكسل (محدثة ومضمونة الترتيب)
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -33,10 +33,17 @@ class StudentSessionsPage extends StatelessWidget {
       final snapshot = await FirebaseFirestore.instance
           .collection('sessions')
           .where('studentId', isEqualTo: studentId)
-          .orderBy('date', descending: true)
           .get();
 
-      var excel = pkg_excel.Excel.createExcel(); // 👈 استخدام التسمية المعزولة للإكسل
+      // ترتيب البيانات برمجياً للتصدير من الأحدث للأقدم
+      final docs = snapshot.docs;
+      docs.sort((a, b) {
+        String dateA = a.data()['date'] ?? '';
+        String dateB = b.data()['date'] ?? '';
+        return dateB.compareTo(dateA); // ترتيب تنازلي (الأحدث أولاً)
+      });
+
+      var excel = pkg_excel.Excel.createExcel();
       pkg_excel.Sheet sheetObject = excel['سجل التسميع'];
       excel.delete('Sheet1');
 
@@ -52,7 +59,7 @@ class StudentSessionsPage extends StatelessWidget {
         pkg_excel.TextCellValue('ملاحظات'),
       ]);
 
-      for (var doc in snapshot.docs) {
+      for (var doc in docs) {
         var data = doc.data();
         bool isAbsent = data['absent'] ?? false;
         bool isExam = data['isExam'] ?? false;
@@ -106,17 +113,26 @@ class StudentSessionsPage extends StatelessWidget {
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: sessionService.getStudentSessions(studentId),
+        stream: sessionService.getStudentSessions(studentId), // جلب البيانات العادي والآمن بدون Index
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          
           final sessions = snapshot.data!.docs;
           if (sessions.isEmpty) return _buildEmptyState(isDarkMode);
 
+          // 🔥 حركة السحر هنا: ترتيب الجلسات داخل الكود من الأحدث إلى الأقدم تلقائياً
+          List<QueryDocumentSnapshot> sortedSessions = List.from(sessions);
+          sortedSessions.sort((a, b) {
+            String dateA = (a.data() as Map<String, dynamic>)['date'] ?? '';
+            String dateB = (b.data() as Map<String, dynamic>)['date'] ?? '';
+            return dateB.compareTo(dateA); // ترتيب تنازلي (الأحدث فوق)
+          });
+
           return ListView.builder(
             padding: const EdgeInsets.all(15),
-            itemCount: sessions.length,
+            itemCount: sortedSessions.length,
             itemBuilder: (context, index) {
-              final session = sessions[index];
+              final session = sortedSessions[index];
               final data = session.data() as Map<String, dynamic>;
               return _buildSessionTimelineItem(context, session.id, data, isDarkMode);
             },
@@ -145,7 +161,6 @@ class StudentSessionsPage extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // رأس الكرت (التاريخ والشارات)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
             decoration: BoxDecoration(
@@ -184,12 +199,10 @@ class StudentSessionsPage extends StatelessWidget {
             ),
           ),
           
-          // تفاصيل الجلسة المعروضة ديناميكياً
           Padding(
             padding: const EdgeInsets.all(15),
             child: Column(
               children: [
-                // 1️⃣ جلسة عادية
                 if (!isAbsent && !isExam) ...[
                   _buildInfoRow(Icons.star, "الحفظ الجديد", data['newMemorization'], isDarkMode),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
@@ -204,7 +217,6 @@ class StudentSessionsPage extends StatelessWidget {
                   _buildInfoRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
                 ],
 
-                // 2️⃣ علبة علامة الاختبار (الحين صارت مستقرة وصافية وبدون أي تضارب) 🔥
                 if (isExam && !isAbsent) ...[
                   Container(
                     width: double.infinity,
@@ -212,7 +224,7 @@ class StudentSessionsPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isDarkMode ? const Color(0xff112b2b) : Colors.teal.shade50,
                       borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: Colors.teal.withOpacity(0.3), width: 1) // 👈 الحين يقرأ من فلاتر مباشرة وبشكل صحيح
+                      border: Border.all(color: Colors.teal.withOpacity(0.3), width: 1)
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -242,7 +254,6 @@ class StudentSessionsPage extends StatelessWidget {
                   ),
                 ],
 
-                // صندوق الملاحظات إذا وُجد
                 if (data['notes'] != null && data['notes'].toString().isNotEmpty) ...[
                   const SizedBox(height: 10),
                   _buildNotesBox(data['notes'], isDarkMode),
