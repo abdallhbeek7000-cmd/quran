@@ -1,11 +1,13 @@
-import 'dart:convert'; // استيراد ضروري لمعالجة أكواد الإشعارات
-import 'package:http/http.dart' as http; // استيراد مكتبة الاتصال بالإنترنت
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/session_model.dart';
 import '../services/session_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart'; 
+import 'package:googleapis_auth/auth_io.dart'; // مكتبة توليد التوكن التلقائي 🔥
 
 class AddSessionPage extends StatefulWidget {
   final String studentId;
@@ -36,21 +38,39 @@ class _AddSessionPageState extends State<AddSessionPage> {
   final religiousActivities = TextEditingController();
   final notes = TextEditingController();
   final absenceReasonController = TextEditingController(); 
+  final examScoreController = TextEditingController(); 
 
   bool loading = false;
   bool absent = false;
+  bool isExam = false; 
   String absenceType = "بدون عذر"; 
   String rating = "جيد";
   String studentStatus = "مهذب";
 
   final Color primaryColor = const Color(0xff425c75);
 
-  // 🔥 دالة إرسال الإشعار السحابي المجاني لهاتف ولي الأمر عبر الـ VAPID Key
-  Future<void> sendNotificationToParent(String studentId, String ratingValue, bool isAbsent, String dateStr) async {
+  // 🔥 دالة ذكية لتوليد الـ Access Token مجاناً وتلقائياً من ملف الـ Assets للأبد
+  Future<String?> getObtainAccessToken() async {
     try {
-      // 1. جلب توكن هاتف الأب من مستند الطالب في الفايربيز
-      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
+      final serviceAccountJson = await rootBundle.loadString('assets/service-account.json');
+      final accountCredentials = ServiceAccountCredentials.fromJson(serviceAccountJson);
+      final scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
       
+      final client = await clientViaServiceAccount(accountCredentials, scopes);
+      final accessToken = client.credentials.accessToken.data;
+      client.close();
+      return accessToken;
+    } catch (e) {
+      print("Error generating automatic Access Token: $e");
+      return null;
+    }
+  }
+
+  // 🔥 دالة إرسال الإشعار السحابي المجاني والمحدثة بالكامل لتعمل طبقاً لـ HTTP v1
+  Future<void> sendNotificationToParent(String studentId, String ratingValue, bool isAbsent, bool isExamSession, String examScore, String dateStr) async {
+    try {
+      // 1. جلب توكن الأب من الفايربيز
+      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
       if (!studentDoc.exists) return;
       Map<String, dynamic> data = studentDoc.data() as Map<String, dynamic>;
       String? parentToken = data['fcmToken'];
@@ -58,26 +78,40 @@ class _AddSessionPageState extends State<AddSessionPage> {
 
       if (parentToken == null || parentToken.isEmpty) return;
 
-      String bodyText = isAbsent 
-          ? "تم تسجيل غياب لـ $studentName في حلقة اليوم $dateStr"
-          : "تم تسجيل مراجعة وحفظ جديد لـ $studentName بتقييم ($ratingValue) ليوم $dateStr";
+      // 2. توليد التوكن مجاناً وبلمح البصر
+      String? accessToken = await getObtainAccessToken();
+      if (accessToken == null) return;
 
-      // 2. إرسال الإشعار المباشر عبر السيرفر المجاني بجوجل
+      String bodyText = "";
+      if (isAbsent) {
+        bodyText = "تم تسجيل غياب لـ $studentName في حلقة اليوم $dateStr";
+      } else if (isExamSession) {
+        bodyText = "🎯 تم تسجيل نتيجة اختبار لـ $studentName بعلامة ($examScore من 100) ليوم $dateStr";
+      } else {
+        bodyText = "تم تسجيل مراجعة وحفظ جديد لـ $studentName بتقييم ($ratingValue) ليوم $dateStr";
+      }
+
+      // 3. إرسال الإشعار لـ Project ID الخاص بك: quran-habal
+      final String projectId = "quran-habal"; 
+      
       await http.post(
-        Uri.parse('https://fcm.googleapis.com/fcm/send'),
+        Uri.parse('https://fcm.googleapis.com/v1/projects/$projectId/messages:send'),
         headers: <String, String>{
           'Content-Type': 'application/json',
-          // تم دمج مفتاح الـ VAPID الخاص بمشروع المعهد هنا بنجاح
-          'Authorization': 'key=BNtbIWjF0hYbP1QLCD1cWi-JLmGxEqxTMSzR_rjZQL3z8OG9p94CBM-ePfKdaxVMZwUD-zjqBk3UtLWoyWDV4N4', 
+          'Authorization': 'Bearer $accessToken', 
         },
         body: jsonEncode(<String, dynamic>{
-          'notification': <String, dynamic>{
-            'title': '📢 تحديث يومي جديد من الحلقة',
-            'body': bodyText,
-            'sound': 'default',
-          },
-          'priority': 'high',
-          'to': parentToken,
+          'message': {
+            'token': parentToken,
+            'notification': {
+              'title': isExamSession ? '📝 نتيجة اختبار جديدة' : '📢 تحديث يومي جديد من الحلقة',
+              'body': bodyText,
+            },
+            'data': {
+              'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+              'sound': 'default',
+            }
+          }
         }),
       );
       print("Notification sent successfully to parent! ✅");
@@ -96,12 +130,19 @@ class _AddSessionPageState extends State<AddSessionPage> {
       return;
     }
 
+    if (isExam && !absent && examScoreController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: Colors.red, content: Text("يرجى إدخال علامة الاختبار أولاً")),
+      );
+      return;
+    }
+
     setState(() => loading = true);
     final now = DateTime.now();
     final date = "${now.year}-${now.month}-${now.day}";
 
-    String finalNearReview = absent ? '' : newReview.text.trim();
-    String finalFarReview = absent ? '' : oldReview.text.trim();
+    String finalNearReview = (absent || isExam) ? '' : newReview.text.trim();
+    String finalFarReview = (absent || isExam) ? '' : oldReview.text.trim();
 
     final session = SessionModel(
       id: '',
@@ -111,12 +152,12 @@ class _AddSessionPageState extends State<AddSessionPage> {
       supervisorName: widget.supervisorName,
       date: date,
       absent: absent,
-      newMemorization: absent ? '' : newMemorization.text.trim(),
-      review: absent ? '' : "$finalNearReview | $finalFarReview",
-      homework: absent ? '' : homework.text.trim(),
-      rating: absent ? '' : rating,
-      studentStatus: absent ? '' : studentStatus,
-      religiousActivities: absent ? '' : religiousActivities.text.trim(),
+      newMemorization: (absent || isExam) ? '' : newMemorization.text.trim(),
+      review: (absent || isExam) ? '' : "$finalNearReview | $finalFarReview",
+      homework: (absent || isExam) ? '' : homework.text.trim(),
+      rating: (absent || isExam) ? '' : rating,
+      studentStatus: (absent || isExam) ? '' : studentStatus,
+      religiousActivities: (absent || isExam) ? '' : religiousActivities.text.trim(),
       notes: notes.text.trim(),
     );
 
@@ -127,11 +168,13 @@ class _AddSessionPageState extends State<AddSessionPage> {
       'supervisorName': session.supervisorName,
       'date': session.date,
       'absent': session.absent,
+      'isExam': isExam, 
+      'examScore': isExam && !absent ? examScoreController.text.trim() : '', 
       'newMemorization': session.newMemorization,
       'nearReview': finalNearReview, 
       'farReview': finalFarReview,   
       'homework': session.homework,
-      'readingBySight': absent ? '' : readingBySight.text.trim(), 
+      'readingBySight': (absent || isExam) ? '' : readingBySight.text.trim(), 
       'rating': session.rating,
       'studentStatus': session.studentStatus,
       'religiousActivities': session.religiousActivities,
@@ -140,14 +183,14 @@ class _AddSessionPageState extends State<AddSessionPage> {
       'absenceReason': absent ? absenceReasonController.text.trim() : '', 
     };
 
-    // حفظ الجلسة بجدول الفايربيز بشكل طبيعي
     await FirebaseFirestore.instance.collection('sessions').add(sessionData);
 
-    // 🔥 استدعاء دالة الإشعارات الفورية فور نجاح عملية الحفظ
     await sendNotificationToParent(
       widget.studentId,
       absent ? '' : rating,
       absent,
+      isExam,
+      examScoreController.text.trim(),
       date,
     );
 
@@ -180,17 +223,44 @@ class _AddSessionPageState extends State<AddSessionPage> {
                 color: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
                 borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
               ),
-              child: Card(
-                elevation: 0,
-                color: Colors.white.withOpacity(0.1),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                child: SwitchListTile(
-                  activeColor: Colors.orange,
-                  value: absent,
-                  title: const Text("تسجيل الطالب غائب؟", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  secondary: Icon(absent ? Icons.person_off : Icons.person, color: Colors.white),
-                  onChanged: (v) => setState(() => absent = v),
-                ),
+              child: Column(
+                children: [
+                  Card(
+                    elevation: 0,
+                    color: Colors.white.withOpacity(0.1),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    child: SwitchListTile(
+                      activeColor: Colors.orange,
+                      value: absent,
+                      title: const Text("تسجيل الطالب غائب؟", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      secondary: Icon(absent ? Icons.person_off : Icons.person, color: Colors.white),
+                      onChanged: (v) {
+                        setState(() {
+                          absent = v;
+                          if (absent) isExam = false; 
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  if (!absent)
+                    Card(
+                      elevation: 0,
+                      color: Colors.white.withOpacity(0.1),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      child: SwitchListTile(
+                        activeColor: Colors.tealAccent,
+                        value: isExam,
+                        title: const Text("تسجيل كـ (جلسة اختبار)؟", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        secondary: Icon(Icons.assignment_turned_in, color: isExam ? Colors.tealAccent : Colors.white),
+                        onChanged: (v) {
+                          setState(() {
+                            isExam = v;
+                          });
+                        },
+                      ),
+                    ),
+                ],
               ),
             ),
 
@@ -198,7 +268,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  if (!absent) ...[
+                  if (!absent && !isExam) ...[
                     _buildSectionCard(
                       title: "الإنجاز القرآني",
                       icon: Icons.menu_book,
@@ -250,6 +320,24 @@ class _AddSessionPageState extends State<AddSessionPage> {
                       icon: Icons.mosque_outlined,
                       isDarkMode: isDarkMode,
                       child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: religiousActivities, decoration: _inputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode)),
+                    ),
+                  ],
+
+                  if (isExam && !absent) ...[
+                    _buildSectionCard(
+                      title: "نتائج اختبار الطالب",
+                      icon: Icons.quiz,
+                      isDarkMode: isDarkMode,
+                      child: TextField(
+                        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                        controller: examScoreController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(3),
+                        ],
+                        decoration: _inputDecoration("علامة الطالب من 100", Icons.percent, isDarkMode),
+                      ),
                     ),
                   ],
 
@@ -307,7 +395,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
                     child: ElevatedButton(
                       onPressed: loading ? null : addSession,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: absent ? Colors.orange : (isDarkMode ? Colors.orange : primaryColor),
+                        backgroundColor: absent ? Colors.orange : (isExam ? Colors.teal : (isDarkMode ? Colors.orange : primaryColor)),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                       ),
                       child: loading
@@ -355,9 +443,9 @@ class _AddSessionPageState extends State<AddSessionPage> {
         children: [
           Row(
             children: [
-              Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 18),
+              Icon(icon, color: isDarkMode ? Colors.tealAccent : primaryColor, size: 18),
               const SizedBox(width: 8),
-              Text(title, style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(title, style: TextStyle(color: isDarkMode ? Colors.tealAccent : primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
           Divider(height: 25, color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),

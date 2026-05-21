@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' as pkg_excel; // 👈 عزلنا مكتبة الإكسل هنا لإنهاء التضارب
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
@@ -23,7 +23,7 @@ class StudentSessionsPage extends StatelessWidget {
 
   final Color primaryColor = const Color(0xff425c75);
 
-  // دالة التصدير للإكسل (محدثة لتشمل خانة القراءة نظراً)
+  // دالة التصدير للإكسل (محدثة لدعم خانة درجات الاختبار ومصلحة بالملي)
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -36,35 +36,42 @@ class StudentSessionsPage extends StatelessWidget {
           .orderBy('date', descending: true)
           .get();
 
-      var excel = Excel.createExcel();
-      Sheet sheetObject = excel['سجل التسميع'];
+      var excel = pkg_excel.Excel.createExcel(); // 👈 استخدام التسمية المعزولة للإكسل
+      pkg_excel.Sheet sheetObject = excel['سجل التسميع'];
       excel.delete('Sheet1');
 
       sheetObject.appendRow([
-        TextCellValue('التاريخ'),
-        TextCellValue('الحالة'),
-        TextCellValue('التقييم'),
-        TextCellValue('الحفظ الجديد'),
-        TextCellValue('مراجعة جديد'),
-        TextCellValue('مراجعة قديم'),
-        TextCellValue('قراءة نظراً'), // الحقل الجديد المضاف للإكسل
-        TextCellValue('الواجب'),
-        TextCellValue('ملاحظات'),
+        pkg_excel.TextCellValue('التاريخ'),
+        pkg_excel.TextCellValue('نوع الجلسة'),
+        pkg_excel.TextCellValue('التقييم / النتيجة'),
+        pkg_excel.TextCellValue('الحفظ الجديد'),
+        pkg_excel.TextCellValue('مراجعة جديد'),
+        pkg_excel.TextCellValue('مراجعة قديم'),
+        pkg_excel.TextCellValue('قراءة نظراً'),
+        pkg_excel.TextCellValue('الواجب'),
+        pkg_excel.TextCellValue('ملاحظات'),
       ]);
 
       for (var doc in snapshot.docs) {
         var data = doc.data();
         bool isAbsent = data['absent'] ?? false;
+        bool isExam = data['isExam'] ?? false;
+
+        String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : 'حلقة عادية');
+        String resultValue = isAbsent 
+            ? '---' 
+            : (isExam ? 'علامة: ${data['examScore'] ?? 0} من 100' : (data['rating'] ?? ''));
+
         sheetObject.appendRow([
-          TextCellValue(data['date']?.toString() ?? ''),
-          TextCellValue(isAbsent ? 'غائب' : 'حاضر'),
-          TextCellValue(isAbsent ? '---' : (data['rating'] ?? '')),
-          TextCellValue(isAbsent ? '---' : (data['newMemorization'] ?? '')),
-          TextCellValue(isAbsent ? '---' : (data['nearReview'] ?? '')),
-          TextCellValue(isAbsent ? '---' : (data['farReview'] ?? '')),
-          TextCellValue(isAbsent ? '---' : (data['readingBySight'] ?? '')), // تصدير القراءة نظراً
-          TextCellValue(isAbsent ? '---' : (data['homework'] ?? '')),
-          TextCellValue(data['notes']?.toString() ?? ''),
+          pkg_excel.TextCellValue(data['date']?.toString() ?? ''),
+          pkg_excel.TextCellValue(sessionType),
+          pkg_excel.TextCellValue(resultValue),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['newMemorization'] ?? '')),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['nearReview'] ?? '')),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['farReview'] ?? '')),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['readingBySight'] ?? '')),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['homework'] ?? '')),
+          pkg_excel.TextCellValue(data['notes']?.toString() ?? ''),
         ]);
       }
 
@@ -121,6 +128,7 @@ class StudentSessionsPage extends StatelessWidget {
 
   Widget _buildSessionTimelineItem(BuildContext context, String sessionId, Map<String, dynamic> data, bool isDarkMode) {
     bool isAbsent = data['absent'] ?? false;
+    bool isExam = data['isExam'] ?? false;
     Color ratingColor = _getRatingColor(data['rating']);
 
     return Container(
@@ -137,13 +145,13 @@ class StudentSessionsPage extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // رأس الكرت (التاريخ والتقييم)
+          // رأس الكرت (التاريخ والشارات)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
             decoration: BoxDecoration(
               color: isAbsent 
                   ? Colors.red.withOpacity(0.15) 
-                  : (isDarkMode ? Colors.white.withOpacity(0.03) : primaryColor.withOpacity(0.05)),
+                  : (isExam ? Colors.teal.withOpacity(0.15) : (isDarkMode ? Colors.white.withOpacity(0.03) : primaryColor.withOpacity(0.05))),
               borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
             ),
             child: Row(
@@ -151,40 +159,90 @@ class StudentSessionsPage extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.calendar_today, size: 16, color: isAbsent ? Colors.red : (isDarkMode ? Colors.orange : primaryColor)),
+                    Icon(
+                      isAbsent ? Icons.calendar_today : (isExam ? Icons.quiz : Icons.calendar_today), 
+                      size: 16, 
+                      color: isAbsent ? Colors.red : (isExam ? Colors.teal : (isDarkMode ? Colors.orange : primaryColor))
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       data['date'] ?? '', 
                       style: TextStyle(
                         fontWeight: FontWeight.bold, 
-                        color: isAbsent ? Colors.red : (isDarkMode ? Colors.white : primaryColor)
+                        color: isAbsent ? Colors.red : (isExam ? Colors.teal : (isDarkMode ? Colors.white : primaryColor))
                       )
                     ),
                   ],
                 ),
-                if (isAbsent) _buildBadge("غائب", Colors.red) else _buildBadge(data['rating'] ?? "غير مقيم", ratingColor),
+                if (isAbsent) 
+                  _buildBadge("غائب", Colors.red) 
+                else if (isExam)
+                  _buildBadge("جلسة اختبار 📝", Colors.teal) 
+                else 
+                  _buildBadge(data['rating'] ?? "غير مقيم", ratingColor),
               ],
             ),
           ),
           
-          // تفاصيل الجلسة 
+          // تفاصيل الجلسة المعروضة ديناميكياً
           Padding(
             padding: const EdgeInsets.all(15),
             child: Column(
               children: [
-                if (!isAbsent) ...[
+                // 1️⃣ جلسة عادية
+                if (!isAbsent && !isExam) ...[
                   _buildInfoRow(Icons.star, "الحفظ الجديد", data['newMemorization'], isDarkMode),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
                   _buildInfoRow(Icons.auto_stories_outlined, "مراجعة جديد", data['nearReview'], isDarkMode),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
                   _buildInfoRow(Icons.history_edu, "مراجعة قديم", data['farReview'], isDarkMode),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-                  _buildInfoRow(Icons.menu_book_outlined, "قراءة نظراً", data['readingBySight'], isDarkMode), // الخانة المحدثة في الواجهة
+                  _buildInfoRow(Icons.menu_book_outlined, "قراءة نظراً", data['readingBySight'], isDarkMode),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
                   _buildInfoRow(Icons.edit_note, "الواجب", data['homework'], isDarkMode),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
                   _buildInfoRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
                 ],
+
+                // 2️⃣ علبة علامة الاختبار (الحين صارت مستقرة وصافية وبدون أي تضارب) 🔥
+                if (isExam && !isAbsent) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? const Color(0xff112b2b) : Colors.teal.shade50,
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: Colors.teal.withOpacity(0.3), width: 1) // 👈 الحين يقرأ من فلاتر مباشرة وبشكل صحيح
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.workspace_premium, color: Colors.teal, size: 30),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "نتيجة الاختبار النهائي للجلسة",
+                              style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "${data['examScore'] ?? '0'} / 100",
+                              style: TextStyle(
+                                fontSize: 24, 
+                                fontWeight: FontWeight.bold, 
+                                color: isDarkMode ? Colors.tealAccent : Colors.teal.shade900
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // صندوق الملاحظات إذا وُجد
                 if (data['notes'] != null && data['notes'].toString().isNotEmpty) ...[
                   const SizedBox(height: 10),
                   _buildNotesBox(data['notes'], isDarkMode),
