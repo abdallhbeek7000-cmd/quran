@@ -7,7 +7,7 @@ import '../services/session_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart'; 
-import 'package:googleapis_auth/auth_io.dart'; // مكتبة توليد التوكن التلقائي 🔥
+import 'package:googleapis_auth/auth_io.dart'; 
 
 class AddSessionPage extends StatefulWidget {
   final String studentId;
@@ -39,17 +39,22 @@ class _AddSessionPageState extends State<AddSessionPage> {
   final notes = TextEditingController();
   final absenceReasonController = TextEditingController(); 
   final examScoreController = TextEditingController(); 
+  
+  final totalMemorizedPagesController = TextEditingController();
 
   bool loading = false;
   bool absent = false;
   bool isExam = false; 
   String absenceType = "بدون عذر"; 
-  String rating = "جيد";
+  
+  // 🎯 التعديل الملوكي: فصل متغيّرات التقييم لعدم الخلط
+  String memorizationRating = "جيد"; // تقييم الحفظ الجديد
+  String reviewRating = "جيد";       // تقييم المراجعات
+  
   String studentStatus = "مهذب";
 
   final Color primaryColor = const Color(0xff425c75);
 
-  // 🔥 دالة ذكية لتوليد الـ Access Token مجاناً وتلقائياً من ملف الـ Assets للأبد
   Future<String?> getObtainAccessToken() async {
     try {
       final serviceAccountJson = await rootBundle.loadString('assets/service-account.json');
@@ -66,10 +71,8 @@ class _AddSessionPageState extends State<AddSessionPage> {
     }
   }
 
-  // 🔥 دالة إرسال الإشعار السحابي المجاني والمحدثة بالكامل لتعمل طبقاً لـ HTTP v1
-  Future<void> sendNotificationToParent(String studentId, String ratingValue, bool isAbsent, bool isExamSession, String examScore, String dateStr) async {
+  Future<void> sendNotificationToParent(String studentId, String memRating, String revRating, bool isAbsent, bool isExamSession, String examScore, String dateStr) async {
     try {
-      // 1. جلب توكن الأب من الفايربيز
       DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
       if (!studentDoc.exists) return;
       Map<String, dynamic> data = studentDoc.data() as Map<String, dynamic>;
@@ -78,9 +81,8 @@ class _AddSessionPageState extends State<AddSessionPage> {
 
       if (parentToken == null || parentToken.isEmpty) return;
 
-      // 2. توليد التوكن مجاناً وبلمح البصر
-      String? accessToken = await getObtainAccessToken();
-      if (accessToken == null) return;
+      String accessToken = await getObtainAccessToken() ?? '';
+      if (accessToken.isEmpty) return;
 
       String bodyText = "";
       if (isAbsent) {
@@ -88,10 +90,10 @@ class _AddSessionPageState extends State<AddSessionPage> {
       } else if (isExamSession) {
         bodyText = "🎯 تم تسجيل نتيجة اختبار لـ $studentName بعلامة ($examScore من 100) ليوم $dateStr";
       } else {
-        bodyText = "تم تسجيل مراجعة وحفظ جديد لـ $studentName بتقييم ($ratingValue) ليوم $dateStr";
+        // 🔔 تحديث نص الإشعار للأهل ليعكس الفصل الجديد
+        bodyText = "تم تحديث يومية $studentName الحفظ: ($memRating) والمراجعة: ($revRating) ليوم $dateStr";
       }
 
-      // 3. إرسال الإشعار لـ Project ID الخاص بك: quran-habal
       final String projectId = "quran-habal"; 
       
       await http.post(
@@ -114,7 +116,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
           }
         }),
       );
-      print("Notification sent successfully to parent! ✅");
     } catch (e) {
       print("Error sending notification: $e");
     }
@@ -144,6 +145,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
     String finalNearReview = (absent || isExam) ? '' : newReview.text.trim();
     String finalFarReview = (absent || isExam) ? '' : oldReview.text.trim();
 
+    // نترك الموديل مؤقتاً يقرأ الـ memorizationRating كتقييم أساسي لحين تعديل ملف الـ Model بالخطوة الجاية
     final session = SessionModel(
       id: '',
       studentId: widget.studentId,
@@ -155,11 +157,13 @@ class _AddSessionPageState extends State<AddSessionPage> {
       newMemorization: (absent || isExam) ? '' : newMemorization.text.trim(),
       review: (absent || isExam) ? '' : "$finalNearReview | $finalFarReview",
       homework: (absent || isExam) ? '' : homework.text.trim(),
-      rating: (absent || isExam) ? '' : rating,
+      rating: (absent || isExam) ? '' : memorizationRating,
       studentStatus: (absent || isExam) ? '' : studentStatus,
       religiousActivities: (absent || isExam) ? '' : religiousActivities.text.trim(),
       notes: notes.text.trim(),
     );
+
+    double totalPages = double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0;
 
     final Map<String, dynamic> sessionData = {
       'studentId': session.studentId,
@@ -175,19 +179,44 @@ class _AddSessionPageState extends State<AddSessionPage> {
       'farReview': finalFarReview,   
       'homework': session.homework,
       'readingBySight': (absent || isExam) ? '' : readingBySight.text.trim(), 
-      'rating': session.rating,
+      
+      // 🎯 رفع التقييمين منفصلين تماماً للـ Firestore لقفل اللخبطة عند الأهل
+      'memorizationRating': (absent || isExam) ? '' : memorizationRating,
+      'reviewRating': (absent || isExam) ? '' : reviewRating,
+      'rating': (absent || isExam) ? '' : memorizationRating, // حقل احتياطي للتوافق القديم
+      
       'studentStatus': session.studentStatus,
       'religiousActivities': session.religiousActivities,
       'notes': session.notes,
       'absenceType': absent ? absenceType : '', 
       'absenceReason': absent ? absenceReasonController.text.trim() : '', 
+      if (!absent && !isExam) 'total_memorized_pages': totalPages,
     };
 
     await FirebaseFirestore.instance.collection('sessions').add(sessionData);
 
+    final studentRef = FirebaseFirestore.instance.collection('students').doc(widget.studentId);
+    
+    if (absent) {
+      await studentRef.update({
+        'consecutiveAbsences': FieldValue.increment(1),
+      });
+    } else {
+      final Map<String, dynamic> updateData = {
+        'consecutiveAbsences': 0,
+      };
+      
+      if (!isExam && totalMemorizedPagesController.text.trim().isNotEmpty) {
+        updateData['memorizedPages'] = totalPages;
+      }
+      
+      await studentRef.update(updateData);
+    }
+
     await sendNotificationToParent(
       widget.studentId,
-      absent ? '' : rating,
+      absent ? '' : memorizationRating,
+      absent ? '' : reviewRating,
       absent,
       isExam,
       examScoreController.text.trim(),
@@ -251,7 +280,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
                       child: SwitchListTile(
                         activeColor: Colors.tealAccent,
                         value: isExam,
-                        title: const Text("تسجيل كـ (جلسة اختبار)؟", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        title: const Text("تسجيل كـ (جلسة اختبار) ؟", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                         secondary: Icon(Icons.assignment_turned_in, color: isExam ? Colors.tealAccent : Colors.white),
                         onChanged: (v) {
                           setState(() {
@@ -270,7 +299,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
                 children: [
                   if (!absent && !isExam) ...[
                     _buildSectionCard(
-                      title: "الإنجاز القرآني",
+                      title: "الإنجاز القرآني اليومي",
                       icon: Icons.menu_book,
                       isDarkMode: isDarkMode,
                       child: Column(
@@ -283,7 +312,17 @@ class _AddSessionPageState extends State<AddSessionPage> {
                           const SizedBox(height: 15),
                           TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: readingBySight, decoration: _inputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
                           const SizedBox(height: 15),
-                          TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: homework, decoration: _inputDecoration("الواجب", Icons.edit_note, isDarkMode)),
+                          TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: homework, decoration: _inputDecoration("الواجب القادم", Icons.edit_note, isDarkMode)),
+                          const SizedBox(height: 20),
+                          const Divider(),
+                          const SizedBox(height: 10),
+                          TextField(
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold), 
+                            controller: totalMemorizedPagesController, 
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
+                            decoration: _inputDecoration("إجمالي عدد الصفحات المحفوظة حتى الآن", Icons.analytics_outlined, isDarkMode)
+                          ),
                         ],
                       ),
                     ),
@@ -294,15 +333,28 @@ class _AddSessionPageState extends State<AddSessionPage> {
                       isDarkMode: isDarkMode,
                       child: Column(
                         children: [
+                          // 🎯 التعديل الملوكي البصري: حقل تقييم الحفظ الجديد بشكل مستقل
                           DropdownButtonFormField<String>(
-                            value: rating,
+                            value: memorizationRating,
                             dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
                             style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                            decoration: _inputDecoration("التقييم", Icons.grade, isDarkMode),
-                            items: ["ممتاز", "جيد", "سيء"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                            onChanged: (v) => setState(() => rating = v!),
+                            decoration: _inputDecoration("تقييم الحفظ الجديد", Icons.stars, isDarkMode),
+                            items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                            onChanged: (v) => setState(() => memorizationRating = v!),
                           ),
                           const SizedBox(height: 15),
+                          
+                          // 🎯 التعديل الملوكي البصري: حقل تقييم المراجعات بشكل مستقل
+                          DropdownButtonFormField<String>(
+                            value: reviewRating,
+                            dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                            decoration: _inputDecoration("تقييم المراجعة", Icons.g_translate, isDarkMode),
+                            items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                            onChanged: (v) => setState(() => reviewRating = v!),
+                          ),
+                          const SizedBox(height: 15),
+                          
                           DropdownButtonFormField<String>(
                             value: studentStatus,
                             dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,

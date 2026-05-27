@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import '../services/session_service.dart';
 import '../services/theme_provider.dart';
 
@@ -23,12 +25,18 @@ class _EditSessionPageState extends State<EditSessionPage> {
   late TextEditingController newReview; 
   late TextEditingController oldReview; 
   late TextEditingController homework;
-  late TextEditingController readingBySight; // الحقل الجديد المطور للتعديل
+  late TextEditingController readingBySight; 
   late TextEditingController religiousActivities;
   late TextEditingController notes;
+  
+  late TextEditingController totalMemorizedPagesController;
 
   bool absent = false;
-  String rating = "جيد";
+  
+  // 🎯 التعديل الملوكي: فصل متغيرات التقييم داخل شاشة التعديل
+  String memorizationRating = "جيد";
+  String reviewRating = "جيد";
+  
   String studentStatus = "مهذب";
   bool loading = false;
 
@@ -40,7 +48,14 @@ class _EditSessionPageState extends State<EditSessionPage> {
     final data = widget.data;
 
     absent = data['absent'] ?? false;
-    rating = (data['rating'] == null || data['rating'] == '') ? "جيد" : data['rating'];
+    
+    // 🎯 قراءة ذكية للتقييمات المفصولة مع حقل احتياطي للبيانات القديمة منعاً للـ Crash
+    memorizationRating = data['memorizationRating'] ?? data['rating'] ?? "جيد";
+    if (memorizationRating.isEmpty) memorizationRating = "جيد";
+    
+    reviewRating = data['reviewRating'] ?? data['rating'] ?? "جيد";
+    if (reviewRating.isEmpty) reviewRating = "جيد";
+
     studentStatus = (data['studentStatus'] == null || data['studentStatus'] == '') ? "مهذب" : data['studentStatus'];
 
     newMemorization = TextEditingController(text: data['newMemorization']);
@@ -56,9 +71,12 @@ class _EditSessionPageState extends State<EditSessionPage> {
     }
 
     homework = TextEditingController(text: data['homework']);
-    readingBySight = TextEditingController(text: data['readingBySight'] ?? ''); // قراءة القيمة القديمة من فايربيز إن وجدت
+    readingBySight = TextEditingController(text: data['readingBySight'] ?? ''); 
     religiousActivities = TextEditingController(text: data['religiousActivities']);
     notes = TextEditingController(text: data['notes']);
+    
+    var initialPages = data['total_memorized_pages']?.toString() ?? '';
+    totalMemorizedPagesController = TextEditingController(text: initialPages);
   }
 
   @override
@@ -70,26 +88,47 @@ class _EditSessionPageState extends State<EditSessionPage> {
     readingBySight.dispose();
     religiousActivities.dispose();
     notes.dispose();
+    totalMemorizedPagesController.dispose(); 
     super.dispose();
   }
 
   save() async {
     setState(() => loading = true);
 
+    double totalPages = double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0;
+    String studentId = widget.data['studentId'] ?? '';
+
+    // 1️⃣ تحديث مستند الجلسة الحالي في مجموعة sessions مع فصل التقييمات
     await sessionService.updateSession(
       sessionId: widget.sessionId,
       data: {
         'absent': absent,
         'newMemorization': absent ? '' : newMemorization.text.trim(),
         'review': absent ? '' : "${newReview.text.trim()} | ${oldReview.text.trim()}",
+        'nearReview': absent ? '' : newReview.text.trim(), 
+        'farReview': absent ? '' : oldReview.text.trim(),   
         'homework': absent ? '' : homework.text.trim(),
-        'readingBySight': absent ? '' : readingBySight.text.trim(), // رفع التعديل الجديد إلى فايربيز
-        'rating': absent ? '' : rating,
+        'readingBySight': absent ? '' : readingBySight.text.trim(), 
+        
+        // 🎯 حفظ التقييمات الجديدة بعد الفصل في قاعدة البيانات
+        'memorizationRating': absent ? '' : memorizationRating,
+        'reviewRating': absent ? '' : reviewRating,
+        'rating': absent ? '' : memorizationRating, // للحفاظ على توافق السيستم القديم
+        
         'studentStatus': absent ? '' : studentStatus,
         'religiousActivities': absent ? '' : religiousActivities.text.trim(),
         'notes': notes.text.trim(),
+        
+        if (!absent) 'total_memorized_pages': totalPages,
       },
     );
+
+    // 2️⃣ المزامنة الفورية: تحديث مستند الطالب الرئيسي
+    if (!absent && studentId.isNotEmpty && totalMemorizedPagesController.text.trim().isNotEmpty) {
+      await FirebaseFirestore.instance.collection('students').doc(studentId).update({
+        'memorizedPages': totalPages,
+      });
+    }
 
     if (!mounted) return;
     setState(() => loading = false);
@@ -141,7 +180,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                 children: [
                   if (!absent) ...[
                     _buildSectionCard(
-                      title: "تعديل الإنجاز",
+                      title: "تعديل الإنجاز القرآني",
                       icon: Icons.edit_calendar,
                       isDarkMode: isDarkMode,
                       child: Column(
@@ -155,6 +194,17 @@ class _EditSessionPageState extends State<EditSessionPage> {
                           TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: readingBySight, decoration: _inputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
                           const SizedBox(height: 15),
                           TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: homework, decoration: _inputDecoration("الواجب", Icons.edit_note, isDarkMode)),
+                          const SizedBox(height: 20), 
+                          const Divider(),
+                          const SizedBox(height: 10),
+                          
+                          TextField(
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold), 
+                            controller: totalMemorizedPagesController, 
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
+                            decoration: _inputDecoration("إجمالي عدد الصفحات المحفوظة حتى الآن", Icons.analytics_outlined, isDarkMode)
+                          ),
                         ],
                       ),
                     ),
@@ -165,15 +215,28 @@ class _EditSessionPageState extends State<EditSessionPage> {
                       isDarkMode: isDarkMode,
                       child: Column(
                         children: [
+                          // 🎯 التعديل الملوكي: Dropdown منفصل لتعديل تقييم الحفظ الجديد
                           DropdownButtonFormField<String>(
-                            value: rating,
+                            value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(memorizationRating) ? memorizationRating : "جيد",
                             dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
                             style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                            decoration: _inputDecoration("التقييم", Icons.grade, isDarkMode),
-                            items: ["ممتاز", "جيد", "سيء"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                            onChanged: (v) => setState(() => rating = v!),
+                            decoration: _inputDecoration("تقييم الحفظ الجديد", Icons.stars, isDarkMode),
+                            items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                            onChanged: (v) => setState(() => memorizationRating = v!),
                           ),
                           const SizedBox(height: 15),
+                          
+                          // 🎯 التعديل الملوكي: Dropdown منفصل لتعديل تقييم المراجعات
+                          DropdownButtonFormField<String>(
+                            value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(reviewRating) ? reviewRating : "جيد",
+                            dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                            decoration: _inputDecoration("تقييم المراجعة (الماضى)", Icons.g_translate, isDarkMode),
+                            items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                            onChanged: (v) => setState(() => reviewRating = v!),
+                          ),
+                          const SizedBox(height: 15),
+                          
                           DropdownButtonFormField<String>(
                             value: studentStatus,
                             dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,

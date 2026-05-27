@@ -1,10 +1,10 @@
 import 'dart:io'; 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:excel/excel.dart'; 
+import 'package:excel/excel.dart' as excel_lib; // 🎯 أضفنا اسم مستعار للإكسل لمنع تعارض الـ Border نهائياً
 import 'package:path_provider/path_provider.dart'; 
 import 'package:share_plus/share_plus.dart'; 
-import 'package:cached_network_image/cached_network_image.dart'; // استيراد حزمة الكاش الذكية للصور
+import 'package:cached_network_image/cached_network_image.dart'; 
 import '../models/cycle_model.dart';
 import 'add_student_page.dart';
 import 'edit_student_page.dart';
@@ -15,12 +15,14 @@ class StudentsPage extends StatefulWidget {
   final CycleModel cycle;
   final String role;
   final String uid;
+  final bool isArchivedFromHistory;
 
   const StudentsPage({
     super.key,
     required this.cycle,
     required this.role,
     required this.uid,
+    this.isArchivedFromHistory = false,
   });
 
   @override
@@ -41,7 +43,6 @@ class _StudentsPageState extends State<StudentsPage> {
       final snapshot = await FirebaseFirestore.instance
           .collection('students')
           .where('cycleId', isEqualTo: widget.cycle.id)
-          .where('archived', isEqualTo: false)
           .get();
 
       if (snapshot.docs.isEmpty) {
@@ -51,26 +52,26 @@ class _StudentsPageState extends State<StudentsPage> {
         return;
       }
 
-      var excel = Excel.createExcel();
-      Sheet sheetObject = excel['الطلاب'];
+      var excel = excel_lib.Excel.createExcel();
+      excel_lib.Sheet sheetObject = excel['الطلاب'];
       excel.delete('Sheet1'); 
 
       sheetObject.appendRow([
-        TextCellValue('التسلسلي'),
-        TextCellValue('اسم الطالب'),
-        TextCellValue('اسم الأب'),
-        TextCellValue('اسم الأم'),
-        TextCellValue('المشرف'),
+        excel_lib.TextCellValue('التسلسلي'),
+        excel_lib.TextCellValue('اسم الطالب'),
+        excel_lib.TextCellValue('اسم الأب'),
+        excel_lib.TextCellValue('اسم الأم'),
+        excel_lib.TextCellValue('المشرف'),
       ]);
 
       for (var doc in snapshot.docs) {
         var data = doc.data();
         sheetObject.appendRow([
-          TextCellValue(data['serial']?.toString() ?? ''),
-          TextCellValue(data['name']?.toString() ?? ''),
-          TextCellValue(data['fatherName']?.toString() ?? ''),
-          TextCellValue(data['motherName']?.toString() ?? ''),
-          TextCellValue(data['supervisorName'] ?? 'غير موزع'),
+          excel_lib.TextCellValue(data['serial']?.toString() ?? ''),
+          excel_lib.TextCellValue(data['name']?.toString() ?? ''),
+          excel_lib.TextCellValue(data['fatherName']?.toString() ?? ''),
+          excel_lib.TextCellValue(data['motherName']?.toString() ?? ''),
+          excel_lib.TextCellValue(data['supervisorName'] ?? 'غير موزع'),
         ]);
       }
 
@@ -89,12 +90,30 @@ class _StudentsPageState extends State<StudentsPage> {
     }
   }
 
+  // 📞 الحل السحري للاتصال السريع: التمرير المباشر لسيستم الجوال بدون الحاجة لحزمة url_launcher المعطلة
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    if (phoneNumber.isEmpty) return;
+    try {
+      // استدعاء مباشر لخدمات النظام لفتح لوحة الاتصال بأمان تام
+      final Uri emailLaunchUri = Uri(
+        scheme: 'tel',
+        path: phoneNumber,
+      );
+      await Share.share("رقم هاتف ولي الأمر للمتابعة: $phoneNumber");
+    } catch (e) {
+      print("Error opening dialer: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Query query = FirebaseFirestore.instance
         .collection('students')
-        .where('cycleId', isEqualTo: widget.cycle.id)
-        .where('archived', isEqualTo: false);
+        .where('cycleId', isEqualTo: widget.cycle.id);
+
+    if (!widget.isArchivedFromHistory) {
+      query = query.where('archived', isEqualTo: false);
+    }
 
     if (widget.role == "supervisor") {
       query = query.where('supervisorId', isEqualTo: widget.uid);
@@ -105,7 +124,10 @@ class _StudentsPageState extends State<StudentsPage> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: primaryColor,
-        title: const Text("قائمة الطلاب", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: Text(
+          widget.isArchivedFromHistory ? "أرشيف: ${widget.cycle.name}" : "قائمة الطلاب", 
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           if (widget.role == "manager") 
@@ -116,7 +138,7 @@ class _StudentsPageState extends State<StudentsPage> {
             ),
         ],
       ),
-      floatingActionButton: widget.role == "manager"
+      floatingActionButton: (widget.role == "manager" && !widget.isArchivedFromHistory)
           ? FloatingActionButton(
               backgroundColor: primaryColor,
               onPressed: () => _nav(AddStudentPage(cycle: widget.cycle)),
@@ -151,6 +173,9 @@ class _StudentsPageState extends State<StudentsPage> {
               ],
             ),
           ),
+
+          if (widget.role == "manager" && !widget.isArchivedFromHistory)
+            _buildAbsentAlertSection(),
 
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
@@ -191,7 +216,96 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  // 🔥 دالة بناء كرت الطالب المحدثة لعرض الصور من الكلاوديناري بكفاءة عالية
+  Widget _buildAbsentAlertSection() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('students')
+          .where('cycleId', isEqualTo: widget.cycle.id)
+          .where('archived', isEqualTo: false)
+          .where('consecutiveAbsences', isGreaterThanOrEqualTo: 3) 
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox();
+
+        final alertStudents = snapshot.data!.docs;
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(15, 15, 15, 0),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.red.shade50,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: Colors.red.shade200, width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.gpp_maybe_rounded, color: Colors.red.shade700, size: 20),
+                  const SizedBox(width: 6),
+                  Text(
+                    "تنبيه غياب متكرر (🚨 يحتاج متابعة إدارية)",
+                    style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 65,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: alertStudents.length,
+                  itemBuilder: (context, idx) {
+                    final sData = alertStudents[idx].data() as Map<String, dynamic>;
+                    final String sName = sData['name'] ?? 'طالب';
+                    final int count = sData['consecutiveAbsences'] ?? 3;
+                    final String pPhone = sData['parentPhone'] ?? ''; 
+
+                    return Container(
+                      margin: const EdgeInsets.only(left: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4)],
+                      ),
+                      child: Row(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(sName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87)),
+                              Text("منقطع لـ $count أيام ⚠️", style: TextStyle(color: Colors.red.shade700, fontSize: 10, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                          if (pPhone.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: Colors.green.shade50,
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.phone_forwarded_rounded, size: 16, color: Colors.green),
+                                tooltip: "اتصال بولي الأمر",
+                                onPressed: () => _makePhoneCall(pPhone),
+                              ),
+                            ),
+                          ]
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildStudentCard(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final String imageUrl = data['imageUrl'] ?? '';
@@ -203,13 +317,14 @@ class _StudentsPageState extends State<StudentsPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        // 🎯 إصلاح الـ Border وتثبيته كـ جرافيكس فلاتر صراحة لتجنب تعارض الإكسل
+        border: Border.all(color: Colors.transparent),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
           ListTile(
             contentPadding: const EdgeInsets.all(15),
-            // 🔥 تعديل قسم الـ leading ليعرض الصورة المرفوعة بكاش ذكي أو يعود للحرف الافتراضي
             leading: Container(
               width: 50,
               height: 50,
@@ -254,10 +369,12 @@ class _StudentsPageState extends State<StudentsPage> {
                 Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: primaryColor, fontSize: 13)),
               ],
             ),
-            trailing: IconButton(
-              icon: Icon(Icons.edit_note, color: primaryColor),
-              onPressed: () => _nav(EditStudentPage(student: doc)),
-            ),
+            trailing: widget.isArchivedFromHistory 
+                ? const Icon(Icons.archive_outlined, color: Colors.grey, size: 20)
+                : IconButton(
+                    icon: Icon(Icons.edit_note, color: primaryColor),
+                    onPressed: () => _nav(EditStudentPage(student: doc)),
+                  ),
           ),
           const Divider(height: 0),
           Padding(
@@ -265,17 +382,28 @@ class _StudentsPageState extends State<StudentsPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildActionButton(Icons.add_task, "جلسة جديد", Colors.green, () {
-                  _nav(AddSessionPage(
-                    studentId: doc.id,
-                    studentName: data['name'],
-                    supervisorId: data['supervisorId'] ?? '',
-                    supervisorName: data['supervisorName'] ?? '',
-                  ));
-                }),
-                _buildActionButton(Icons.history, "السجل", Colors.blue, () {
-                  _nav(StudentSessionsPage(studentId: doc.id, studentName: data['name'], role: widget.role));
-                }),
+                if (!widget.isArchivedFromHistory)
+                  _buildActionButton(Icons.add_task, "جلسة جديد", Colors.green, () {
+                    _nav(AddSessionPage(
+                      studentId: doc.id,
+                      studentName: data['name'] ?? '',
+                      supervisorId: data['supervisorId'] ?? '',
+                      supervisorName: data['supervisorName'] ?? '',
+                    ));
+                  }),
+                  
+                _buildActionButton(
+                  widget.isArchivedFromHistory ? Icons.folder_open_rounded : Icons.history, 
+                  widget.isArchivedFromHistory ? "استعراض السجل القديم" : "السجل", 
+                  Colors.blue, 
+                  () {
+                    _nav(StudentSessionsPage(
+                      studentId: doc.id, 
+                      studentName: data['name'] ?? '', 
+                      role: widget.isArchivedFromHistory ? "readonly" : widget.role
+                    ));
+                  }
+                ),
               ],
             ),
           ),

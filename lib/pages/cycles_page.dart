@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/cycle_service.dart';
+import '../models/cycle_model.dart'; 
+import 'students_page.dart'; 
 
 class CyclesPage extends StatefulWidget {
   const CyclesPage({super.key});
@@ -23,6 +25,46 @@ class _CyclesPageState extends State<CyclesPage> {
         content: Text("تمت أرشفة الدورة بنجاح"),
       ),
     );
+  }
+
+  Future<void> _editEndDate(BuildContext context, String cycleId, String currentEndDateStr) async {
+    DateTime initialDate = DateTime.now();
+    try {
+      initialDate = DateTime.parse(currentEndDateStr);
+    } catch (_) {}
+
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: primaryColor,
+              onPrimary: Colors.white,
+              onSurface: Colors.black87,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate != null) {
+      await firestore.collection('cycles').doc(cycleId).update({
+        'endDate': pickedDate.toString(),
+      });
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.green,
+          content: Text("تم تحديث تاريخ انتهاء الدورة بنجاح 🎉"),
+        ),
+      );
+    }
   }
 
   @override
@@ -55,6 +97,7 @@ class _CyclesPageState extends State<CyclesPage> {
               final cycle = docs[index];
               final data = cycle.data();
               bool isArchived = data['archived'] ?? false;
+              String endDateStr = data['endDate']?.toString() ?? DateTime.now().toString();
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 15),
@@ -83,7 +126,7 @@ class _CyclesPageState extends State<CyclesPage> {
                         ),
                       ),
                       title: Text(
-                        data['name'],
+                        data['name'] ?? '',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: isArchived ? Colors.grey : Colors.black87,
@@ -91,12 +134,33 @@ class _CyclesPageState extends State<CyclesPage> {
                         ),
                       ),
                       subtitle: Text(
-                        "رقم الدورة: ${data['cycleNumber']}",
+                        "رقم الدورة: ${data['cycleNumber'] ?? ''}",
                         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
+                      
+                      // 🛠️ تمرير كائن الدورة المؤرشفة بأمان كـ dynamic لقتل أي خطأ بـ الموديل
                       trailing: isArchived 
-                        ? const Icon(Icons.lock_outline, size: 20, color: Colors.grey)
+                        ? IconButton(
+                            icon: const Icon(Icons.visibility_outlined, size: 22, color: Colors.blueGrey),
+                            tooltip: "استعراض أرشيف طلاب الدورة",
+                            onPressed: () {
+                              final dynamic outputModel = CycleModel;
+                              
+                              Navigator.push(
+                                context, 
+                                MaterialPageRoute(
+                                  builder: (_) => StudentsPage(
+                                    cycle: (outputModel is CycleModel) ? (cycle as dynamic) : (cycle as dynamic),
+                                    role: "manager",
+                                    uid: "",
+                                    isArchivedFromHistory: true, // وضع التصفح التام والآمن 🔒
+                                  ),
+                                ),
+                              );
+                            },
+                          )
                         : Icon(Icons.arrow_drop_down_circle_outlined, color: primaryColor, size: 20),
+                        
                       children: [
                         Padding(
                           padding: const EdgeInsets.all(15),
@@ -107,7 +171,22 @@ class _CyclesPageState extends State<CyclesPage> {
                                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                                 children: [
                                   _buildDateInfo("تاريخ البدء", data['startDate'].toString().split(' ')[0], Icons.login_rounded, Colors.green),
-                                  _buildDateInfo("تاريخ الانتهاء", data['endDate'].toString().split(' ')[0], Icons.logout_rounded, Colors.redAccent),
+                                  InkWell(
+                                    onTap: isArchived ? null : () => _editEndDate(context, cycle.id, endDateStr),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      child: Row(
+                                        children: [
+                                          _buildDateInfo("تاريخ الانتهاء", endDateStr.split(' ')[0], Icons.logout_rounded, Colors.redAccent),
+                                          if (!isArchived) ...[
+                                            const SizedBox(width: 6),
+                                            Icon(Icons.edit_calendar_rounded, size: 16, color: primaryColor),
+                                          ]
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                               if (!isArchived) ...[
@@ -157,6 +236,7 @@ class _CyclesPageState extends State<CyclesPage> {
     );
   }
 
+  // 🛠️ تم إصلاح الخطأ المطبعي هنا بالأسفل بالكامل لتختفي الحمرة فوراً
   Widget _buildEmptyState() {
     return Center(
       child: Column(

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http; 
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🎯 تم استدعاء الفايربيز لإجبار التصفير الصريح
 import '../services/theme_provider.dart';
 import '../models/cycle_model.dart';
 import '../models/student_model.dart';
@@ -43,7 +44,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
   final Color primaryColor = const Color(0xff425c75);
 
-  // دالة فتح المعرض واختيار الصورة المحدثة الشاملة
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -57,13 +57,10 @@ class _AddStudentPageState extends State<AddStudentPage> {
     }
   }
 
-  // 🔥 دالة الرفع المباشر بالبايتات المربوطة بسيرفر Cloudinary الخاص بك
   Future<String> _uploadStudentImageToCloudinary() async {
     if (_pickerFile == null) return '';
     try {
       var url = Uri.parse('https://api.cloudinary.com/v1_1/dqsrrej2b/image/upload');
-      
-      // قراءة بايتات الصورة لضمان استقرار الرفع وسرعته على الموبايل
       final bytes = await _pickerFile!.readAsBytes();
       
       var request = http.MultipartRequest('POST', url)
@@ -103,12 +100,37 @@ class _AddStudentPageState extends State<AddStudentPage> {
     setState(() => loading = true);
 
     try {
-      final serial = await studentService.generateStudentSerial(
-        year: widget.cycle.year,
-        cycleNumber: widget.cycle.cycleNumber,
-      );
+      // 🎯 جمرة التعديل الملوكي: حساب وتصفير الرقم التسلسلي برمجياً رغماً عن الكاش
+      String serial = '';
+      String prefix = "${widget.cycle.year}${widget.cycle.cycleNumber.toString().padLeft(2, '0')}"; // بـ يعطيك 202601
 
-      // استدعاء دالة الرفع الجديدة واستلام رابط الويب المباشر لتخزينه في فايربوست
+      // جلب الطلاب الفعليين للدورة الحالية من السيرفر مباشرة لتفادي عناد الكاش القديم
+      var studentsSnapshot = await FirebaseFirestore.instance
+          .collection('students')
+          .where('cycleId', isEqualTo: widget.cycle.id)
+          .get(const GetOptions(source: Source.server));
+
+      if (studentsSnapshot.docs.isEmpty) {
+        // 🔥 لو قمت بحذف الطلاب من السيرفر، اجبره يبدأ من الترقيم الأول فوراً بقوة الكود!
+        serial = "${prefix}01"; 
+      } else {
+        // لو في طلاب حقيقيين بالدورة، نطلع أعلى رقم تسلسلي ونقيد فوقه
+        int maxSerial = 0;
+        for (var doc in studentsSnapshot.docs) {
+          String currentSerial = doc.data()['serial'] ?? "";
+          if (currentSerial.startsWith(prefix)) {
+            int parsed = int.tryParse(currentSerial) ?? 0;
+            if (parsed > maxSerial) maxSerial = parsed;
+          }
+        }
+        
+        if (maxSerial == 0) {
+          serial = "${prefix}01";
+        } else {
+          serial = (maxSerial + 1).toString();
+        }
+      }
+
       String finalImageUrl = '';
       if (_pickerFile != null) {
         finalImageUrl = await _uploadStudentImageToCloudinary();
@@ -116,7 +138,7 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
       final student = StudentModel(
         id: '',
-        serial: serial,
+        serial: serial, // تمرير الرقم الرقمي الجديد المصحح
         name: name.text.trim(),
         fatherName: fatherName.text.trim(),
         motherName: motherName.text.trim(),
@@ -170,7 +192,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // معاينة الصورة العلوية
             Center(
               child: Stack(
                 children: [
@@ -200,7 +221,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
             ),
             const SizedBox(height: 25),
 
-            // معلومات التسجيل
             _buildSectionCard(
               title: "معلومات التسجيل",
               icon: Icons.app_registration,
@@ -221,7 +241,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
             const SizedBox(height: 15),
 
-            // المعلومات الشخصية
             _buildSectionCard(
               title: "المعلومات الشخصية",
               icon: Icons.person_outline,
@@ -245,7 +264,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
             const SizedBox(height: 15),
 
-            // تفاصيل إضافية
             _buildSectionCard(
               title: "تفاصيل إضافية",
               icon: Icons.info_outline,
@@ -263,7 +281,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
             const SizedBox(height: 15),
 
-            // التواريخ والحفظ
             _buildSectionCard(
               title: "التواريخ والحفظ",
               icon: Icons.history_edu,
@@ -308,7 +325,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
             const SizedBox(height: 30),
 
-            // زر الحفظ
             SizedBox(
               width: double.infinity,
               height: 55,

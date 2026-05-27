@@ -18,6 +18,7 @@ import 'honor_board_page.dart';
 import 'dashboard_page.dart';
 import 'daily_stats_page.dart';
 import 'supervisor_page.dart';
+import 'update_checker.dart'; // 🎯 استدعاء ملف الفحص لضمان طيران التحديثات لايف
 
 
 class HomePage extends StatefulWidget {
@@ -46,6 +47,11 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     loadCycle();
+
+    // 🎯 تشغيل فحص التحديث أوتوماتيكياً بأمان للمشرفين والمدير بعد بناء الواجهة فوراً
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdateChecker.checkForUpdates(context);
+    });
   }
 
   loadCycle() async {
