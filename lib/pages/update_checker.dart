@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart'; // 🎯 الباكج الذكي لقراءة رقم إصدار الكود لايف
 import '../main.dart'; // استيراد الـ main لقط لـ navigatorKey السحري
 
 class UpdateChecker {
-  // رقم إصدار تطبيق المشرفين الحالي بـ الكود (اربطه بـ رقم الـ build بـ pubspec)
-  static const int currentVersionCode = 4; 
 
   static Future<void> checkForUpdates() async {
     try {
       print("🎯 [UpdateChecker] بدأ فحص التحديثات الحين...");
       
-      // 🎯 المسار الصحيح بعد التصحيح الملوكي
+      // 1. جلب رقم إصدار التطبيق الحالي المثبت على جهاز المستخدم أوتوماتيكياً
+      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      // تحويل الـ buildNumber (الموجود بملف pubspec.yaml) إلى رقم صحيح (Integer)
+      int currentVersionCode = int.tryParse(packageInfo.buildNumber) ?? 0;
+
+      // 2. جلب مستند التحكم بالإصدارات من الفايربيز
       DocumentSnapshot documentSnapshot = await FirebaseFirestore.instance
           .collection('app_settings')
           .doc('version_control')
@@ -27,15 +31,15 @@ class UpdateChecker {
         String updateUrl = data['supervisors_update_url']?.toString() ?? '';
 
         print("🎯 [UpdateChecker] إصدار السيرفر المقروء: $serverVersion");
-        print("🎯 [UpdateChecker] إصدار الكود الحالي: $currentVersionCode");
+        print("🎯 [UpdateChecker] إصدار جهاز المستخدم الحالي: $currentVersionCode");
         print("🎯 [UpdateChecker] رابط التحديث المقروء: $updateUrl");
 
-        // إذا كان إصدار السيرفر (7) أكبر من إصدار الكود (4)، والرابط ليس فارغاً، يظهر المنبثق فوراً
+        // 🎯 المقارنة الذكية: المنبثق يظهر فقط وفقط إذا كان السيرفر أعلى من إصدار الجهاز الحالي
         if (serverVersion > currentVersionCode && updateUrl.isNotEmpty) {
-          print("🎯 [UpdateChecker] الشروط تحققت! جاري محاولة إظهار المنبثق...");
+          print("🎯 [UpdateChecker] تم اكتشاف نسخة أعلى بالسيرفر! جاري إظهار المنبثق...");
           _showUpdateDialog(updateUrl);
         } else {
-          print("🎯 [UpdateChecker] الشروط لم تتحقق (إما الإصدار أصغر أو الرابط فارغ)");
+          print("🎯 [UpdateChecker] نظامك محدث بالكامل (إصدار الجهاز متطابق أو أعلى من السيرفر) ✅");
         }
       } else {
         print("❌ [UpdateChecker] خطأ: المستند فارغ أو غير موجود على هذا المسار بالفايربيز!");
