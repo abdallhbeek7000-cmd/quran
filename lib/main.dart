@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_storage/firebase_storage.dart'; // استيراد مكتبة الاستورج الجديدة
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart'; 
 import 'firebase_options.dart';
 import 'utils/app_colors.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
+import 'pages/update_checker.dart'; // تأكد من مسار الملف عندك
 import 'services/theme_provider.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
+
+// 🎯 المفتاح العالمي السحري للتحكم بالمنبثقات من أي مكان بالتطبيق
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,11 +19,9 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
-  // 🔥 إجبار التطبيق على الاتصال بالـ Storage وتفعيله برابط المشروع لتخطي تعليق الموقع
   FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
   
   runApp(
-    // تغليف التطبيق بالـ Provider لتمرير حالة الثيم لكل الصفحات
     ChangeNotifierProvider(
       create: (_) => ThemeProvider(),
       child: const MyApp(),
@@ -43,6 +45,11 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     checkLogin();
+    
+    // 🎯 تشغيل الفحص فوراً عند تشغيل التطبيق بأمان كامل وبدون الاعتماد على الـ Build Context
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdateChecker.checkForUpdates();
+    });
   }
 
   void checkLogin() async {
@@ -60,20 +67,15 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    // مراقبة حالة الوضع الليلي من الـ Provider
     final themeProvider = Provider.of<ThemeProvider>(context);
-    
-    // اللون الكحلي الفخم الخاص بتطبيقك
     const Color primaryColor = Color(0xff425c75); 
 
     return MaterialApp(
+      navigatorKey: navigatorKey, // 🎯 ربط المفتاح العالمي بالـ MaterialApp الحين غصب
       debugShowCheckedModeBanner: false,
       title: "معهد القرآن",
-      
-      // تحديد الثيم بناءً على اختيار المستخدم عبر الزر
       themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
 
-      // 1. ثيم الوضع الفاتح (Light Theme)
       theme: ThemeData(
         brightness: Brightness.light,
         primaryColor: primaryColor,
@@ -86,16 +88,15 @@ class _MyAppState extends State<MyApp> {
         ),
       ),
 
-      // 2. ثيم الوضع الليلي الفخم (Dark Theme)
       darkTheme: ThemeData(
         brightness: Brightness.dark,
         primaryColor: primaryColor,
-        scaffoldBackgroundColor: const Color(0xff121212), // أسود مريح للعين
+        scaffoldBackgroundColor: const Color(0xff121212),
         cardTheme: const CardTheme(
-          color: Color(0xff1e1e1e), // لون الكروت بالوضع الليلي
+          color: Color(0xff1e1e1e),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xff1f2d3d), // لون الـ AppBar بالوضع الليلي
+          backgroundColor: Color(0xff1f2d3d),
           foregroundColor: Colors.white,
           centerTitle: true,
           elevation: 0,

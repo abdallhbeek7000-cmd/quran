@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../main.dart'; // 🎯 استيراد الـ main لقط لـ navigatorKey السحري
 
 class UpdateChecker {
   // رقم إصدار تطبيق المشرفين الحالي بـ الكود (اربطه بـ رقم الـ build بـ pubspec)
   static const int currentVersionCode = 4; 
 
-  static Future<void> checkForUpdates(BuildContext context) async {
+  static Future<void> checkForUpdates() async {
     try {
       // جلب مستند التحكم بالإصدارات من الفايربيز
       DocumentSnapshot documentSnapshot = await FirebaseFirestore.instance
@@ -17,18 +18,13 @@ class UpdateChecker {
       if (documentSnapshot.exists && documentSnapshot.data() != null) {
         Map<String, dynamic> data = documentSnapshot.data() as Map<String, dynamic>;
 
-        // 🎯 قراءة الحقول المخصصة للمشرفين من السيرفر بالملي
+        // 🎯 الفصل النهائي: قراءة الحقول الصفراء المخصصة للمشرفين فقط وعزلها تماماً عن الأهل
         int serverVersion = int.tryParse(data['supervisors_current_version']?.toString() ?? '0') ?? 0;
-        
-        // 🛠️ فحص ذكي: إذا كان حقل المشرفين فاضي أو null، يسحب الرابط العام فوراً كخيار احتياطي
-        String updateUrl = (data['supervisors_update_url'] != null && data['supervisors_update_url'].toString().isNotEmpty)
-            ? data['supervisors_update_url'].toString()
-            : (data['update_url'] ?? '').toString();
+        String updateUrl = data['supervisors_update_url']?.toString() ?? '';
 
         // إذا كان إصدار السيرفر أكبر من إصدار التطبيق الحالي، يظهر المنبثق فوراً
         if (serverVersion > currentVersionCode && updateUrl.isNotEmpty) {
-          if (!context.mounted) return;
-          _showUpdateDialog(context, updateUrl);
+          _showUpdateDialog(updateUrl);
         }
       }
     } catch (e) {
@@ -36,9 +32,14 @@ class UpdateChecker {
     }
   }
 
-  static void _showUpdateDialog(BuildContext context, String downloadUrl) {
+  static void _showUpdateDialog(String downloadUrl) {
+    // 🎯 استخدام الـ navigatorKey للوصول للـ Context بأعلى طبقة شاشة غصب
+    final BuildContext? currentContext = navigatorKey.currentState?.overlay?.context;
+    
+    if (currentContext == null) return;
+
     showDialog(
-      context: context,
+      context: currentContext,
       barrierDismissible: false, // إجبار المستخدم على التحديث لمنع الدخول بنسخة قديمة
       builder: (BuildContext context) {
         return WillPopScope(
