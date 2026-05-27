@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../main.dart'; // 🎯 استيراد الـ main لقط لـ navigatorKey السحري
+import '../main.dart'; // استيراد الـ main لقط لـ navigatorKey السحري
 
 class UpdateChecker {
   // رقم إصدار تطبيق المشرفين الحالي بـ الكود (اربطه بـ رقم الـ build بـ pubspec)
@@ -9,41 +9,56 @@ class UpdateChecker {
 
   static Future<void> checkForUpdates() async {
     try {
-      // جلب مستند التحكم بالإصدارات من الفايربيز
+      print("🎯 [UpdateChecker] بدأ فحص التحديثات الحين...");
+      
+      // 🎯 المسار الصحيح بعد التصحيح الملوكي
       DocumentSnapshot documentSnapshot = await FirebaseFirestore.instance
-          .collection('version_control')
-          .doc('version_info')
+          .collection('app_settings')
+          .doc('version_control')
           .get();
+
+      print("🎯 [UpdateChecker] هل المستند موجود بالسيرفر؟: ${documentSnapshot.exists}");
 
       if (documentSnapshot.exists && documentSnapshot.data() != null) {
         Map<String, dynamic> data = documentSnapshot.data() as Map<String, dynamic>;
 
-        // 🎯 الفصل النهائي: قراءة الحقول الصفراء المخصصة للمشرفين فقط وعزلها تماماً عن الأهل
+        // قراءة الحقول الصفراء المعزولة للمشرفين
         int serverVersion = int.tryParse(data['supervisors_current_version']?.toString() ?? '0') ?? 0;
         String updateUrl = data['supervisors_update_url']?.toString() ?? '';
 
-        // إذا كان إصدار السيرفر أكبر من إصدار التطبيق الحالي، يظهر المنبثق فوراً
+        print("🎯 [UpdateChecker] إصدار السيرفر المقروء: $serverVersion");
+        print("🎯 [UpdateChecker] إصدار الكود الحالي: $currentVersionCode");
+        print("🎯 [UpdateChecker] رابط التحديث المقروء: $updateUrl");
+
+        // إذا كان إصدار السيرفر (7) أكبر من إصدار الكود (4)، والرابط ليس فارغاً، يظهر المنبثق فوراً
         if (serverVersion > currentVersionCode && updateUrl.isNotEmpty) {
+          print("🎯 [UpdateChecker] الشروط تحققت! جاري محاولة إظهار المنبثق...");
           _showUpdateDialog(updateUrl);
+        } else {
+          print("🎯 [UpdateChecker] الشروط لم تتحقق (إما الإصدار أصغر أو الرابط فارغ)");
         }
+      } else {
+        print("❌ [UpdateChecker] خطأ: المستند فارغ أو غير موجود على هذا المسار بالفايربيز!");
       }
     } catch (e) {
-      print("Error checking for supervisor updates: $e");
+      print("❌ [UpdateChecker] خطأ فادح أثناء جلب البيانات من السيرفر: $e");
     }
   }
 
   static void _showUpdateDialog(String downloadUrl) {
-    // 🎯 استخدام الـ navigatorKey للوصول للـ Context بأعلى طبقة شاشة غصب
     final BuildContext? currentContext = navigatorKey.currentState?.overlay?.context;
     
-    if (currentContext == null) return;
+    if (currentContext == null) {
+      print("❌ [UpdateChecker] خطأ: الـ currentContext قيمته null، لا يمكن إظهار الـ Dialog!");
+      return;
+    }
 
     showDialog(
       context: currentContext,
-      barrierDismissible: false, // إجبار المستخدم على التحديث لمنع الدخول بنسخة قديمة
+      barrierDismissible: false, 
       builder: (BuildContext context) {
         return WillPopScope(
-          onWillPop: () async => false, // منع زر الرجوع بالجوال
+          onWillPop: () async => false, 
           child: AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
             title: const Row(
@@ -73,7 +88,7 @@ class UpdateChecker {
                     if (await canLaunchUrl(url)) {
                       await launchUrl(url, mode: LaunchMode.externalApplication);
                     } else {
-                      print('Could not launch update URL');
+                      print('❌ [UpdateChecker] Could not launch update URL');
                     }
                   },
                 ),

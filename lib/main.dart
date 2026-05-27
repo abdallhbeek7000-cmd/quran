@@ -10,6 +10,7 @@ import 'pages/update_checker.dart'; // تأكد من مسار الملف عند�
 import 'services/theme_provider.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 
+
 // 🎯 المفتاح العالمي السحري للتحكم بالمنبثقات من أي مكان بالتطبيق
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
