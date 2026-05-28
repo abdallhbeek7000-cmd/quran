@@ -1,7 +1,7 @@
 import 'dart:io'; 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:excel/excel.dart' as excel_lib; // 🎯 أضفنا اسم مستعار للإكسل لمنع تعارض الـ Border نهائياً
+import 'package:excel/excel.dart' as excel_lib; 
 import 'package:path_provider/path_provider.dart'; 
 import 'package:share_plus/share_plus.dart'; 
 import 'package:cached_network_image/cached_network_image.dart'; 
@@ -33,6 +33,60 @@ class _StudentsPageState extends State<StudentsPage> {
   String search = '';
   String selectedSupervisor = '';
   final Color primaryColor = const Color(0xff425c75);
+
+  void _showDeleteStudentDialog(BuildContext context, String studentId, String studentName) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+              SizedBox(width: 10),
+              Text(
+                "حذف ملف الطالب",
+                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16),
+              ),
+            ],
+          ),
+          content: Text(
+            "هل أنت متأكد من حذف الطالب ($studentName) نهائياً من هذه الدورة؟\n\n🚨 تنبيه: سيتم مسح بيانات الطالب وسجل التسميع الخاص به تماماً ولا يمكن التراجع عن هذا الإجراء.",
+            style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, height: 1.4, color: Colors.black87),
+          ),
+          actions: [
+            TextButton(
+              child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+              onPressed: () => Navigator.pop(dialogContext),
+            ),
+            TextButton(
+              child: const Text(
+                "حذف نهائي", 
+                style: TextStyle(color: Colors.red, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+              ),
+              onPressed: () async {
+                Navigator.pop(dialogContext); 
+                
+                await FirebaseFirestore.instance
+                    .collection('students')
+                    .doc(studentId)
+                    .delete();
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: Colors.red.shade900,
+                      content: Text("تم حذف ملف الطالب ($studentName) بنجاح 🗑️", style: const TextStyle(fontFamily: 'Cairo')),
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   Future<void> exportToExcel() async {
     try {
@@ -90,15 +144,9 @@ class _StudentsPageState extends State<StudentsPage> {
     }
   }
 
-  // 📞 الحل السحري للاتصال السريع: التمرير المباشر لسيستم الجوال بدون الحاجة لحزمة url_launcher المعطلة
   Future<void> _makePhoneCall(String phoneNumber) async {
     if (phoneNumber.isEmpty) return;
     try {
-      // استدعاء مباشر لخدمات النظام لفتح لوحة الاتصال بأمان تام
-      final Uri emailLaunchUri = Uri(
-        scheme: 'tel',
-        path: phoneNumber,
-      );
       await Share.share("رقم هاتف ولي الأمر للمتابعة: $phoneNumber");
     } catch (e) {
       print("Error opening dialer: $e");
@@ -126,7 +174,7 @@ class _StudentsPageState extends State<StudentsPage> {
         backgroundColor: primaryColor,
         title: Text(
           widget.isArchivedFromHistory ? "أرشيف: ${widget.cycle.name}" : "قائمة الطلاب", 
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo', fontSize: 16)
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
@@ -156,9 +204,10 @@ class _StudentsPageState extends State<StudentsPage> {
             child: Column(
               children: [
                 TextField(
-                  style: const TextStyle(color: Colors.black),
+                  style: const TextStyle(color: Colors.black, fontFamily: 'Cairo', fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'ابحث عن اسم الطالب...',
+                    hintStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
                     prefixIcon: const Icon(Icons.search, color: Color(0xff425c75)),
                     filled: true,
                     fillColor: Colors.white,
@@ -204,6 +253,7 @@ class _StudentsPageState extends State<StudentsPage> {
                 if (docs.isEmpty) return _buildEmptyState();
 
                 return ListView.builder(
+                  physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.all(15),
                   itemCount: docs.length,
                   itemBuilder: (context, index) => _buildStudentCard(docs[index]),
@@ -246,7 +296,7 @@ class _StudentsPageState extends State<StudentsPage> {
                   const SizedBox(width: 6),
                   Text(
                     "تنبيه غياب متكرر (🚨 يحتاج متابعة إدارية)",
-                    style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 13),
+                    style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo'),
                   ),
                 ],
               ),
@@ -276,8 +326,9 @@ class _StudentsPageState extends State<StudentsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(sName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87)),
-                              Text("منقطع لـ $count أيام ⚠️", style: TextStyle(color: Colors.red.shade700, fontSize: 10, fontWeight: FontWeight.w600)),
+                              Text(sName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87, fontFamily: 'Cairo')),
+                              // 🎯 إصلاح السطر 332: تعديل size إلى fontSize داخل الـ TextStyle وتنسيق السطور المتداخلة
+                              Text("منقطع لـ $count أيام ⚠️", style: TextStyle(color: Colors.red.shade700, fontSize: 10, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
                             ],
                           ),
                           if (pPhone.isNotEmpty) ...[
@@ -317,7 +368,6 @@ class _StudentsPageState extends State<StudentsPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        // 🎯 إصلاح الـ Border وتثبيته كـ جرافيكس فلاتر صراحة لتجنب تعارض الإكسل
         border: Border.all(color: Colors.transparent),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
@@ -348,32 +398,44 @@ class _StudentsPageState extends State<StudentsPage> {
                         errorWidget: (context, url, error) => Center(
                           child: Text(
                             firstLetter,
-                            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20),
+                            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'),
                           ),
                         ),
                       )
                     : Center(
                         child: Text(
                           firstLetter,
-                          style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20),
+                          style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'),
                         ),
                       ),
               ),
             ),
-            title: Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            title: Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo')),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 5),
-                Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: primaryColor, fontSize: 13)),
+                Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: Colors.grey[600], fontSize: 12, fontFamily: 'Cairo')),
+                Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: primaryColor, fontSize: 12, fontFamily: 'Cairo')),
               ],
             ),
             trailing: widget.isArchivedFromHistory 
                 ? const Icon(Icons.archive_outlined, color: Colors.grey, size: 20)
-                : IconButton(
-                    icon: Icon(Icons.edit_note, color: primaryColor),
-                    onPressed: () => _nav(EditStudentPage(student: doc)),
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.edit_note_rounded, color: primaryColor, size: 24),
+                        tooltip: "تعديل بيانات الطالب",
+                        onPressed: () => _nav(EditStudentPage(student: doc)),
+                      ),
+                      if (widget.role == "manager") 
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+                          tooltip: "حذف الطالب",
+                          onPressed: () => _showDeleteStudentDialog(context, doc.id, studentName),
+                        ),
+                    ],
                   ),
           ),
           const Divider(height: 0),
@@ -416,7 +478,7 @@ class _StudentsPageState extends State<StudentsPage> {
     return TextButton.icon(
       onPressed: onTap,
       icon: Icon(icon, size: 18, color: color),
-      label: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+      label: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'Cairo')),
     );
   }
 
@@ -432,14 +494,14 @@ class _StudentsPageState extends State<StudentsPage> {
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: selectedSupervisor.isEmpty ? null : selectedSupervisor,
-              hint: const Text("فلترة بالمشرف", style: TextStyle(color: Colors.white70, fontSize: 14)),
+              hint: const Text("فلترة بالمشرف", style: TextStyle(color: Colors.white70, fontSize: 13, fontFamily: 'Cairo')),
               dropdownColor: primaryColor,
               icon: const Icon(Icons.filter_list, color: Colors.white),
               items: [
-                const DropdownMenuItem(value: '', child: Text("كل المشرفين", style: TextStyle(color: Colors.white))),
+                const DropdownMenuItem(value: '', child: Text("كل المشرفين", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 13))),
                 ...supervisors.map((sup) => DropdownMenuItem(
                   value: sup['name'].toString(), 
-                  child: Text(sup['name'], style: const TextStyle(color: Colors.white)),
+                  child: Text(sup['name'], style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 13)),
                 )),
               ],
               onChanged: (v) => setState(() => selectedSupervisor = v!),
@@ -457,7 +519,7 @@ class _StudentsPageState extends State<StudentsPage> {
         children: [
           Icon(Icons.person_search, size: 80, color: Colors.grey[400]),
           const SizedBox(height: 10),
-          Text("لم نجد أي طلاب بهذا الاسم", style: TextStyle(color: Colors.grey[600])),
+          Text("لم نجد أي طلاب بهذا الاسم", style: TextStyle(color: Colors.grey[600], fontFamily: 'Cairo', fontSize: 14)),
         ],
       ),
     );
