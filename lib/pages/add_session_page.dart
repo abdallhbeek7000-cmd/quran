@@ -199,11 +199,12 @@ class _AddSessionPageState extends State<AddSessionPage> {
       notifyType = "regular";
     }
 
-    await NotificationService.sendAndSaveNotification(
+await NotificationService.sendAndSaveNotification(
       studentId: widget.studentId,
       title: notifyTitle,
       body: notifyBody,
       type: notifyType,
+      context: context, // 🎯 هاد السطر السحري اللي كان ناقص ليظهر الشريط!
     );
 
     if (!mounted) return;
