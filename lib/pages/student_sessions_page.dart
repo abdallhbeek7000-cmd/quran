@@ -23,12 +23,20 @@ class StudentSessionsPage extends StatelessWidget {
 
   final Color primaryColor = const Color(0xff425c75);
 
-  // 📊 دالة التصدير للإكسل (محدثة لتشمل التقييمات المنفصلة بالتفصيل)
+  // 📊 دالة التصدير للإكسل (ذكية ومحدثة للتمييز بين الطالب الخاتم والعادي)
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("جاري تجهيز سجل الجلسات الشامل...")),
       );
+
+      // 1. جلب حالة الطالب أولاً لمعرفة هل هو خاتم أم لا
+      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
+      bool isCompleted = false;
+      if (studentDoc.exists && studentDoc.data() != null) {
+        var sData = studentDoc.data() as Map<String, dynamic>;
+        isCompleted = sData['studentType'] == 'completed';
+      }
 
       final snapshot = await FirebaseFirestore.instance
           .collection('sessions')
@@ -46,15 +54,16 @@ class StudentSessionsPage extends StatelessWidget {
       pkg_excel.Sheet sheetObject = excel['سجل التسميع'];
       excel.delete('Sheet1');
 
-      // 📜 إضافة رؤوس الأعمدة بعد التعديل وفصل التقييمات
+      // 📜 تكييف رؤوس الأعمدة بالإكسل حسب وضعية الختمة
       sheetObject.appendRow([
         pkg_excel.TextCellValue('التاريخ'),
         pkg_excel.TextCellValue('نوع الجلسة'),
-        pkg_excel.TextCellValue('تقييم الحفظ الجديد'), // 🎯 عمود منفصل
-        pkg_excel.TextCellValue('تقييم المراجعة'),    // 🎯 عمود منفصل
+        pkg_excel.TextCellValue('المشرف المسجِّل'), 
+        pkg_excel.TextCellValue(isCompleted ? 'تقييم مراجعة الختمة' : 'تقييم الحفظ الجديد'), 
+        pkg_excel.TextCellValue(isCompleted ? 'الحالة' : 'تقييم المراجعة'),    
         pkg_excel.TextCellValue('الحفظ الجديد'),
         pkg_excel.TextCellValue('مراجعة جديد'),
-        pkg_excel.TextCellValue('مراجعة قديم'),
+        pkg_excel.TextCellValue(isCompleted ? 'مراجعة الختمة الشاملة' : 'مراجعة قديم'),
         pkg_excel.TextCellValue('قراءة نظراً'),
         pkg_excel.TextCellValue('الواجب'),
         pkg_excel.TextCellValue('الأنشطة الدينية'), 
@@ -68,8 +77,8 @@ class StudentSessionsPage extends StatelessWidget {
         bool isExam = data['isExam'] ?? false;
 
         String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : 'حلقة عادية');
-        
-        // قراءة ذكية لبيانات التقييمات بالإكسل مع حماية التوافق القديم
+        String supervisorResult = data['supervisorName'] ?? 'غير محدد';
+
         String memRatingResult = isAbsent ? '---' : (isExam ? '---' : (data['memorizationRating'] ?? data['rating'] ?? '---'));
         String revRatingResult = isAbsent ? '---' : (isExam ? '---' : (data['reviewRating'] ?? data['rating'] ?? '---'));
         
@@ -81,15 +90,16 @@ class StudentSessionsPage extends StatelessWidget {
         sheetObject.appendRow([
           pkg_excel.TextCellValue(data['date']?.toString() ?? ''),
           pkg_excel.TextCellValue(sessionType),
-          pkg_excel.TextCellValue(memRatingResult),
-          pkg_excel.TextCellValue(revRatingResult),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['newMemorization'] ?? '')),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['nearReview'] ?? '')),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['farReview'] ?? '')),
+          pkg_excel.TextCellValue(supervisorResult), 
+          pkg_excel.TextCellValue(isCompleted ? revRatingResult : memRatingResult),
+          pkg_excel.TextCellValue(isCompleted ? (isAbsent ? '---' : 'خاتم 👑') : revRatingResult),
+          pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : (data['newMemorization'] ?? '')),
+          pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : (data['nearReview'] ?? '')),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['farReview'] ?? (isCompleted ? data['review'] : ''))),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['readingBySight'] ?? '')),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['homework'] ?? '')),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['religiousActivities'] ?? '')), 
-          pkg_excel.TextCellValue(isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---')), 
+          pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---'))), 
           pkg_excel.TextCellValue(data['notes']?.toString() ?? ''),
         ]);
       }
@@ -124,28 +134,40 @@ class StudentSessionsPage extends StatelessWidget {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: sessionService.getStudentSessions(studentId), 
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          
-          final sessions = snapshot.data!.docs;
-          if (sessions.isEmpty) return _buildEmptyState(isDarkMode);
+      body: FutureBuilder<DocumentSnapshot>(
+        // 🎯 أولاً: فحص حالة الطالب لايف من مجموعة الطلاب للتأكد من وضعيته
+        future: FirebaseFirestore.instance.collection('students').doc(studentId).get(),
+        builder: (context, studentSnapshot) {
+          bool isCompletedStudent = false;
+          if (studentSnapshot.hasData && studentSnapshot.data!.exists) {
+            var sData = studentSnapshot.data!.data() as Map<String, dynamic>;
+            isCompletedStudent = sData['studentType'] == 'completed';
+          }
 
-          List<QueryDocumentSnapshot> sortedSessions = List.from(sessions);
-          sortedSessions.sort((a, b) {
-            String dateA = (a.data() as Map<String, dynamic>)['date'] ?? '';
-            String dateB = (b.data() as Map<String, dynamic>)['date'] ?? '';
-            return dateB.compareTo(dateA); 
-          });
+          return StreamBuilder<QuerySnapshot>(
+            stream: sessionService.getStudentSessions(studentId), 
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              
+              final sessions = snapshot.data!.docs;
+              if (sessions.isEmpty) return _buildEmptyState(isDarkMode);
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(15),
-            itemCount: sortedSessions.length,
-            itemBuilder: (context, index) {
-              final session = sortedSessions[index];
-              final data = session.data() as Map<String, dynamic>;
-              return _buildSessionTimelineItem(context, session.id, data, isDarkMode);
+              List<QueryDocumentSnapshot> sortedSessions = List.from(sessions);
+              sortedSessions.sort((a, b) {
+                String dateA = (a.data() as Map<String, dynamic>)['date'] ?? '';
+                String dateB = (b.data() as Map<String, dynamic>)['date'] ?? '';
+                return dateB.compareTo(dateA); 
+              });
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(15),
+                itemCount: sortedSessions.length,
+                itemBuilder: (context, index) {
+                  final session = sortedSessions[index];
+                  final data = session.data() as Map<String, dynamic>;
+                  return _buildSessionTimelineItem(context, session.id, data, isDarkMode, isCompletedStudent);
+                },
+              );
             },
           );
         },
@@ -153,11 +175,10 @@ class StudentSessionsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildSessionTimelineItem(BuildContext context, String sessionId, Map<String, dynamic> data, bool isDarkMode) {
+  Widget _buildSessionTimelineItem(BuildContext context, String sessionId, Map<String, dynamic> data, bool isDarkMode, bool isCompletedStudent) {
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
 
-    // 🎯 قراءة ذكية ومحميّة للتقييمات الجديدة من الفايربيز
     String memRating = data['memorizationRating'] ?? data['rating'] ?? "غير مقيم";
     if (memRating.isEmpty) memRating = "غير مقيم";
     
@@ -206,17 +227,21 @@ class StudentSessionsPage extends StatelessWidget {
                     ),
                   ],
                 ),
-                // 🎯 تعديل شارات العرض بالأعلى بشكل فخم ومزدوج
                 if (isAbsent) 
                   _buildBadge("غائب ❌", Colors.red) 
                 else if (isExam)
                   _buildBadge("جلسة اختبار 📝", Colors.teal) 
                 else 
+                  // 🎯 تكييف شارات التقييم العلوية لو الطالب خاتم
                   Row(
                     children: [
-                      _buildBadge("حفظ: $memRating", _getRatingColor(memRating)),
-                      const SizedBox(width: 5),
-                      _buildBadge("مراجعة: $revRating", _getRatingColor(revRating)),
+                      if (isCompletedStudent)
+                        _buildBadge("مراجعة الختمة: $revRating", _getRatingColor(revRating))
+                      else ...[
+                        _buildBadge("حفظ: $memRating", _getRatingColor(memRating)),
+                        const SizedBox(width: 5),
+                        _buildBadge("مراجعة: $revRating", _getRatingColor(revRating)),
+                      ],
                     ],
                   ),
               ],
@@ -227,13 +252,26 @@ class StudentSessionsPage extends StatelessWidget {
             padding: const EdgeInsets.all(15),
             child: Column(
               children: [
+                _buildInfoRow(Icons.person_outline, "المشرف المسجِّل", data['supervisorName'] ?? "غير محدد", isDarkMode),
+                Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
+
                 if (!isAbsent && !isExam) ...[
-                  _buildInfoRow(Icons.star, "الحفظ الجديد", data['newMemorization'], isDarkMode),
+                  // 🎯 إظهار وإخفاء أسطر البيانات حسب وضعية الختمة بنظافة متناهية
+                  if (!isCompletedStudent) ...[
+                    _buildInfoRow(Icons.star, "الحفظ الجديد", data['newMemorization'], isDarkMode),
+                    Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
+                    _buildInfoRow(Icons.auto_stories_outlined, "مراجعة جديد", data['nearReview'], isDarkMode),
+                    Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
+                  ],
+                  
+                  _buildInfoRow(
+                    isCompletedStudent ? Icons.verified_user_rounded : Icons.history_edu, 
+                    isCompletedStudent ? "مراجعة الختمة الشاملة" : "مراجعة قديم", 
+                    isCompletedStudent ? (data['farReview'] ?? data['review']) : data['farReview'], 
+                    isDarkMode
+                  ),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-                  _buildInfoRow(Icons.auto_stories_outlined, "مراجعة جديد", data['nearReview'], isDarkMode),
-                  Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-                  _buildInfoRow(Icons.history_edu, "مراجعة قديم", data['farReview'], isDarkMode),
-                  Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
+                  
                   _buildInfoRow(Icons.menu_book_outlined, "قراءة نظراً", data['readingBySight'], isDarkMode),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
                   _buildInfoRow(Icons.edit_note, "الواجب", data['homework'], isDarkMode),
@@ -242,7 +280,12 @@ class StudentSessionsPage extends StatelessWidget {
                   _buildInfoRow(Icons.mosque_outlined, "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
 
-                  _buildInfoRow(Icons.analytics_outlined, "إجمالي الحفظ للختمة", data['total_memorized_pages'] != null ? "${data['total_memorized_pages']} صفحة" : "---", isDarkMode),
+                  _buildInfoRow(
+                    Icons.analytics_outlined, 
+                    "إجمالي الحفظ للختمة", 
+                    isCompletedStudent ? "604 صفحة (مكتملة ✨)" : (data['total_memorized_pages'] != null ? "${data['total_memorized_pages']} صفحة" : "---"), 
+                    isDarkMode
+                  ),
                   Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
 
                   _buildInfoRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
@@ -267,7 +310,7 @@ class StudentSessionsPage extends StatelessWidget {
                           children: [
                             const Text(
                               "نتيجة الاختبار النهائي للجلسة",
-                              style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
+                              style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500, fontFamily: 'Cairo'),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -275,7 +318,8 @@ class StudentSessionsPage extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 24, 
                                 fontWeight: FontWeight.bold, 
-                                color: isDarkMode ? Colors.tealAccent : Colors.teal.shade900
+                                color: isDarkMode ? Colors.tealAccent : Colors.teal.shade900,
+                                fontFamily: 'Cairo'
                               ),
                             ),
                           ],
@@ -306,11 +350,23 @@ class StudentSessionsPage extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: isDarkMode ? Colors.orange : primaryColor),
           const SizedBox(width: 10),
-          Text("$label: ", style: TextStyle(color: isDarkMode ? Colors.grey[400] : Colors.grey, fontSize: 13)),
+          Text(
+            "$label: ", 
+            style: TextStyle(
+              color: isDarkMode ? Colors.grey[400] : Colors.grey, 
+              fontSize: 13,
+              fontFamily: 'Cairo',
+            )
+          ),
           Expanded(
             child: Text(
               (value == null || value.toString().trim().isEmpty) ? "---" : value.toString(), 
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: isDarkMode ? Colors.white : Colors.black87)
+              style: TextStyle(
+                fontWeight: FontWeight.w500, 
+                fontSize: 14, 
+                color: isDarkMode ? Colors.white : Colors.black87,
+                fontFamily: 'Cairo',
+              )
             ),
           ),
         ],
@@ -329,7 +385,12 @@ class StudentSessionsPage extends StatelessWidget {
       ),
       child: Text(
         "ملاحظات: $notes", 
-        style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: isDarkMode ? Colors.white70 : Colors.black87)
+        style: TextStyle(
+          fontSize: 13, 
+          fontStyle: FontStyle.italic, 
+          color: isDarkMode ? Colors.white70 : Colors.black87,
+          fontFamily: 'Cairo',
+        )
       ),
     );
   }
@@ -341,7 +402,7 @@ class StudentSessionsPage extends StatelessWidget {
         TextButton.icon(
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditSessionPage(sessionId: id, data: data))),
           icon: Icon(Icons.edit, size: 16, color: isDarkMode ? Colors.orange : primaryColor),
-          label: Text("تعديل", style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor)),
+          label: Text("تعديل", style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor, fontFamily: 'Cairo')),
         ),
         if (role == "manager")
           TextButton.icon(
@@ -351,7 +412,7 @@ class StudentSessionsPage extends StatelessWidget {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الجلسة")));
             },
             icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-            label: const Text("حذف", style: TextStyle(color: Colors.red)),
+            label: const Text("حذف", style: TextStyle(color: Colors.red, fontFamily: 'Cairo')),
           ),
       ],
     );
@@ -361,7 +422,15 @@ class StudentSessionsPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+      child: Text(
+        text, 
+        style: const TextStyle(
+          color: Colors.white, 
+          fontSize: 10, 
+          fontWeight: FontWeight.bold,
+          fontFamily: 'Cairo',
+        )
+      ),
     );
   }
 
@@ -369,7 +438,7 @@ class StudentSessionsPage extends StatelessWidget {
     return Center(
       child: Text(
         "لا يوجد سجل جلسات لهذا الطالب", 
-        style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black54, fontSize: 15)
+        style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black54, fontSize: 15, fontFamily: 'Cairo')
       )
     );
   }

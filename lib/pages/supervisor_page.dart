@@ -8,6 +8,62 @@ class SupervisorPage extends StatelessWidget {
 
   final Color primaryColor = const Color(0xff425c75);
 
+  // 🎯 دالة إظهار نافذة التأكيد والتحذير قبل حذف المشرف نهائياً
+  void _showDeleteConfirmationDialog(BuildContext context, String docId, String supervisorName) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+              SizedBox(width: 10),
+              Text(
+                "تأكيد حذف المشرف",
+                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16),
+              ),
+            ],
+          ),
+          content: Text(
+            "هل أنت متأكد من رغبتك في حذف حساب المشرف ($supervisorName) نهائياً من المنظومة؟\n\n⚠️ تنبيه: هذا الإجراء لا يمكن التراجع عنه.",
+            style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+              onPressed: () => Navigator.pop(dialogContext),
+            ),
+            TextButton(
+              child: const Text(
+                "حذف نهائي", 
+                style: TextStyle(color: Colors.red, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+              ),
+              onPressed: () async {
+                Navigator.pop(dialogContext); // إغلاق الدايلوج أولاً
+                
+                // حذف المستند من الفايربيز
+                await FirebaseFirestore.instance
+                    .collection('supervisors')
+                    .doc(docId)
+                    .delete();
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: Colors.red.shade800,
+                      content: Text("تم حذف المشرف ($supervisorName) بنجاح 🗑️", style: const TextStyle(fontFamily: 'Cairo')),
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // دالة ذكية لإظهار قائمة التعديل من الأسفل (BottomSheet)
   void _showEditBottomSheet(BuildContext context, String docId, Map<String, dynamic> currentData) {
     final TextEditingController nameEditController = TextEditingController(text: currentData['name']);
@@ -16,16 +72,16 @@ class SupervisorPage extends StatelessWidget {
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // لتجنب تغطية الكيبورد للواجهة
+      isScrollControlled: true, 
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
       builder: (context) {
-        return StatefulBuilder( // لتحديث الواجهة الداخلية عند رفع صورة جديدة
+        return StatefulBuilder( 
           builder: (context, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom, // مسافة الكيبورد
+                bottom: MediaQuery.of(context).viewInsets.bottom, 
                 top: 20,
                 left: 20,
                 right: 20,
@@ -36,10 +92,9 @@ class SupervisorPage extends StatelessWidget {
                   children: [
                     Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(5))),
                     const SizedBox(height: 20),
-                    const Text("تعديل بيانات المشرف", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text("تعديل بيانات المشرف", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                     const SizedBox(height: 20),
                     
-                    // الضغط على الصورة داخل التعديل لتغييرها
                     GestureDetector(
                       onTap: isUploading ? null : () async {
                         setModalState(() => isUploading = true);
@@ -70,21 +125,21 @@ class SupervisorPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    const Text("اضغط على الصورة لتغييرها", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const Text("اضغط على الصورة لتغييرها", style: TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'Cairo')),
                     const SizedBox(height: 20),
                     
-                    // حقل تعديل الاسم
                     TextField(
                       controller: nameEditController,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
                       decoration: InputDecoration(
                         labelText: "اسم المشرف",
+                        labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 12),
                         prefixIcon: Icon(Icons.person, color: primaryColor),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                     const SizedBox(height: 25),
                     
-                    // أزرار الحفظ والإلغاء
                     Row(
                       children: [
                         Expanded(
@@ -97,7 +152,6 @@ class SupervisorPage extends StatelessWidget {
                             onPressed: () async {
                               if (nameEditController.text.trim().isEmpty) return;
                               
-                              // تحديث البيانات في الفايربيز فوراً
                               await FirebaseFirestore.instance
                                   .collection('supervisors')
                                   .doc(docId)
@@ -106,12 +160,14 @@ class SupervisorPage extends StatelessWidget {
                                 'imageUrl': currentImgUrl ?? '',
                               });
                               
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث البيانات بنجاح")),
-                              );
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث البيانات بنجاح", style: TextStyle(fontFamily: 'Cairo'))),
+                                );
+                              }
                             },
-                            child: const Text("حفظ التعديلات", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            child: const Text("حفظ التعديلات", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -122,7 +178,7 @@ class SupervisorPage extends StatelessWidget {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                             onPressed: () => Navigator.pop(context),
-                            child: const Text("إلغاء"),
+                            child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo')),
                           ),
                         ),
                       ],
@@ -145,7 +201,7 @@ class SupervisorPage extends StatelessWidget {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: primaryColor,
-        title: const Text("قائمة المشرفين", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text("قائمة المشرفين", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       floatingActionButton: FloatingActionButton(
@@ -174,12 +230,14 @@ class SupervisorPage extends StatelessWidget {
           }
 
           return ListView.builder(
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.all(15),
             itemCount: supervisors.length,
             itemBuilder: (context, index) {
               final supervisor = supervisors[index];
               final data = supervisor.data();
               String? imageUrl = data['imageUrl'];
+              String sName = data['name'] ?? 'بدون اسم';
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -195,8 +253,8 @@ class SupervisorPage extends StatelessWidget {
                   ],
                 ),
                 child: ListTile(
-                  onTap: () => _showEditBottomSheet(context, supervisor.id, data), // عند الضغط يفتح التعديل فوراً
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  onTap: () => _showEditBottomSheet(context, supervisor.id, data), 
+                  contentPadding: const EdgeInsets.only(right: 20, left: 10, top: 6, bottom: 6),
                   leading: CircleAvatar(
                     radius: 25,
                     backgroundColor: primaryColor.withOpacity(0.1),
@@ -208,32 +266,27 @@ class SupervisorPage extends StatelessWidget {
                         : null,
                   ),
                   title: Text(
-                    data['name'] ?? 'بدون اسم',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    sName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo'),
                   ),
                   subtitle: Row(
                     children: [
-                      Icon(Icons.email_outlined, size: 14, color: Colors.grey[600]),
+                      Icon(Icons.email_outlined, size: 13, color: Colors.grey[600]),
                       const SizedBox(width: 5),
                       Expanded(
                         child: Text(
                           data['email'] ?? '',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12, fontFamily: 'Cairo'),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      "نشط",
-                      style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
+                  // 🎯 حقن زر الحذف الفخم المدمج بالتحذير الأمني للأدمن
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 24),
+                    tooltip: "حذف المشرف",
+                    onPressed: () => _showDeleteConfirmationDialog(context, supervisor.id, sName),
                   ),
                 ),
               );
@@ -253,7 +306,7 @@ class SupervisorPage extends StatelessWidget {
           const SizedBox(height: 15),
           Text(
             "لا يوجد مشرفين مضافين بعد",
-            style: TextStyle(color: Colors.grey[600], fontSize: 16),
+            style: TextStyle(color: Colors.grey[600], fontSize: 15, fontFamily: 'Cairo'),
           ),
         ],
       ),
