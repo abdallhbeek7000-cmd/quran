@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:provider/provider.dart'; // مكتبة الـ Provider
-import 'package:cloud_firestore/cloud_firestore.dart'; // مكتبة الفايرستور
+import 'package:provider/provider.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:quran_habal/services/cloudinary_helper.dart';
+import 'dart:ui'; // 🎯 ضرورية لتأثير الزجاج (Blur)
 
 import 'login_page.dart';
 import 'create_cycle_page.dart';
@@ -12,7 +13,7 @@ import 'students_page.dart';
 import 'assign_students_page.dart';
 import '../models/cycle_model.dart';
 import '../services/cycle_service.dart';
-import '../services/theme_provider.dart'; // استدعاء الـ ThemeProvider
+import '../services/theme_provider.dart'; 
 import 'statistics_page.dart';
 import 'honor_board_page.dart';
 import 'dashboard_page.dart';
@@ -39,12 +40,13 @@ class _HomePageState extends State<HomePage> {
   CycleModel? currentCycleModel;
 
   final Color primaryColor = const Color(0xff425c75);
-  bool _isUploadingManagerImage = false; // لمؤشر تحميل رفع صورة المدير
+  final Color accentGold = const Color(0xffd4af37); // لون إضافي للانعكاسات
+  bool _isUploadingManagerImage = false; 
 
   @override
   void initState() {
     super.initState();
-    loadCycle(); // 🎯 الدالة الحين صافية وممتازة والفحص شغال أوتوماتيكياً من الـ main.dart
+    loadCycle(); 
   }
 
   loadCycle() async {
@@ -66,7 +68,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // دالة مخصصة للمدير لرفع وتحديث صورته الشخصية
   Future<void> _updateManagerImage() async {
     setState(() => _isUploadingManagerImage = true);
     try {
@@ -75,7 +76,7 @@ class _HomePageState extends State<HomePage> {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(widget.uid)
-            .set({'imageUrl': url}, SetOptions(merge: true)); // حفظ أو دمج الحقل في مستند المدير
+            .set({'imageUrl': url}, SetOptions(merge: true));
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -92,180 +93,222 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-
-    // تحديد الـ Collection والمسار بناءً على دور المستخدم الحالي بشكل ديناميكي
     final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
+    final bool isDark = themeProvider.isDarkMode;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية لتشمل الـ AppBar لجمالية الزجاج
+      backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
+        backgroundColor: Colors.transparent, // 🎯 AppBar شفاف بالكامل
+        centerTitle: true,
         title: Text(
           widget.role == "manager" ? "لوحة المدير" : "لوحة المشرف",
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor),
         ),
         actions: [
           IconButton(
             icon: Icon(
-              themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: Colors.white,
+              isDark ? Icons.light_mode : Icons.dark_mode,
+              color: isDark ? Colors.orangeAccent : primaryColor,
             ),
             tooltip: "تغيير المظهر",
-            onPressed: () {
-              themeProvider.toggleTheme();
-            },
+            onPressed: () => themeProvider.toggleTheme(),
           ),
           IconButton(
             onPressed: logout,
-            icon: const Icon(Icons.logout, color: Colors.white),
+            icon: Icon(Icons.logout, color: isDark ? Colors.redAccent : Colors.red),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Header Section المعدل بالكامل لدعم الـ Streams والصور الشخصية
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(30),
-                  bottomRight: Radius.circular(30),
-                ),
+      body: Stack(
+        children: [
+          // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة (Blobs)
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] // ليلي فخم
+                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], // نهاري منعش
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: Column(
-                children: [
-                  // استخدام StreamBuilder لسحب وعرض الصورة فوراً وبشكل لحظي
-                  StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection(currentCollection)
-                        .doc(widget.uid)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      String? imageUrl;
-                      if (snapshot.hasData && snapshot.data!.exists) {
-                        var userData = snapshot.data!.data() as Map<String, dynamic>?;
-                        imageUrl = userData?['imageUrl'];
-                      }
+            ),
+          ),
+          Positioned(
+            top: -50,
+            left: -50,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 200,
+            right: -80,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15),
+              ),
+            ),
+          ),
 
-                      return GestureDetector(
-                        // التفعيل للمدير فقط، وتعطيله للمشرف
-                        onTap: widget.role == "manager" && !_isUploadingManagerImage
-                            ? _updateManagerImage
-                            : null,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            CircleAvatar(
-                              radius: 40,
-                              backgroundColor: Colors.white24,
-                              backgroundImage: imageUrl != null && imageUrl.isNotEmpty
-                                  ? NetworkImage(imageUrl)
-                                  : null,
-                              child: (imageUrl == null || imageUrl.isEmpty) && !_isUploadingManagerImage
-                                  ? const Icon(Icons.person, size: 45, color: Colors.white)
-                                  : null,
-                            ),
-                            if (_isUploadingManagerImage)
-                              const Positioned.fill(
-                                child: Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: CircularProgressIndicator(color: Colors.white),
+          // 🏢 2. المحتوى الأساسي للواجهة
+          SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Column(
+                  children: [
+                    // 🧊 هيدر زجاجي (صورة المدير واسم الدورة)
+                    _buildGlassContainer(
+                      isDark: isDark,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          StreamBuilder<DocumentSnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection(currentCollection)
+                                .doc(widget.uid)
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              String? imageUrl;
+                              if (snapshot.hasData && snapshot.data!.exists) {
+                                var userData = snapshot.data!.data() as Map<String, dynamic>?;
+                                imageUrl = userData?['imageUrl'];
+                              }
+
+                              return GestureDetector(
+                                onTap: widget.role == "manager" && !_isUploadingManagerImage
+                                    ? _updateManagerImage
+                                    : null,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 42,
+                                      backgroundColor: isDark ? Colors.white12 : Colors.white54,
+                                      backgroundImage: imageUrl != null && imageUrl.isNotEmpty
+                                          ? NetworkImage(imageUrl)
+                                          : null,
+                                      child: (imageUrl == null || imageUrl.isEmpty) && !_isUploadingManagerImage
+                                          ? Icon(Icons.person, size: 45, color: isDark ? Colors.white : primaryColor)
+                                          : null,
+                                    ),
+                                    if (_isUploadingManagerImage)
+                                      const Positioned.fill(
+                                        child: Padding(
+                                          padding: EdgeInsets.all(8.0),
+                                          child: CircularProgressIndicator(color: Colors.white),
+                                        ),
+                                      ),
+                                    if (widget.role == "manager" && !_isUploadingManagerImage)
+                                      Positioned(
+                                        bottom: 0,
+                                        right: 0,
+                                        child: CircleAvatar(
+                                          radius: 14,
+                                          backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white,
+                                          child: Icon(Icons.camera_alt, size: 16, color: primaryColor),
+                                        ),
+                                      ),
+                                  ],
                                 ),
-                              ),
-                            // أيقونة الكاميرا الصغيرة لإعلام المدير بإمكانية التعديل
-                            if (widget.role == "manager" && !_isUploadingManagerImage)
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: CircleAvatar(
-                                  radius: 12,
-                                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                                  child: Icon(Icons.camera_alt, size: 14, color: primaryColor),
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    widget.role == "manager" ? "أهلاً مدير المعهد" : "أهلاً أيها المشرف",
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 15),
-                  
-                  // Current Cycle Card
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: themeProvider.isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.calendar_month, color: themeProvider.isDarkMode ? Colors.orange : primaryColor),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text("الدورة الحالية", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                              Text(
-                                currentCycle, 
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold, 
-                                  color: themeProvider.isDarkMode ? Colors.white : primaryColor,
-                                ),
-                              ),
-                            ],
+                              );
+                            },
                           ),
-                        ),
+                          const SizedBox(height: 12),
+                          Text(
+                            widget.role == "manager" ? "أهلاً مدير المعهد" : "أهلاً أيها المشرف",
+                            style: TextStyle(
+                              color: isDark ? Colors.white : primaryColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          
+                          // بطاقة الدورة الحالية داخل الزجاج
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(color: isDark ? Colors.white12 : Colors.white, width: 1),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_month, color: isDark ? accentGold : primaryColor),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text("الدورة الحالية", style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[700])),
+                                      Text(
+                                        currentCycle,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: isDark ? Colors.white : primaryColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 25),
+
+                    // 🧊 شبكة الأزرار الزجاجية
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 15,
+                      mainAxisSpacing: 15,
+                      childAspectRatio: 1.1,
+                      children: [
+                        if (widget.role == "manager") ...[
+                          _buildGlassMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
+                          _buildGlassMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), isDark),
+                          _buildGlassMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), isDark),
+                          if (currentCycleModel != null)
+                            _buildGlassMenuCard(Icons.person_add_alt_1, "إضافة طالب", () => _nav(AddStudentPage(cycle: currentCycleModel!)), isDark),
+                          _buildGlassMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage()), isDark),
+                          if (currentCycleModel != null)
+                            _buildGlassMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), isDark),
+                        ],
+                        if (currentCycleModel != null)
+                          _buildGlassMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
+                        
+                        _buildGlassMenuCard(Icons.bar_chart, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
+                        _buildGlassMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
+                        _buildGlassMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 15,
-                mainAxisSpacing: 15,
-                childAspectRatio: 1.1,
-                children: [
-                  // Manager Only Actions
-                  if (widget.role == "manager") ...[
-                    _buildMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), themeProvider.isDarkMode),
-                    _buildMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), themeProvider.isDarkMode),
-                    _buildMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), themeProvider.isDarkMode),
-                    if (currentCycleModel != null)
-                      _buildMenuCard(Icons.person_add_alt_1, "إضافة طالب", () => _nav(AddStudentPage(cycle: currentCycleModel!)), themeProvider.isDarkMode),
-                    _buildMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage()), themeProvider.isDarkMode),
-                    if (currentCycleModel != null)
-                      _buildMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), themeProvider.isDarkMode),
+                    const SizedBox(height: 20),
                   ],
-
-                  // Common Actions
-                  if (currentCycleModel != null)
-                    _buildMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), themeProvider.isDarkMode),
-                  
-                  _buildMenuCard(Icons.bar_chart, "الإحصائيات", () => _nav(const StatisticsPage()), themeProvider.isDarkMode),
-                  _buildMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), themeProvider.isDarkMode),
-                  _buildMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), themeProvider.isDarkMode),
-                ],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -274,37 +317,58 @@ class _HomePageState extends State<HomePage> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
-  Widget _buildMenuCard(IconData icon, String title, VoidCallback onTap, bool isDarkMode) {
+  // 🧊 أداة مساعدة لإنشاء أي حاوية زجاجية (Glassmorphism)
+  Widget _buildGlassContainer({required Widget child, required bool isDark, EdgeInsetsGeometry padding = EdgeInsets.zero}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(25),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  // 🧊 كرت القائمة بستايل الزجاج
+  Widget _buildGlassMenuCard(IconData icon, String title, VoidCallback onTap, bool isDark) {
     return InkWell(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.05), 
-              blurRadius: 10, 
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
+      borderRadius: BorderRadius.circular(25),
+      child: _buildGlassContainer(
+        isDark: isDark,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              icon, 
-              size: 35, 
-              color: isDarkMode ? Colors.orange : primaryColor,
+              icon,
+              size: 38,
+              color: isDark ? accentGold : primaryColor,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Text(
               title,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 14, 
-                fontWeight: FontWeight.bold, 
-                color: isDarkMode ? Colors.white : primaryColor,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white.withOpacity(0.9) : primaryColor,
               ),
             ),
           ],
