@@ -34,6 +34,20 @@ class _StudentsPageState extends State<StudentsPage> {
   String selectedSupervisor = '';
   final Color primaryColor = const Color(0xff425c75);
 
+  // 🎯 خريطة الأعلام لباقي الجنسيات
+  final Map<String, String> _flags = {
+    'فلسطيني': '🇵🇸',
+    'أردني': '🇯🇴',
+    'لبناني': '🇱🇧',
+    'عراقي': '🇮🇶',
+    'مصري': '🇪🇬',
+    'سعودي': '🇸🇦',
+    'يمني': '🇾🇪',
+    'سوداني': '🇸🇩',
+    'تركي': '🇹🇷',
+    'جنسية أخرى': '🌍',
+  };
+
   void _showDeleteStudentDialog(BuildContext context, String studentId, String studentName) {
     showDialog(
       context: context,
@@ -113,6 +127,7 @@ class _StudentsPageState extends State<StudentsPage> {
       sheetObject.appendRow([
         excel_lib.TextCellValue('التسلسلي'),
         excel_lib.TextCellValue('اسم الطالب'),
+        excel_lib.TextCellValue('الجنسية'), // 🎯 أضفنا الجنسية لملف الإكسل
         excel_lib.TextCellValue('اسم الأب'),
         excel_lib.TextCellValue('اسم الأم'),
         excel_lib.TextCellValue('المشرف'),
@@ -123,6 +138,7 @@ class _StudentsPageState extends State<StudentsPage> {
         sheetObject.appendRow([
           excel_lib.TextCellValue(data['serial']?.toString() ?? ''),
           excel_lib.TextCellValue(data['name']?.toString() ?? ''),
+          excel_lib.TextCellValue(data['nationality']?.toString() ?? 'سوري'), // 🎯 التصدير
           excel_lib.TextCellValue(data['fatherName']?.toString() ?? ''),
           excel_lib.TextCellValue(data['motherName']?.toString() ?? ''),
           excel_lib.TextCellValue(data['supervisorName'] ?? 'غير موزع'),
@@ -150,6 +166,49 @@ class _StudentsPageState extends State<StudentsPage> {
       await Share.share("رقم هاتف ولي الأمر للمتابعة: $phoneNumber");
     } catch (e) {
       print("Error opening dialer: $e");
+    }
+  }
+
+  // 🎯 برمجة علم الثورة السورية ليتناسب مع حجم الخط
+  Widget _buildSyrianRevolutionFlag() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        width: 24,
+        height: 16,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade400, width: 0.5),
+        ),
+        child: Column(
+          children: [
+            Expanded(child: Container(color: const Color(0xff007A3D))), 
+            Expanded(
+              child: Container(
+                color: Colors.white,
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Icon(Icons.star, color: Color(0xffCE1126), size: 4.5),
+                    Icon(Icons.star, color: Color(0xffCE1126), size: 4.5),
+                    Icon(Icons.star, color: Color(0xffCE1126), size: 4.5),
+                  ],
+                ),
+              )
+            ), 
+            Expanded(child: Container(color: Colors.black)), 
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🎯 دالة مساعدة لاختيار العلم المناسب
+  Widget _getNationalityFlag(String? nationality) {
+    String nat = nationality ?? 'سوري';
+    if (nat == 'سوري') {
+      return _buildSyrianRevolutionFlag();
+    } else {
+      return Text(_flags[nat] ?? '🌍', style: const TextStyle(fontSize: 16));
     }
   }
 
@@ -327,7 +386,6 @@ class _StudentsPageState extends State<StudentsPage> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(sName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87, fontFamily: 'Cairo')),
-                              // 🎯 إصلاح السطر 332: تعديل size إلى fontSize داخل الـ TextStyle وتنسيق السطور المتداخلة
                               Text("منقطع لـ $count أيام ⚠️", style: TextStyle(color: Colors.red.shade700, fontSize: 10, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
                             ],
                           ),
@@ -361,6 +419,7 @@ class _StudentsPageState extends State<StudentsPage> {
     final data = doc.data() as Map<String, dynamic>;
     final String imageUrl = data['imageUrl'] ?? '';
     final String studentName = data['name'] ?? 'بدون اسم';
+    final String nationality = data['nationality'] ?? 'سوري'; // 🎯 جلب الجنسية
     final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
 
     return Container(
@@ -410,7 +469,20 @@ class _StudentsPageState extends State<StudentsPage> {
                       ),
               ),
             ),
-            title: Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo')),
+            // 🎯 تم إدراج العلم بجانب الاسم بشكل احترافي وأنيق
+            title: Row(
+              children: [
+                _getNationalityFlag(nationality),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    studentName, 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo'),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

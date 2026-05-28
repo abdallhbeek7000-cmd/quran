@@ -1,48 +1,31 @@
 class StudentModel {
   final String id;
-
   final String serial;
-
   final String name;
-
+  final String nationality; // 🎯 تمت الإضافة هنا
   final String fatherName;
-
   final String motherName;
-
   final String phone;
-
   final String fatherJob;
-
   final String address;
-
   final String schoolGrade;
-
   final String birthDate;
-
   final String studentType;
-
   final String supervisorId;
-
   final String supervisorName;
-
   final String cycleId;
-
   final String cycleName;
-
   final String startMemorization;
-
   final double memorizedPages;
-
   final String imageUrl;
-
   final bool archived;
-
   final String createdAt;
 
   StudentModel({
     required this.id,
     required this.serial,
     required this.name,
+    required this.nationality, // 🎯 تمت الإضافة هنا
     required this.fatherName,
     required this.motherName,
     required this.phone,
@@ -66,6 +49,7 @@ class StudentModel {
     return {
       'serial': serial,
       'name': name,
+      'nationality': nationality, // 🎯 تمت الإضافة هنا لرفعها للفايربيز
       'fatherName': fatherName,
       'motherName': motherName,
       'phone': phone,
@@ -94,6 +78,8 @@ class StudentModel {
       id: id,
       serial: map['serial'] ?? '',
       name: map['name'] ?? '',
+      // 🎯 وضعنا (سوري) كافتراضي لحماية بيانات الطلاب القدامى من الأخطاء
+      nationality: map['nationality'] ?? 'سوري', 
       fatherName: map['fatherName'] ?? '',
       motherName: map['motherName'] ?? '',
       phone: map['phone'] ?? '',
@@ -106,10 +92,8 @@ class StudentModel {
       supervisorName: map['supervisorName'] ?? '',
       cycleId: map['cycleId'] ?? '',
       cycleName: map['cycleName'] ?? '',
-      startMemorization:
-          map['startMemorization'] ?? '',
-      memorizedPages:
-          (map['memorizedPages'] ?? 0).toDouble(),
+      startMemorization: map['startMemorization'] ?? '',
+      memorizedPages: (map['memorizedPages'] ?? 0).toDouble(),
       imageUrl: map['imageUrl'] ?? '',
       archived: map['archived'] ?? false,
       createdAt: map['createdAt'] ?? '',

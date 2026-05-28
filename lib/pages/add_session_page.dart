@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/session_model.dart';
@@ -7,8 +5,7 @@ import '../services/session_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart'; 
-import 'package:googleapis_auth/auth_io.dart'; 
-import '../services/notification_service.dart'; // 🎯 قمنا فقط بإضافة استيراد السيرفيس المحدث ليعمل بالتزامن مع كودك
+import '../services/notification_service.dart'; 
 
 class AddSessionPage extends StatefulWidget {
   final String studentId;
@@ -53,11 +50,9 @@ class _AddSessionPageState extends State<AddSessionPage> {
   
   String studentStatus = "مهذب";
 
-  // 🎯 متغير الفحص الذكي: هل الطالب خاتم؟
   bool isCompletedStudent = false;
   bool checkingStudentType = true;
 
-  // متغيرات المشرف المختار من القائمة المنسدلة
   String? selectedSupervisorId;
   String? selectedSupervisorName;
 
@@ -68,12 +63,9 @@ class _AddSessionPageState extends State<AddSessionPage> {
     super.initState();
     selectedSupervisorId = widget.supervisorId;
     selectedSupervisorName = widget.supervisorName;
-    
-    // 🎯 استدعاء فحص حالة الطالب فوراً عند فتح الواجهة
     _checkIfStudentIsCompleted();
   }
 
-  // 🎯 دالة الفحص الذكي من الفايربيز
   Future<void> _checkIfStudentIsCompleted() async {
     try {
       DocumentSnapshot studentDoc = await FirebaseFirestore.instance
@@ -95,75 +87,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
       setState(() {
         checkingStudentType = false;
       });
-    }
-  }
-
-  // الحفاظ على دالتك كما هي بالملي بناء على طلبك منعا لأي تضارب
-  Future<String?> getObtainAccessToken() async {
-    try {
-      final serviceAccountJson = await rootBundle.loadString('assets/service-account.json');
-      final accountCredentials = ServiceAccountCredentials.fromJson(serviceAccountJson);
-      final scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-      
-      final client = await clientViaServiceAccount(accountCredentials, scopes);
-      final accessToken = client.credentials.accessToken.data;
-      client.close();
-      return accessToken;
-    } catch (e) {
-      print("Error generating automatic Access Token: $e");
-      return null;
-    }
-  }
-
-  // الحفاظ على دالتك الأساسية القديمة متصلة وموجودة بالملي دون تعديل حرصا على كودك المكتوب
-  Future<void> sendNotificationToParent(String studentId, String memRating, String revRating, bool isAbsent, bool isExamSession, String examScore, String dateStr) async {
-    try {
-      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
-      if (!studentDoc.exists) return;
-      Map<String, dynamic> data = studentDoc.data() as Map<String, dynamic>;
-      String? parentToken = data['fcmToken'];
-      String studentName = data['name'] ?? 'ابنكم';
-
-      if (parentToken == null || parentToken.isEmpty) return;
-
-      String accessToken = await getObtainAccessToken() ?? '';
-      if (accessToken.isEmpty) return;
-
-      String bodyText = "";
-      if (isAbsent) {
-        bodyText = "تم تسجيل غياب لـ $studentName في حلقة اليوم $dateStr";
-      } else if (isExamSession) {
-        bodyText = "🎯 تم تسجيل نتيجة اختبار لـ $studentName بعلامة ($examScore من 100) ليوم $dateStr";
-      } else {
-        bodyText = isCompletedStudent 
-            ? "تم تحديث يومية مراجعة الختمة لـ $studentName التقييم: ($revRating) ليوم $dateStr"
-            : "تم تحديث يومية $studentName الحفظ: ($memRating) والمراجعة: ($revRating) ليوم $dateStr";
-      }
-
-      final String projectId = "quran-habal"; 
-      
-      await http.post(
-        Uri.parse('https://fcm.googleapis.com/v1/projects/$projectId/messages:send'),
-        headers: <String, String>{
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken', 
-        },
-        body: jsonEncode(<String, dynamic>{
-          'message': {
-            'token': parentToken,
-            'notification': {
-              'title': isExamSession ? '📝 نتيجة اختبار جديدة' : '📢 تحديث يومي جديد من الحلقة',
-              'body': bodyText,
-            },
-            'data': {
-              'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-              'sound': 'default',
-            }
-          }
-        }),
-      );
-    } catch (e) {
-      print("Error sending notification: $e");
     }
   }
 
@@ -255,7 +178,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
       await studentRef.update(updateData);
     }
 
-    // 🎯 هنا نقوم بالنداء على السيرفيس الجديد المضاف لتحديث السجل السحابي ومركز تنبيهات الأهل فوراً عند الحفظ دون أي تضارب
+    // 🎯 شحن الإشعار المزدوج لمركز التنبيهات والبوش نوتفيكيشن مرة واحدة فقط وبقوة النظام
     String notifyTitle = "";
     String notifyBody = "";
     String notifyType = "regular";
@@ -276,23 +199,11 @@ class _AddSessionPageState extends State<AddSessionPage> {
       notifyType = "regular";
     }
 
-    // شحن الإشعار المزدوج لمركز التنبيهات والبوش نوتفيكيشن
     await NotificationService.sendAndSaveNotification(
       studentId: widget.studentId,
       title: notifyTitle,
       body: notifyBody,
       type: notifyType,
-    );
-
-    // الحفاظ على استدعاء دالتك القديمة لتشغيل الباكيند الموازي الخاص بك دون تداخل
-    await sendNotificationToParent(
-      widget.studentId,
-      (absent || isCompletedStudent) ? '' : memorizationRating,
-      absent ? '' : reviewRating,
-      absent,
-      isExam,
-      examScoreController.text.trim(),
-      date,
     );
 
     if (!mounted) return;

@@ -1,15 +1,14 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/services.dart'; // 🎯 مكتبة قراءة ملفات الـ assets محلياً
+import 'package:flutter/services.dart'; 
 import 'package:googleapis_auth/auth_io.dart';
 
 class NotificationService {
   
-  // 🔐 دالة جلب تصريح الوصول الذكي بالقراءة المحلية الآمنة من الـ assets منعا لكشف المفتاح
+  // 🔐 دالة جلب تصريح الوصول الذكي بالقراءة المحلية الآمنة
   static Future<String> _getAccessToken() async {
     try {
-      // قراءة ملف الـ JSON بأمان من مجلد الـ assets محلياً داخل التطبيق دون كتابته كـ نص مكشوف
       final String serviceAccountStr = await rootBundle.loadString('assets/service-account.json');
       final Map<String, dynamic> serviceAccountJson = jsonDecode(serviceAccountStr);
       
@@ -26,15 +25,15 @@ class NotificationService {
     }
   }
 
-  // 🚀 الدالة الشغالة لإرسال الإشعار الخارجي وحفظه بمركز التنبيهات لايف بنفس اللحظة
+  // 🚀 الدالة الشغالة لإرسال الإشعار الخارجي وحفظه بمركز التنبيهات لايف
   static Future<void> sendAndSaveNotification({
     required String studentId,
     required String title,
     required String body,
-    required String type, // 'regular', 'absent', 'exam', 'honor'
+    required String type, 
   }) async {
     try {
-      // 1. حقن وتوثيق التنبيه في الفايرستور أولاً لمركز إشعارات الأهل
+      // 1. حقن وتوثيق التنبيه في الفايرستور أولاً
       await FirebaseFirestore.instance
           .collection('students')
           .doc(studentId)
@@ -48,7 +47,7 @@ class NotificationService {
       });
       print("Notification documented in Firestore successfully! ✅");
 
-      // 2. جلب الـ FCM Token الخاص بجوال الأهل لإرساله خارجياً
+      // 2. جلب الـ FCM Token الخاص بجوال الأهل
       DocumentSnapshot studentDoc = await FirebaseFirestore.instance
           .collection('students')
           .doc(studentId)
@@ -59,14 +58,12 @@ class NotificationService {
         String? fcmToken = data['fcmToken'];
 
         if (fcmToken != null && fcmToken.isNotEmpty) {
-          // جلب التوكن المؤقت من جوجل لفك تشفير الإرسال
           final String accessToken = await _getAccessToken();
           if (accessToken.isEmpty) {
             print("Access token generation failed.");
             return;
           }
           
-          // يمكنك تثبيت مشروعك الافتراضي quran-habal هنا
           const String projectId = 'quran-habal';
           var url = Uri.parse('https://fcm.googleapis.com/v1/projects/$projectId/messages:send');
 
@@ -75,7 +72,7 @@ class NotificationService {
             'Authorization': 'Bearer $accessToken',
           };
 
-          // الهيكلية الرسمية لـ V1 لضمان نزول الإشعار والجوال مقفل تماماً
+          // الهيكلية الرسمية والمثالية لـ V1
           var requestBody = jsonEncode({
             'message': {
               'token': fcmToken,
@@ -89,7 +86,7 @@ class NotificationService {
                 'type': type,
               },
               'android': {
-                'priority': 'high',
+                'priority': 'HIGH', // 👈 تم التعديل لتتوافق مع خوادم جوجل 100%
                 'notification': {
                   'sound': 'default',
                   'channel_id': 'high_importance_channel',

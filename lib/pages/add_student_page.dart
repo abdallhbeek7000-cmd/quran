@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http; 
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // 🎯 تم استدعاء الفايربيز لإجبار التصفير الصريح
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import '../services/theme_provider.dart';
 import '../models/cycle_model.dart';
 import '../models/student_model.dart';
@@ -37,6 +37,22 @@ class _AddStudentPageState extends State<AddStudentPage> {
   DateTime? startDate;
   bool loading = false;
   String studentType = "new";
+  
+  // 🎯 المتغيرات الجديدة الخاصة بالجنسية
+  String selectedNationality = "سوري";
+  final List<Map<String, dynamic>> nationalities = [
+    {'name': 'سوري', 'flag': 'custom'}, // سيتم استدعاء العلم المبرمج يدوياً
+    {'name': 'فلسطيني', 'flag': '🇵🇸'},
+    {'name': 'أردني', 'flag': '🇯🇴'},
+    {'name': 'لبناني', 'flag': '🇱🇧'},
+    {'name': 'عراقي', 'flag': '🇮🇶'},
+    {'name': 'مصري', 'flag': '🇪🇬'},
+    {'name': 'سعودي', 'flag': '🇸🇦'},
+    {'name': 'يمني', 'flag': '🇾🇪'},
+    {'name': 'سوداني', 'flag': '🇸🇩'},
+    {'name': 'تركي', 'flag': '🇹🇷'},
+    {'name': 'جنسية أخرى', 'flag': '🌍'},
+  ];
 
   File? _selectedImage; 
   XFile? _pickerFile; 
@@ -100,21 +116,17 @@ class _AddStudentPageState extends State<AddStudentPage> {
     setState(() => loading = true);
 
     try {
-      // 🎯 جمرة التعديل الملوكي: حساب وتصفير الرقم التسلسلي برمجياً رغماً عن الكاش
       String serial = '';
-      String prefix = "${widget.cycle.year}${widget.cycle.cycleNumber.toString().padLeft(2, '0')}"; // بـ يعطيك 202601
+      String prefix = "${widget.cycle.year}${widget.cycle.cycleNumber.toString().padLeft(2, '0')}"; 
 
-      // جلب الطلاب الفعليين للدورة الحالية من السيرفر مباشرة لتفادي عناد الكاش القديم
       var studentsSnapshot = await FirebaseFirestore.instance
           .collection('students')
           .where('cycleId', isEqualTo: widget.cycle.id)
           .get(const GetOptions(source: Source.server));
 
       if (studentsSnapshot.docs.isEmpty) {
-        // 🔥 لو قمت بحذف الطلاب من السيرفر، اجبره يبدأ من الترقيم الأول فوراً بقوة الكود!
         serial = "${prefix}01"; 
       } else {
-        // لو في طلاب حقيقيين بالدورة، نطلع أعلى رقم تسلسلي ونقيد فوقه
         int maxSerial = 0;
         for (var doc in studentsSnapshot.docs) {
           String currentSerial = doc.data()['serial'] ?? "";
@@ -138,8 +150,9 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
       final student = StudentModel(
         id: '',
-        serial: serial, // تمرير الرقم الرقمي الجديد المصحح
+        serial: serial, 
         name: name.text.trim(),
+        nationality: selectedNationality, // 🎯 تم إضافة الجنسية هنا
         fatherName: fatherName.text.trim(),
         motherName: motherName.text.trim(),
         phone: phone.text.trim(),
@@ -174,6 +187,39 @@ class _AddStudentPageState extends State<AddStudentPage> {
     } finally {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  // 🎯 برمجة علم الثورة السورية باستخدام Flutter Containers بدلاً من الإيموجي
+  Widget _buildSyrianRevolutionFlag() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        width: 26,
+        height: 18,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade400, width: 0.5),
+        ),
+        child: Column(
+          children: [
+            Expanded(child: Container(color: const Color(0xff007A3D))), // اللون الأخضر
+            Expanded(
+              child: Container(
+                color: Colors.white,
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Icon(Icons.star, color: Color(0xffCE1126), size: 5.5),
+                    Icon(Icons.star, color: Color(0xffCE1126), size: 5.5),
+                    Icon(Icons.star, color: Color(0xffCE1126), size: 5.5),
+                  ],
+                ),
+              )
+            ), // اللون الأبيض مع النجوم الحمراء
+            Expanded(child: Container(color: Colors.black)), // اللون الأسود
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -248,6 +294,32 @@ class _AddStudentPageState extends State<AddStudentPage> {
               child: Column(
                 children: [
                   TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: name, decoration: _inputDecoration("اسم الطالب الكامل", Icons.person, isDarkMode)),
+                  
+                  const SizedBox(height: 15),
+                  
+                  // 🎯 تم إضافة قائمة الجنسية هنا مع الأعلام
+                  DropdownButtonFormField<String>(
+                    value: selectedNationality,
+                    dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'),
+                    decoration: _inputDecoration("الجنسية", Icons.flag_outlined, isDarkMode),
+                    items: nationalities.map((nat) {
+                      return DropdownMenuItem<String>(
+                        value: nat['name'],
+                        child: Row(
+                          children: [
+                            nat['flag'] == 'custom' 
+                                ? _buildSyrianRevolutionFlag() 
+                                : Text(nat['flag'], style: const TextStyle(fontSize: 18)),
+                            const SizedBox(width: 10),
+                            Text(nat['name']),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => selectedNationality = v!),
+                  ),
+
                   const SizedBox(height: 15),
                   Row(
                     children: [
