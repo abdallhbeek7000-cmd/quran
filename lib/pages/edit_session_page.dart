@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; 
 import '../services/session_service.dart';
 import '../services/theme_provider.dart';
+import '../services/notification_service.dart'; // 🎯 استيراد سيرفيس الإشعارات والتوثيق المحدث
 
 class EditSessionPage extends StatefulWidget {
   final String sessionId;
@@ -87,11 +88,9 @@ class _EditSessionPageState extends State<EditSessionPage> {
     selectedSupervisorId = data['supervisorId'] ?? '';
     selectedSupervisorName = data['supervisorName'] ?? '';
 
-    // 🎯 استدعاء فحص حالة الطالب عند التعديل
     _checkIfStudentIsCompleted();
   }
 
-  // 🎯 دالة الفحص الذكي من كوليكشن الطلاب
   Future<void> _checkIfStudentIsCompleted() async {
     try {
       String studentId = widget.data['studentId'] ?? '';
@@ -138,7 +137,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
     double totalPages = isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0);
     String studentId = widget.data['studentId'] ?? '';
 
-    // 1️⃣ تحديث مستند الجلسة الحالي في مجموعة sessions مع حفظ المشرف المحدث والتقييمات
+    // 1️⃣ تحديث مستند الجلسة الحالي في مجموعة sessions
     await sessionService.updateSession(
       sessionId: widget.sessionId,
       data: {
@@ -168,11 +167,37 @@ class _EditSessionPageState extends State<EditSessionPage> {
       });
     }
 
+    // 🎯 3️⃣ شحن التحديث السحري لمركز التنبيهات وإرساله كإشعار دفع خارجي معدل للأهل
+    if (studentId.isNotEmpty) {
+      String notifyTitle = "✏️ تعديل في بيانات الحلقة";
+      String notifyBody = "";
+      String notifyType = "regular";
+
+      if (absent) {
+        notifyTitle = "🚨 تعديل: تسجيل غياب طالب";
+        notifyBody = "تم تعديل الجلسة وتوثيق غياب الطالب اليوم بـ السجل الإداري.";
+        notifyType = "absent";
+      } else {
+        notifyBody = isCompletedStudent
+            ? "تم تحديث وتعديل سجل مراجعة الختمة الشاملة بنجاح، التقييم الحالي: ($reviewRating)"
+            : "تم تعديل بيانات الإنجاز اليومي بنجاح، الحفظ: ($memorizationRating) والمراجعة: ($reviewRating)";
+        notifyType = "regular";
+      }
+
+      // إرسال وتوثيق لايف
+      await NotificationService.sendAndSaveNotification(
+        studentId: studentId,
+        title: notifyTitle,
+        body: notifyBody,
+        type: notifyType,
+      );
+    }
+
     if (!mounted) return;
     setState(() => loading = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث الجلسة بنجاح")),
+      const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث الجلسة وإخطار الأهل بالتعديل بنجاح", style: TextStyle(fontFamily: 'Cairo'))),
     );
 
     Navigator.pop(context);
@@ -187,12 +212,13 @@ class _EditSessionPageState extends State<EditSessionPage> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
-        title: const Text("تعديل بيانات الجلسة", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text("تعديل بيانات الجلسة", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo', fontSize: 16)),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: checkingStudentType
-          ? const Center(child: CircularProgressIndicator()) // انتظار أمان التحميل لحالة الطالب
+          ? const Center(child: CircularProgressIndicator()) 
           : SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
                   Container(
@@ -208,7 +234,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                       child: SwitchListTile(
                         activeColor: Colors.orange,
                         value: absent,
-                        title: const Text("تسجيل غياب في هذا اليوم", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        title: const Text("تسجيل غياب في هذا اليوم", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)),
                         onChanged: (v) => setState(() => absent = v),
                       ),
                     ),
@@ -225,16 +251,15 @@ class _EditSessionPageState extends State<EditSessionPage> {
                             isDarkMode: isDarkMode,
                             child: Column(
                               children: [
-                                // 🎯 إخفاء حقول الحفظ والمراجعة الجديدة لو الطالب خاتم
                                 if (!isCompletedStudent) ...[
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newMemorization, decoration: _inputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode)),
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: newMemorization, decoration: _inputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode)),
                                   const SizedBox(height: 15),
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newReview, decoration: _inputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode)),
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: newReview, decoration: _inputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode)),
                                   const SizedBox(height: 15),
                                 ],
                                 
                                 TextField(
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), 
                                   controller: oldReview, 
                                   decoration: _inputDecoration(
                                     isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
@@ -243,16 +268,16 @@ class _EditSessionPageState extends State<EditSessionPage> {
                                   )
                                 ),
                                 const SizedBox(height: 15),
-                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: readingBySight, decoration: _inputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
+                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: readingBySight, decoration: _inputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
                                 const SizedBox(height: 15),
-                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: homework, decoration: _inputDecoration(isCompletedStudent ? "المقدار المطلوب للمرة القادمة" : "الواجب", Icons.edit_note, isDarkMode)),
+                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: homework, decoration: _inputDecoration(isCompletedStudent ? "المقدار المطلوب للمرة القادمة" : "الواجب", Icons.edit_note, isDarkMode)),
                                 
                                 if (!isCompletedStudent) ...[
                                   const SizedBox(height: 20), 
                                   const Divider(),
                                   const SizedBox(height: 10),
                                   TextField(
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold), 
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'), 
                                     controller: totalMemorizedPagesController, 
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"^\d+\.?\d*"))],
@@ -269,12 +294,11 @@ class _EditSessionPageState extends State<EditSessionPage> {
                             isDarkMode: isDarkMode,
                             child: Column(
                               children: [
-                                // 🎯 إخفاء تقييم الحفظ الجديد لو الطالب خاتم
                                 if (!isCompletedStudent) ...[
                                   DropdownButtonFormField<String>(
                                     value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(memorizationRating) ? memorizationRating : "جيد",
                                     dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'),
                                     decoration: _inputDecoration("تقييم الحفظ الجديد", Icons.stars, isDarkMode),
                                     items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
                                     onChanged: (v) => setState(() => memorizationRating = v!),
@@ -285,7 +309,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                                 DropdownButtonFormField<String>(
                                   value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(reviewRating) ? reviewRating : "جيد",
                                   dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'),
                                   decoration: _inputDecoration(isCompletedStudent ? "تقييم مراجعة الختمة" : "تقييم المراجعة (الماضى)", Icons.rate_review_outlined, isDarkMode),
                                   items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
                                   onChanged: (v) => setState(() => reviewRating = v!),
@@ -294,7 +318,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                                 DropdownButtonFormField<String>(
                                   value: studentStatus,
                                   dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'),
                                   decoration: _inputDecoration("حالة الطالب", Icons.mood, isDarkMode),
                                   items: ["مهذب", "منضبط", "مشاغب", "كثير الحركة"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
                                   onChanged: (v) => setState(() => studentStatus = v!),
@@ -307,11 +331,10 @@ class _EditSessionPageState extends State<EditSessionPage> {
                             title: "نشاطات إضافية",
                             icon: Icons.mosque_outlined,
                             isDarkMode: isDarkMode,
-                            child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: religiousActivities, decoration: _inputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode)),
+                            child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: religiousActivities, decoration: _inputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode)),
                           ),
                         ],
 
-                        // كرت تعديل واختيار المشرف المسجّل للجلسة
                         const SizedBox(height: 15),
                         _buildSectionCard(
                           title: "المشرف المسجِّل للجلسة",
@@ -324,7 +347,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                                 return const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)));
                               }
                               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                                return Text("لم يتم العثور على مشرفين", style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.black54));
+                                return Text("لم يتم العثور على مشرفين", style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.black54, fontFamily: 'Cairo'));
                               }
 
                               List<DropdownMenuItem<String>> items = snapshot.data!.docs.map((doc) {
@@ -332,7 +355,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                                 String name = doc["name"] ?? "مشرف غير معروف";
                                 return DropdownMenuItem<String>(
                                   value: id,
-                                  child: Text(name),
+                                  child: Text(name, style: const TextStyle(fontFamily: 'Cairo')),
                                 );
                               }).toList();
 
@@ -344,7 +367,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                               return DropdownButtonFormField<String>(
                                 value: selectedSupervisorId,
                                 dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.w600),
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.w600, fontFamily: 'Cairo'),
                                 decoration: _inputDecoration("اسم المشرف الحالي / البديل", Icons.person_search_rounded, isDarkMode),
                                 items: items,
                                 onChanged: (v) {
@@ -367,7 +390,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                           child: Column(
                             children: [
                               if (absent) const SizedBox(height: 15),
-                              TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: notes, maxLines: 3, decoration: _inputDecoration("الملاحظات العامة", Icons.comment, isDarkMode)),
+                              TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: notes, maxLines: 3, decoration: _inputDecoration("الملاحظات العامة", Icons.comment, isDarkMode)),
                             ],
                           ),
                         ),
@@ -383,7 +406,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                             ),
                             child: loading
                                 ? const CircularProgressIndicator(color: Colors.white)
-                                : const Text("تحديث البيانات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                                : const Text("تحديث البيانات", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
                           ),
                         ),
                       ],
@@ -398,12 +421,14 @@ class _EditSessionPageState extends State<EditSessionPage> {
   InputDecoration _inputDecoration(String label, IconData icon, bool isDarkMode) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: isDarkMode ? Colors.grey[400] : Colors.grey[700]),
-      prefixIcon: Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 20),
+      labelStyle: TextStyle(color: isDarkMode ? Colors.grey[400] : Colors.grey[700], fontFamily: 'Cairo', fontSize: 12),
+      prefixIcon: Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 18),
       filled: true,
       fillColor: isDarkMode ? const Color(0xff2b2b2b) : Colors.white,
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade300)),
       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade200)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.orange : primaryColor, width: 1.5)),
     );
   }
 
@@ -428,7 +453,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
             children: [
               Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 18),
               const SizedBox(width: 8),
-              Text(title, style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(title, style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor, fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo')),
             ],
           ),
           Divider(height: 25, color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),

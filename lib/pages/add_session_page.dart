@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart'; 
 import 'package:googleapis_auth/auth_io.dart'; 
+import '../services/notification_service.dart'; // 🎯 قمنا فقط بإضافة استيراد السيرفيس المحدث ليعمل بالتزامن مع كودك
 
 class AddSessionPage extends StatefulWidget {
   final String studentId;
@@ -97,6 +98,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
     }
   }
 
+  // الحفاظ على دالتك كما هي بالملي بناء على طلبك منعا لأي تضارب
   Future<String?> getObtainAccessToken() async {
     try {
       final serviceAccountJson = await rootBundle.loadString('assets/service-account.json');
@@ -113,6 +115,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
     }
   }
 
+  // الحفاظ على دالتك الأساسية القديمة متصلة وموجودة بالملي دون تعديل حرصا على كودك المكتوب
   Future<void> sendNotificationToParent(String studentId, String memRating, String revRating, bool isAbsent, bool isExamSession, String examScore, String dateStr) async {
     try {
       DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
@@ -132,7 +135,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
       } else if (isExamSession) {
         bodyText = "🎯 تم تسجيل نتيجة اختبار لـ $studentName بعلامة ($examScore من 100) ليوم $dateStr";
       } else {
-        // 🎯 تكييف نص الإشعار للأهل لو الطالب خاتم
         bodyText = isCompletedStudent 
             ? "تم تحديث يومية مراجعة الختمة لـ $studentName التقييم: ($revRating) ليوم $dateStr"
             : "تم تحديث يومية $studentName الحفظ: ($memRating) والمراجعة: ($revRating) ليوم $dateStr";
@@ -253,6 +255,36 @@ class _AddSessionPageState extends State<AddSessionPage> {
       await studentRef.update(updateData);
     }
 
+    // 🎯 هنا نقوم بالنداء على السيرفيس الجديد المضاف لتحديث السجل السحابي ومركز تنبيهات الأهل فوراً عند الحفظ دون أي تضارب
+    String notifyTitle = "";
+    String notifyBody = "";
+    String notifyType = "regular";
+
+    if (absent) {
+      notifyTitle = "🚨 تنبيه غياب الطالب";
+      notifyBody = "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)";
+      notifyType = "absent";
+    } else if (isExam) {
+      notifyTitle = "📝 نتيجة اختبار جديدة";
+      notifyBody = "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)";
+      notifyType = "exam";
+    } else {
+      notifyTitle = "📢 تحديث يومي من الحلقة";
+      notifyBody = isCompletedStudent 
+          ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح، التقييم: ($reviewRating)"
+          : "تم تسجيل يومية جديدة لـ ${widget.studentName} الحفظ: ($memorizationRating) والمراجعة: ($reviewRating)";
+      notifyType = "regular";
+    }
+
+    // شحن الإشعار المزدوج لمركز التنبيهات والبوش نوتفيكيشن
+    await NotificationService.sendAndSaveNotification(
+      studentId: widget.studentId,
+      title: notifyTitle,
+      body: notifyBody,
+      type: notifyType,
+    );
+
+    // الحفاظ على استدعاء دالتك القديمة لتشغيل الباكيند الموازي الخاص بك دون تداخل
     await sendNotificationToParent(
       widget.studentId,
       (absent || isCompletedStudent) ? '' : memorizationRating,
@@ -284,7 +316,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: checkingStudentType 
-          ? const Center(child: CircularProgressIndicator()) // انتظار تحميل نوع الطالب بأمان
+          ? const Center(child: CircularProgressIndicator()) 
           : SingleChildScrollView(
               child: Column(
                 children: [
@@ -346,7 +378,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                             isDarkMode: isDarkMode,
                             child: Column(
                               children: [
-                                // 🎯 إخفاء الحفظ والمراجعة الجديدة أوتوماتيكياً لو الطالب خاتم
                                 if (!isCompletedStudent) ...[
                                   TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newMemorization, decoration: _inputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode)),
                                   const SizedBox(height: 15),
@@ -354,7 +385,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                                   const SizedBox(height: 15),
                                 ],
                                 
-                                // حقل المراجعة الشامل للختمة (تغيير اسمه لو الطالب خاتم)
                                 TextField(
                                   style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
                                   controller: oldReview, 
@@ -391,7 +421,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                             isDarkMode: isDarkMode,
                             child: Column(
                               children: [
-                                // 🎯 إخفاء تقييم حفظ جديد لو الطالب خاتم
                                 if (!isCompletedStudent) ...[
                                   DropdownButtonFormField<String>(
                                     value: memorizationRating,
@@ -433,7 +462,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                           ),
                         ],
 
-                        // كرت اختيار المشرف المسجّل للجلسة
                         const SizedBox(height: 15),
                         _buildSectionCard(
                           title: "المشرف المسجِّل للجلسة",
