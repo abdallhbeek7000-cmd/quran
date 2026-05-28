@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart'; 
+import 'package:flutter/material.dart'; // 🎯 ضروري لإظهار رسائل الخطأ على الشاشة
 import 'package:googleapis_auth/auth_io.dart';
 
 class NotificationService {
@@ -31,6 +32,7 @@ class NotificationService {
     required String title,
     required String body,
     required String type, 
+    BuildContext? context, // 🎯 تمت الإضافة كاختياري لكي تظهر الأخطاء المنبثقة إن أردت
   }) async {
     try {
       // 1. حقن وتوثيق التنبيه في الفايرستور أولاً
@@ -61,6 +63,11 @@ class NotificationService {
           final String accessToken = await _getAccessToken();
           if (accessToken.isEmpty) {
             print("Access token generation failed.");
+            if (context != null && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(backgroundColor: Colors.red, content: Text("فشل في قراءة ملف المفتاح السري.")),
+              );
+            }
             return;
           }
           
@@ -72,7 +79,7 @@ class NotificationService {
             'Authorization': 'Bearer $accessToken',
           };
 
-          // الهيكلية الرسمية والمثالية لـ V1
+          // 🎯 الهيكلية الرسمية والمثالية لـ V1 المتطابقة مع تطبيق الأهل
           var requestBody = jsonEncode({
             'message': {
               'token': fcmToken,
@@ -86,29 +93,37 @@ class NotificationService {
                 'type': type,
               },
               'android': {
-                'priority': 'HIGH', // 👈 تم التعديل لتتوافق مع خوادم جوجل 100%
+                'priority': 'high',
                 'notification': {
-                  'sound': 'default',
                   'channel_id': 'high_importance_channel',
+                  'sound': 'default',
+                  'click_action': 'FLUTTER_NOTIFICATION_CLICK',
                 }
               },
-              'apns': {
-                'payload': {
-                  'aps': {
-                    'sound': 'default',
-                    'badge': 1,
-                  }
-                }
-              }
             }
           });
 
           var response = await http.post(url, headers: headers, body: requestBody);
           
+          // 🎯 التحقق الاستخباراتي لمعرفة رد جوجل
           if (response.statusCode == 200) {
             print("Push Notification fired successfully outside the app! 🔔🚀");
+            if (context != null && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(backgroundColor: Colors.green, content: Text("🚀 تم إرسال الإشعار بنجاح!")),
+              );
+            }
           } else {
-            print("FCM V1 Broadcast Error: ${response.body}");
+            print("FCM V1 Broadcast Error: ${response.statusCode} - ${response.body}");
+            if (context != null && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: Colors.red, 
+                  duration: const Duration(seconds: 10),
+                  content: Text("❌ خطأ من جوجل: ${response.statusCode}\n${response.body}")
+                ),
+              );
+            }
           }
         } else {
           print("FCM Token is empty for this student doc. الأهل لم يسجلوا بالهاتف بعد.");
@@ -116,6 +131,11 @@ class NotificationService {
       }
     } catch (e) {
       print("Error inside V1 Notification Service: $e");
+      if (context != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.orange, content: Text("⚠️ خطأ في التطبيق: $e")),
+        );
+      }
     }
   }
 }
