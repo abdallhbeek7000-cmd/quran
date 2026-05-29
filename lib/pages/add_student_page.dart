@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert'; 
+import 'dart:ui'; // 🎯 ضرورية جداً لتأثير الزجاج
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http; 
@@ -38,10 +39,10 @@ class _AddStudentPageState extends State<AddStudentPage> {
   bool loading = false;
   String studentType = "new";
   
-  // 🎯 المتغيرات الجديدة الخاصة بالجنسية
+  // 🎯 المتغيرات الخاصة بالجنسية
   String selectedNationality = "سوري";
   final List<Map<String, dynamic>> nationalities = [
-    {'name': 'سوري', 'flag': 'custom'}, // سيتم استدعاء العلم المبرمج يدوياً
+    {'name': 'سوري', 'flag': 'custom'}, 
     {'name': 'فلسطيني', 'flag': '🇵🇸'},
     {'name': 'أردني', 'flag': '🇯🇴'},
     {'name': 'لبناني', 'flag': '🇱🇧'},
@@ -59,6 +60,7 @@ class _AddStudentPageState extends State<AddStudentPage> {
   final ImagePicker _picker = ImagePicker();
 
   final Color primaryColor = const Color(0xff425c75);
+  final Color accentGold = const Color(0xffd4af37); // 🎯 لون الزجاج المكمل
 
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(
@@ -152,7 +154,7 @@ class _AddStudentPageState extends State<AddStudentPage> {
         id: '',
         serial: serial, 
         name: name.text.trim(),
-        nationality: selectedNationality, // 🎯 تم إضافة الجنسية هنا
+        nationality: selectedNationality, 
         fatherName: fatherName.text.trim(),
         motherName: motherName.text.trim(),
         phone: phone.text.trim(),
@@ -189,19 +191,19 @@ class _AddStudentPageState extends State<AddStudentPage> {
     }
   }
 
-  // 🎯 برمجة علم الثورة السورية باستخدام Flutter Containers بدلاً من الإيموجي
+  // 🎯 برمجة علم الثورة السورية باستخدام Flutter Containers
   Widget _buildSyrianRevolutionFlag() {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: BorderRadius.circular(4),
       child: Container(
         width: 26,
         height: 18,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade400, width: 0.5),
+          border: Border.all(color: Colors.white60, width: 0.5), // تعديل لون الإطار ليناسب الزجاج
         ),
         child: Column(
           children: [
-            Expanded(child: Container(color: const Color(0xff007A3D))), // اللون الأخضر
+            Expanded(child: Container(color: const Color(0xff007A3D))), 
             Expanded(
               child: Container(
                 color: Colors.white,
@@ -214,8 +216,8 @@ class _AddStudentPageState extends State<AddStudentPage> {
                   ],
                 ),
               )
-            ), // اللون الأبيض مع النجوم الحمراء
-            Expanded(child: Container(color: Colors.black)), // اللون الأسود
+            ), 
+            Expanded(child: Container(color: Colors.black)), 
           ],
         ),
       ),
@@ -227,250 +229,345 @@ class _AddStudentPageState extends State<AddStudentPage> {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية للزجاج
+      backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
-        title: const Text("إضافة طالب جديد", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: Colors.transparent, // AppBar شفاف
+        title: Text("إضافة طالب جديد", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
+        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+        centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Center(
-              child: Stack(
+      body: Stack(
+        children: [
+          // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDarkMode
+                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
+                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          Positioned(
+            top: 20,
+            left: -60,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)),
+            ),
+          ),
+          Positioned(
+            bottom: 150,
+            right: -80,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
+            ),
+          ),
+
+          // 🏢 2. المحتوى الأساسي للواجهة
+          SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 55,
-                    backgroundColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                    backgroundImage: _selectedImage != null ? FileImage(_selectedImage!) : null,
-                    child: _selectedImage == null
-                        ? Icon(Icons.account_circle, size: 110, color: Colors.grey[400])
-                        : null,
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 4,
-                    child: CircleAvatar(
-                      backgroundColor: isDarkMode ? Colors.orange : primaryColor,
-                      radius: 18,
-                      child: IconButton(
-                        icon: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
-                        onPressed: _pickImage,
-                        tooltip: "اختيار صورة للطالب",
+                  // 🧊 3. قسم الصورة الشخصية (بتأثير زجاجي خفيف خلفها)
+                  _buildGlassContainer(
+                    isDarkMode: isDarkMode,
+                    padding: const EdgeInsets.all(20),
+                    child: Center(
+                      child: Stack(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.1), blurRadius: 15, offset: const Offset(0, 5)),
+                              ]
+                            ),
+                            child: CircleAvatar(
+                              radius: 55,
+                              backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                              backgroundImage: _selectedImage != null ? FileImage(_selectedImage!) : null,
+                              child: _selectedImage == null
+                                  ? Icon(Icons.add_a_photo_outlined, size: 45, color: isDarkMode ? Colors.white54 : Colors.grey[400])
+                                  : null,
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: CircleAvatar(
+                              backgroundColor: isDarkMode ? accentGold : primaryColor,
+                              radius: 18,
+                              child: IconButton(
+                                icon: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                                onPressed: _pickImage,
+                                tooltip: "اختيار صورة للطالب",
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 25),
+                  const SizedBox(height: 20),
 
-            _buildSectionCard(
-              title: "معلومات التسجيل",
-              icon: Icons.app_registration,
-              isDarkMode: isDarkMode,
-              child: DropdownButtonFormField<String>(
-                value: studentType,
-                dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                decoration: _inputDecoration("نوع الطالب", Icons.category_outlined, isDarkMode),
-                items: const [
-                  DropdownMenuItem(value: "new", child: Text("طالب جديد")),
-                  DropdownMenuItem(value: "old", child: Text("طالب قديم")),
-                  DropdownMenuItem(value: "completed", child: Text("خاتم")),
-                ],
-                onChanged: (v) => setState(() => studentType = v!),
-              ),
-            ),
+                  // 🧊 4. الأقسام الزجاجية
+                  _buildSectionCard(
+                    title: "معلومات التسجيل",
+                    icon: Icons.app_registration,
+                    isDarkMode: isDarkMode,
+                    child: DropdownButtonFormField<String>(
+                      value: studentType,
+                      dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                      decoration: _glassInputDecoration("نوع الطالب", Icons.category_outlined, isDarkMode),
+                      items: const [
+                        DropdownMenuItem(value: "new", child: Text("طالب جديد")),
+                        DropdownMenuItem(value: "old", child: Text("طالب قديم")),
+                        DropdownMenuItem(value: "completed", child: Text("خاتم")),
+                      ],
+                      onChanged: (v) => setState(() => studentType = v!),
+                    ),
+                  ),
 
-            const SizedBox(height: 15),
-
-            _buildSectionCard(
-              title: "المعلومات الشخصية",
-              icon: Icons.person_outline,
-              isDarkMode: isDarkMode,
-              child: Column(
-                children: [
-                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: name, decoration: _inputDecoration("اسم الطالب الكامل", Icons.person, isDarkMode)),
-                  
                   const SizedBox(height: 15),
-                  
-                  // 🎯 تم إضافة قائمة الجنسية هنا مع الأعلام
-                  DropdownButtonFormField<String>(
-                    value: selectedNationality,
-                    dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'),
-                    decoration: _inputDecoration("الجنسية", Icons.flag_outlined, isDarkMode),
-                    items: nationalities.map((nat) {
-                      return DropdownMenuItem<String>(
-                        value: nat['name'],
-                        child: Row(
+
+                  _buildSectionCard(
+                    title: "المعلومات الشخصية",
+                    icon: Icons.person_outline,
+                    isDarkMode: isDarkMode,
+                    child: Column(
+                      children: [
+                        TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold), controller: name, decoration: _glassInputDecoration("اسم الطالب الكامل", Icons.person, isDarkMode)),
+                        
+                        const SizedBox(height: 15),
+                        
+                        DropdownButtonFormField<String>(
+                          value: selectedNationality,
+                          dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                          decoration: _glassInputDecoration("الجنسية", Icons.flag_outlined, isDarkMode),
+                          items: nationalities.map((nat) {
+                            return DropdownMenuItem<String>(
+                              value: nat['name'],
+                              child: Row(
+                                children: [
+                                  nat['flag'] == 'custom' 
+                                      ? _buildSyrianRevolutionFlag() 
+                                      : Text(nat['flag'], style: const TextStyle(fontSize: 18)),
+                                  const SizedBox(width: 10),
+                                  Text(nat['name']),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (v) => setState(() => selectedNationality = v!),
+                        ),
+
+                        const SizedBox(height: 15),
+                        Row(
                           children: [
-                            nat['flag'] == 'custom' 
-                                ? _buildSyrianRevolutionFlag() 
-                                : Text(nat['flag'], style: const TextStyle(fontSize: 18)),
+                            Expanded(child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: fatherName, decoration: _glassInputDecoration("اسم الأب", Icons.man, isDarkMode))),
                             const SizedBox(width: 10),
-                            Text(nat['name']),
+                            Expanded(child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: motherName, decoration: _glassInputDecoration("اسم الأم", Icons.woman, isDarkMode))),
                           ],
                         ),
-                      );
-                    }).toList(),
-                    onChanged: (v) => setState(() => selectedNationality = v!),
-                  ),
-
-                  const SizedBox(height: 15),
-                  Row(
-                    children: [
-                      Expanded(child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: fatherName, decoration: _inputDecoration("اسم الأب", Icons.man, isDarkMode))),
-                      const SizedBox(width: 10),
-                      Expanded(child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: motherName, decoration: _inputDecoration("اسم الأم", Icons.woman, isDarkMode))),
-                    ],
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: phone, keyboardType: TextInputType.phone, decoration: _inputDecoration("رقم الهاتف", Icons.phone, isDarkMode)),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            _buildSectionCard(
-              title: "تفاصيل إضافية",
-              icon: Icons.info_outline,
-              isDarkMode: isDarkMode,
-              child: Column(
-                children: [
-                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: address, decoration: _inputDecoration("مكان السكن", Icons.location_on_outlined, isDarkMode)),
-                  const SizedBox(height: 15),
-                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: schoolGrade, decoration: _inputDecoration("الصف الدراسي", Icons.school_outlined, isDarkMode)),
-                  const SizedBox(height: 15),
-                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: fatherJob, decoration: _inputDecoration("عمل الأب", Icons.work_outline, isDarkMode)),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            _buildSectionCard(
-              title: "التواريخ والحفظ",
-              icon: Icons.history_edu,
-              isDarkMode: isDarkMode,
-              child: Column(
-                children: [
-                  if (studentType != "new") ...[
-                    TextField(
-                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                      controller: memorizedPages,
-                      keyboardType: TextInputType.number,
-                      decoration: _inputDecoration("عدد الصفحات المحفوظة", Icons.auto_stories_outlined, isDarkMode),
+                        const SizedBox(height: 15),
+                        TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: phone, keyboardType: TextInputType.phone, decoration: _glassInputDecoration("رقم الهاتف", Icons.phone, isDarkMode)),
+                      ],
                     ),
-                    const SizedBox(height: 15),
-                  ],
-                  Row(
-                    children: [
-                      Expanded(child: _buildDatePicker(
-                        label: birthDate == null ? "تاريخ الميلاد" : birthDate.toString().split(" ")[0],
-                        icon: Icons.cake_outlined,
-                        isDarkMode: isDarkMode,
-                        onTap: () async {
-                          final picked = await _selectDate(context, DateTime(1990), isDarkMode);
-                          if (picked != null) setState(() => birthDate = picked);
-                        },
-                      )),
-                      const SizedBox(width: 10),
-                      Expanded(child: _buildDatePicker(
-                        label: startDate == null ? "بدء الحفظ" : startDate.toString().split(" ")[0],
-                        icon: Icons.play_arrow_outlined,
-                        isDarkMode: isDarkMode,
-                        onTap: () async {
-                          final picked = await _selectDate(context, DateTime(2010), isDarkMode);
-                          if (picked != null) setState(() => startDate = picked);
-                        },
-                      )),
-                    ],
                   ),
+
+                  const SizedBox(height: 15),
+
+                  _buildSectionCard(
+                    title: "تفاصيل إضافية",
+                    icon: Icons.info_outline,
+                    isDarkMode: isDarkMode,
+                    child: Column(
+                      children: [
+                        TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: address, decoration: _glassInputDecoration("مكان السكن", Icons.location_on_outlined, isDarkMode)),
+                        const SizedBox(height: 15),
+                        TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: schoolGrade, decoration: _glassInputDecoration("الصف الدراسي", Icons.school_outlined, isDarkMode)),
+                        const SizedBox(height: 15),
+                        TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: fatherJob, decoration: _glassInputDecoration("عمل الأب", Icons.work_outline, isDarkMode)),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 15),
+
+                  _buildSectionCard(
+                    title: "التواريخ والحفظ",
+                    icon: Icons.history_edu,
+                    isDarkMode: isDarkMode,
+                    child: Column(
+                      children: [
+                        if (studentType != "new") ...[
+                          TextField(
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                            controller: memorizedPages,
+                            keyboardType: TextInputType.number,
+                            decoration: _glassInputDecoration("عدد الصفحات المحفوظة مسبقاً", Icons.auto_stories_outlined, isDarkMode),
+                          ),
+                          const SizedBox(height: 15),
+                        ],
+                        Row(
+                          children: [
+                            Expanded(child: _buildDatePicker(
+                              label: birthDate == null ? "تاريخ الميلاد" : birthDate.toString().split(" ")[0],
+                              icon: Icons.cake_outlined,
+                              isDarkMode: isDarkMode,
+                              onTap: () async {
+                                final picked = await _selectDate(context, DateTime(1990), isDarkMode);
+                                if (picked != null) setState(() => birthDate = picked);
+                              },
+                            )),
+                            const SizedBox(width: 10),
+                            Expanded(child: _buildDatePicker(
+                              label: startDate == null ? "بدء الحفظ" : startDate.toString().split(" ")[0],
+                              icon: Icons.play_arrow_outlined,
+                              isDarkMode: isDarkMode,
+                              onTap: () async {
+                                final picked = await _selectDate(context, DateTime(2010), isDarkMode);
+                                if (picked != null) setState(() => startDate = picked);
+                              },
+                            )),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 35),
+
+                  // 🚀 زر الحفظ الزجاجي الفخم
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: loading ? null : addStudent,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9),
+                        foregroundColor: Colors.white,
+                        elevation: 5,
+                        shadowColor: Colors.black38,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      ),
+                      child: loading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text("حفظ بيانات الطالب", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            const SizedBox(height: 30),
-
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: loading ? null : addStudent,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isDarkMode ? Colors.orange : primaryColor,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  elevation: 2,
-                ),
-                child: loading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text("حفظ بيانات الطالب", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-              ),
+  // 🧊 أداة تغليف الأقسام بتأثير الزجاج (Glassmorphism)
+  Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = const EdgeInsets.all(16)}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(25),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6),
+              width: 1.5,
             ),
-            const SizedBox(height: 20),
-          ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.03),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: child,
         ),
       ),
     );
   }
 
-  InputDecoration _inputDecoration(String label, IconData icon, bool isDarkMode) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(color: isDarkMode ? Colors.grey[400] : Colors.grey[700]),
-      prefixIcon: Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 20),
-      filled: true,
-      fillColor: isDarkMode ? const Color(0xff2b2b2b) : Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade200)),
-    );
-  }
-
+  // 🧊 أداة بطاقة القسم (تستخدم التغليف الزجاجي)
   Widget _buildSectionCard({required String title, required IconData icon, required Widget child, required bool isDarkMode}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 5))],
-      ),
+    return _buildGlassContainer(
+      isDarkMode: isDarkMode,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 18),
-              const SizedBox(width: 8),
-              Text(title, style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
+              Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
+              const SizedBox(width: 10),
+              Text(title, style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
-          Divider(height: 25, color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
+          Divider(height: 25, color: isDarkMode ? Colors.white24 : Colors.black12),
           child,
         ],
       ),
     );
   }
 
+  // 🧊 أداة حقول الإدخال الزجاجية
+  InputDecoration _glassInputDecoration(String label, IconData icon, bool isDarkMode) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.w600),
+      prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
+      filled: true,
+      fillColor: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), 
+      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15), 
+        borderSide: BorderSide(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15), 
+        borderSide: BorderSide(color: isDarkMode ? accentGold : primaryColor, width: 1.5),
+      ),
+    );
+  }
+
+  // 🧊 أداة اختيار التاريخ (بستايل زجاجي)
   Widget _buildDatePicker({required String label, required IconData icon, required bool isDarkMode, required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xff2b2b2b) : Colors.white,
-          border: Border.all(color: isDarkMode ? Colors.transparent : Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
+          color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+          border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+          borderRadius: BorderRadius.circular(15),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: isDarkMode ? Colors.orange : primaryColor),
+            Icon(icon, size: 20, color: isDarkMode ? accentGold : primaryColor),
             const SizedBox(width: 8),
-            Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: isDarkMode ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis)),
+            Expanded(child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDarkMode ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis)),
           ],
         ),
       ),
@@ -487,12 +584,12 @@ class _AddStudentPageState extends State<AddStudentPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: isDarkMode ? Colors.orange : primaryColor,
+              primary: isDarkMode ? accentGold : primaryColor,
               onPrimary: Colors.white,
-              surface: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+              surface: isDarkMode ? const Color(0xff1e293b) : Colors.white,
               onSurface: isDarkMode ? Colors.white : Colors.black,
             ),
-            dialogBackgroundColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
+            dialogBackgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
           ),
           child: child!,
         );

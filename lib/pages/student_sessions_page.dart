@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui'; // 🎯 ضرورية لتأثير الزجاج (Blur)
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as pkg_excel;
@@ -22,12 +23,13 @@ class StudentSessionsPage extends StatelessWidget {
   });
 
   final Color primaryColor = const Color(0xff425c75);
+  final Color accentGold = const Color(0xffd4af37); // لون الإنعكاس الزجاجي
 
   // 📊 دالة التصدير للإكسل (ذكية ومحدثة للتمييز بين الطالب الخاتم والعادي)
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("جاري تجهيز سجل الجلسات الشامل...")),
+        const SnackBar(content: Text("جاري تجهيز سجل الجلسات الشامل...", style: TextStyle(fontFamily: 'Cairo'))),
       );
 
       // 1. جلب حالة الطالب أولاً لمعرفة هل هو خاتم أم لا
@@ -58,7 +60,7 @@ class StudentSessionsPage extends StatelessWidget {
       sheetObject.appendRow([
         pkg_excel.TextCellValue('التاريخ'),
         pkg_excel.TextCellValue('نوع الجلسة'),
-        pkg_excel.TextCellValue('المشرف المسجِّل'), 
+        pkg_excel.TextCellValue('المشرف المسجِّل'), 
         pkg_excel.TextCellValue(isCompleted ? 'تقييم مراجعة الختمة' : 'تقييم الحفظ الجديد'), 
         pkg_excel.TextCellValue(isCompleted ? 'الحالة' : 'تقييم المراجعة'),    
         pkg_excel.TextCellValue('الحفظ الجديد'),
@@ -111,7 +113,7 @@ class StudentSessionsPage extends StatelessWidget {
       await file.writeAsBytes(fileBytes!);
       await Share.shareXFiles([XFile(filePath)], text: 'سجل الطالب: $studentName');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e", style: const TextStyle(fontFamily: 'Cairo'))));
     }
   }
 
@@ -121,60 +123,104 @@ class StudentSessionsPage extends StatelessWidget {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية خلف الـ AppBar لجمالية الزجاج
+      backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
-        title: Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: Colors.transparent, // AppBar شفاف بالكامل
+        title: Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined),
+            icon: Icon(Icons.download_rounded, color: isDarkMode ? accentGold : primaryColor),
+            tooltip: "تصدير إلى Excel",
             onPressed: () => exportSessionsToExcel(context),
           ),
         ],
       ),
-      body: FutureBuilder<DocumentSnapshot>(
-        // 🎯 أولاً: فحص حالة الطالب لايف من مجموعة الطلاب للتأكد من وضعيته
-        future: FirebaseFirestore.instance.collection('students').doc(studentId).get(),
-        builder: (context, studentSnapshot) {
-          bool isCompletedStudent = false;
-          if (studentSnapshot.hasData && studentSnapshot.data!.exists) {
-            var sData = studentSnapshot.data!.data() as Map<String, dynamic>;
-            isCompletedStudent = sData['studentType'] == 'completed';
-          }
+      body: Stack(
+        children: [
+          // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة (Blobs)
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDarkMode
+                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
+                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          Positioned(
+            top: -20,
+            left: -50,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)),
+            ),
+          ),
+          Positioned(
+            bottom: 100,
+            right: -60,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
+            ),
+          ),
 
-          return StreamBuilder<QuerySnapshot>(
-            stream: sessionService.getStudentSessions(studentId), 
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-              
-              final sessions = snapshot.data!.docs;
-              if (sessions.isEmpty) return _buildEmptyState(isDarkMode);
+          // 🏢 2. المحتوى الأساسي للواجهة
+          SafeArea(
+            child: FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance.collection('students').doc(studentId).get(),
+              builder: (context, studentSnapshot) {
+                bool isCompletedStudent = false;
+                if (studentSnapshot.hasData && studentSnapshot.data!.exists) {
+                  var sData = studentSnapshot.data!.data() as Map<String, dynamic>;
+                  isCompletedStudent = sData['studentType'] == 'completed';
+                }
 
-              List<QueryDocumentSnapshot> sortedSessions = List.from(sessions);
-              sortedSessions.sort((a, b) {
-                String dateA = (a.data() as Map<String, dynamic>)['date'] ?? '';
-                String dateB = (b.data() as Map<String, dynamic>)['date'] ?? '';
-                return dateB.compareTo(dateA); 
-              });
+                return StreamBuilder<QuerySnapshot>(
+                  stream: sessionService.getStudentSessions(studentId), 
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                    
+                    final sessions = snapshot.data!.docs;
+                    if (sessions.isEmpty) return _buildEmptyState(isDarkMode);
 
-              return ListView.builder(
-                padding: const EdgeInsets.all(15),
-                itemCount: sortedSessions.length,
-                itemBuilder: (context, index) {
-                  final session = sortedSessions[index];
-                  final data = session.data() as Map<String, dynamic>;
-                  return _buildSessionTimelineItem(context, session.id, data, isDarkMode, isCompletedStudent);
-                },
-              );
-            },
-          );
-        },
+                    List<QueryDocumentSnapshot> sortedSessions = List.from(sessions);
+                    sortedSessions.sort((a, b) {
+                      String dateA = (a.data() as Map<String, dynamic>)['date'] ?? '';
+                      String dateB = (b.data() as Map<String, dynamic>)['date'] ?? '';
+                      return dateB.compareTo(dateA); 
+                    });
+
+                    return ListView.builder(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 30),
+                      itemCount: sortedSessions.length,
+                      itemBuilder: (context, index) {
+                        final session = sortedSessions[index];
+                        final data = session.data() as Map<String, dynamic>;
+                        return _buildSessionTimelineItem(context, session.id, data, isDarkMode, isCompletedStudent);
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 
+  // 🧊 تصميم بطاقة الجلسة بستايل الزجاج (Liquid Glass)
   Widget _buildSessionTimelineItem(BuildContext context, String sessionId, Map<String, dynamic> data, bool isDarkMode, bool isCompletedStudent) {
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
@@ -187,158 +233,185 @@ class StudentSessionsPage extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.05), 
-            blurRadius: 8
-          )
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-            decoration: BoxDecoration(
-              color: isAbsent 
-                  ? Colors.red.withOpacity(0.15) 
-                  : (isExam ? Colors.teal.withOpacity(0.15) : (isDarkMode ? Colors.white.withOpacity(0.03) : primaryColor.withOpacity(0.05))),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      isAbsent ? Icons.calendar_today : (isExam ? Icons.workspace_premium : Icons.calendar_today), 
-                      size: 16, 
-                      color: isAbsent ? Colors.red : (isExam ? Colors.teal : (isDarkMode ? Colors.orange : primaryColor))
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      data['date'] ?? '', 
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold, 
-                        color: isAbsent ? Colors.red : (isExam ? Colors.teal : (isDarkMode ? Colors.white : primaryColor))
-                      )
-                    ),
-                  ],
-                ),
-                if (isAbsent) 
-                  _buildBadge("غائب ❌", Colors.red) 
-                else if (isExam)
-                  _buildBadge("جلسة اختبار 📝", Colors.teal) 
-                else 
-                  // 🎯 تكييف شارات التقييم العلوية لو الطالب خاتم
+      child: _buildGlassContainer(
+        isDarkMode: isDarkMode,
+        customBorderColor: isAbsent ? Colors.red.withOpacity(0.4) : (isExam ? Colors.teal.withOpacity(0.4) : null),
+        child: Column(
+          children: [
+            // هيدر البطاقة الزجاجية
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+              decoration: BoxDecoration(
+                color: isAbsent 
+                    ? Colors.red.withOpacity(isDarkMode ? 0.2 : 0.15) 
+                    : (isExam ? Colors.teal.withOpacity(isDarkMode ? 0.2 : 0.15) : (isDarkMode ? Colors.white.withOpacity(0.05) : primaryColor.withOpacity(0.05))),
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
                   Row(
                     children: [
-                      if (isCompletedStudent)
-                        _buildBadge("مراجعة الختمة: $revRating", _getRatingColor(revRating))
-                      else ...[
-                        _buildBadge("حفظ: $memRating", _getRatingColor(memRating)),
-                        const SizedBox(width: 5),
-                        _buildBadge("مراجعة: $revRating", _getRatingColor(revRating)),
-                      ],
+                      Icon(
+                        isAbsent ? Icons.event_busy : (isExam ? Icons.workspace_premium : Icons.calendar_today), 
+                        size: 16, 
+                        color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? accentGold : primaryColor))
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        data['date'] ?? '', 
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold, 
+                          color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? Colors.white : primaryColor)),
+                          fontFamily: 'Cairo'
+                        )
+                      ),
                     ],
                   ),
-              ],
-            ),
-          ),
-          
-          Padding(
-            padding: const EdgeInsets.all(15),
-            child: Column(
-              children: [
-                _buildInfoRow(Icons.person_outline, "المشرف المسجِّل", data['supervisorName'] ?? "غير محدد", isDarkMode),
-                Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-
-                if (!isAbsent && !isExam) ...[
-                  // 🎯 إظهار وإخفاء أسطر البيانات حسب وضعية الختمة بنظافة متناهية
-                  if (!isCompletedStudent) ...[
-                    _buildInfoRow(Icons.star, "الحفظ الجديد", data['newMemorization'], isDarkMode),
-                    Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-                    _buildInfoRow(Icons.auto_stories_outlined, "مراجعة جديد", data['nearReview'], isDarkMode),
-                    Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-                  ],
-                  
-                  _buildInfoRow(
-                    isCompletedStudent ? Icons.verified_user_rounded : Icons.history_edu, 
-                    isCompletedStudent ? "مراجعة الختمة الشاملة" : "مراجعة قديم", 
-                    isCompletedStudent ? (data['farReview'] ?? data['review']) : data['farReview'], 
-                    isDarkMode
-                  ),
-                  Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-                  
-                  _buildInfoRow(Icons.menu_book_outlined, "قراءة نظراً", data['readingBySight'], isDarkMode),
-                  Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-                  _buildInfoRow(Icons.edit_note, "الواجب", data['homework'], isDarkMode),
-                  Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-                  
-                  _buildInfoRow(Icons.mosque_outlined, "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
-                  Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-
-                  _buildInfoRow(
-                    Icons.analytics_outlined, 
-                    "إجمالي الحفظ للختمة", 
-                    isCompletedStudent ? "604 صفحة (مكتملة ✨)" : (data['total_memorized_pages'] != null ? "${data['total_memorized_pages']} صفحة" : "---"), 
-                    isDarkMode
-                  ),
-                  Divider(color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-
-                  _buildInfoRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
-                ],
-
-                if (isExam && !isAbsent) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
-                    decoration: BoxDecoration(
-                      color: isDarkMode ? const Color(0xff112b2b) : Colors.teal.shade50,
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: Colors.teal.withOpacity(0.3), width: 1)
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  if (isAbsent) 
+                    _buildBadge("غائب ❌", Colors.redAccent) 
+                  else if (isExam)
+                    _buildBadge("جلسة اختبار 📝", Colors.teal) 
+                  else 
+                    // 🎯 تكييف شارات التقييم العلوية
+                    Row(
                       children: [
-                        const Icon(Icons.workspace_premium, color: Colors.teal, size: 30),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "نتيجة الاختبار النهائي للجلسة",
-                              style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500, fontFamily: 'Cairo'),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "${data['examScore'] ?? '0'} / 100",
-                              style: TextStyle(
-                                fontSize: 24, 
-                                fontWeight: FontWeight.bold, 
-                                color: isDarkMode ? Colors.tealAccent : Colors.teal.shade900,
-                                fontFamily: 'Cairo'
-                              ),
-                            ),
-                          ],
-                        ),
+                        if (isCompletedStudent)
+                          _buildBadge("مراجعة الختمة: $revRating", _getRatingColor(revRating))
+                        else ...[
+                          _buildBadge("حفظ: $memRating", _getRatingColor(memRating)),
+                          const SizedBox(width: 5),
+                          _buildBadge("مراجعة: $revRating", _getRatingColor(revRating)),
+                        ],
                       ],
                     ),
-                  ),
                 ],
-
-                if (data['notes'] != null && data['notes'].toString().isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  _buildNotesBox(data['notes'], isDarkMode),
-                ],
-                const SizedBox(height: 10),
-                _buildActionButtons(context, sessionId, data, isDarkMode),
-              ],
+              ),
             ),
+            
+            // بيانات الجلسة 
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+              child: Column(
+                children: [
+                  _buildInfoRow(Icons.person_outline, "المشرف المسجِّل", data['supervisorName'] ?? "غير محدد", isDarkMode),
+                  Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+
+                  if (!isAbsent && !isExam) ...[
+                    if (!isCompletedStudent) ...[
+                      _buildInfoRow(Icons.star_rounded, "الحفظ الجديد", data['newMemorization'], isDarkMode),
+                      Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                      _buildInfoRow(Icons.auto_stories_outlined, "مراجعة جديد", data['nearReview'], isDarkMode),
+                      Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    ],
+                    
+                    _buildInfoRow(
+                      isCompletedStudent ? Icons.verified_user_rounded : Icons.history_edu, 
+                      isCompletedStudent ? "مراجعة الختمة الشاملة" : "مراجعة قديم", 
+                      isCompletedStudent ? (data['farReview'] ?? data['review']) : data['farReview'], 
+                      isDarkMode
+                    ),
+                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    
+                    _buildInfoRow(Icons.menu_book_outlined, "قراءة نظراً", data['readingBySight'], isDarkMode),
+                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    _buildInfoRow(Icons.edit_note, "الواجب", data['homework'], isDarkMode),
+                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    
+                    _buildInfoRow(Icons.mosque_outlined, "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
+                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+
+                    _buildInfoRow(
+                      Icons.analytics_outlined, 
+                      "إجمالي الحفظ للختمة", 
+                      isCompletedStudent ? "604 صفحة (مكتملة ✨)" : (data['total_memorized_pages'] != null ? "${data['total_memorized_pages']} صفحة" : "---"), 
+                      isDarkMode
+                    ),
+                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+
+                    _buildInfoRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
+                  ],
+
+                  if (isExam && !isAbsent) ...[
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.symmetric(vertical: 5),
+                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? Colors.teal.withOpacity(0.1) : Colors.teal.shade50.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.teal.withOpacity(0.3), width: 1)
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.workspace_premium, color: Colors.teal, size: 30),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "نتيجة الاختبار النهائي للجلسة",
+                                style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.grey, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "${data['examScore'] ?? '0'} / 100",
+                                style: TextStyle(
+                                  fontSize: 24, 
+                                  fontWeight: FontWeight.bold, 
+                                  color: isDarkMode ? Colors.tealAccent : Colors.teal.shade900,
+                                  fontFamily: 'Cairo'
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  if (data['notes'] != null && data['notes'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 15),
+                    _buildNotesBox(data['notes'], isDarkMode),
+                  ],
+                  
+                  const SizedBox(height: 10),
+                  _buildActionButtons(context, sessionId, data, isDarkMode),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🧊 أداة مساعدة لتغليف العناصر وتأثير الزجاج الأساسية (Glassmorphism)
+  Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(25),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: customColor ?? (isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4)),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: customBorderColor ?? (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6)),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.02),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-        ],
+          child: child,
+        ),
       ),
     );
   }
@@ -348,25 +421,16 @@ class StudentSessionsPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: isDarkMode ? Colors.orange : primaryColor),
+          Icon(icon, size: 18, color: isDarkMode ? accentGold : primaryColor),
           const SizedBox(width: 10),
           Text(
             "$label: ", 
-            style: TextStyle(
-              color: isDarkMode ? Colors.grey[400] : Colors.grey, 
-              fontSize: 13,
-              fontFamily: 'Cairo',
-            )
+            style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 13, fontFamily: 'Cairo', fontWeight: FontWeight.bold)
           ),
           Expanded(
             child: Text(
               (value == null || value.toString().trim().isEmpty) ? "---" : value.toString(), 
-              style: TextStyle(
-                fontWeight: FontWeight.w500, 
-                fontSize: 14, 
-                color: isDarkMode ? Colors.white : Colors.black87,
-                fontFamily: 'Cairo',
-              )
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo')
             ),
           ),
         ],
@@ -377,20 +441,15 @@ class StudentSessionsPage extends StatelessWidget {
   Widget _buildNotesBox(String notes, bool isDarkMode) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xff2b2b2b) : Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 1)],
+        color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: isDarkMode ? Colors.white12 : Colors.black12),
       ),
       child: Text(
         "ملاحظات: $notes", 
-        style: TextStyle(
-          fontSize: 13, 
-          fontStyle: FontStyle.italic, 
-          color: isDarkMode ? Colors.white70 : Colors.black87,
-          fontFamily: 'Cairo',
-        )
+        style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: isDarkMode ? Colors.white70 : Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.w600)
       ),
     );
   }
@@ -400,45 +459,63 @@ class StudentSessionsPage extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         TextButton.icon(
+          style: TextButton.styleFrom(
+            backgroundColor: isDarkMode ? Colors.orange.withOpacity(0.1) : Colors.orange.withOpacity(0.05),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+          ),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditSessionPage(sessionId: id, data: data))),
-          icon: Icon(Icons.edit, size: 16, color: isDarkMode ? Colors.orange : primaryColor),
-          label: Text("تعديل", style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor, fontFamily: 'Cairo')),
+          icon: Icon(Icons.edit_rounded, size: 16, color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800),
+          label: Text("تعديل", style: TextStyle(color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
         ),
-        if (role == "manager")
+        if (role == "manager") ...[
+          const SizedBox(width: 10),
           TextButton.icon(
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red.withOpacity(0.1),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+            ),
             onPressed: () async {
               await SessionService().deleteSession(id);
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الجلسة")));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الجلسة", style: TextStyle(fontFamily: 'Cairo'))));
             },
-            icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-            label: const Text("حذف", style: TextStyle(color: Colors.red, fontFamily: 'Cairo')),
+            icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+            label: const Text("حذف", style: TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
           ),
+        ]
       ],
     );
   }
 
   Widget _buildBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: color.withOpacity(0.9), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 4)]),
       child: Text(
         text, 
-        style: const TextStyle(
-          color: Colors.white, 
-          fontSize: 10, 
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Cairo',
-        )
+        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')
       ),
     );
   }
 
   Widget _buildEmptyState(bool isDarkMode) {
     return Center(
-      child: Text(
-        "لا يوجد سجل جلسات لهذا الطالب", 
-        style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black54, fontSize: 15, fontFamily: 'Cairo')
+      child: _buildGlassContainer(
+        isDarkMode: isDarkMode,
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history_toggle_off_rounded, size: 70, color: isDarkMode ? accentGold.withOpacity(0.6) : primaryColor.withOpacity(0.4)),
+            const SizedBox(height: 15),
+            Text(
+              "لا يوجد سجل جلسات لهذا الطالب حتى الآن", 
+              textAlign: TextAlign.center,
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 14, fontFamily: 'Cairo', fontWeight: FontWeight.bold)
+            ),
+          ],
+        ),
       )
     );
   }

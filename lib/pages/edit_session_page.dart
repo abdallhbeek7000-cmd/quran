@@ -1,10 +1,11 @@
+import 'dart:ui'; // 🎯 ضرورية لتأثير الزجاج والـ Blur
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; 
 import '../services/session_service.dart';
 import '../services/theme_provider.dart';
-import '../services/notification_service.dart'; // 🎯 استيراد سيرفيس الإشعارات والتوثيق المحدث
+import '../services/notification_service.dart';
 
 class EditSessionPage extends StatefulWidget {
   final String sessionId;
@@ -40,15 +41,14 @@ class _EditSessionPageState extends State<EditSessionPage> {
   String studentStatus = "مهذب";
   bool loading = false;
 
-  // 🎯 متغير الفحص الذكي: هل الطالب خاتم؟
   bool isCompletedStudent = false;
   bool checkingStudentType = true;
 
-  // متغيرات المشرف المختار للتعديل
   String? selectedSupervisorId;
   String? selectedSupervisorName;
 
   final Color primaryColor = const Color(0xff425c75);
+  final Color accentGold = const Color(0xffd4af37); // 🎯 لون الزجاج المكمل
 
   @override
   void initState() {
@@ -184,12 +184,12 @@ class _EditSessionPageState extends State<EditSessionPage> {
         notifyType = "regular";
       }
 
-      // إرسال وتوثيق لايف
       await NotificationService.sendAndSaveNotification(
         studentId: studentId,
         title: notifyTitle,
         body: notifyBody,
         type: notifyType,
+        context: context, // 🎯 تمرير الـ context لعرض الشريط
       );
     }
 
@@ -197,7 +197,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
     setState(() => loading = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث الجلسة وإخطار الأهل بالتعديل بنجاح", style: TextStyle(fontFamily: 'Cairo'))),
+      const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث الجلسة وإخطار الأهل بالتعديل بنجاح", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
     );
 
     Navigator.pop(context);
@@ -208,42 +208,74 @@ class _EditSessionPageState extends State<EditSessionPage> {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية خلف الـ AppBar لجمالية الزجاج
+      backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
-        title: const Text("تعديل بيانات الجلسة", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo', fontSize: 16)),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: Colors.transparent, // AppBar شفاف
+        title: Text("تعديل بيانات الجلسة", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
+        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+        centerTitle: true,
       ),
       body: checkingStudentType
           ? const Center(child: CircularProgressIndicator()) 
-          : SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
-                      borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
-                    ),
-                    child: Card(
-                      elevation: 0,
-                      color: Colors.white.withOpacity(0.1),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      child: SwitchListTile(
-                        activeColor: Colors.orange,
-                        value: absent,
-                        title: const Text("تسجيل غياب في هذا اليوم", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)),
-                        onChanged: (v) => setState(() => absent = v),
-                      ),
+          : Stack(
+              children: [
+                // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة (Blobs)
+                Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDarkMode
+                          ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
+                          : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
                   ),
+                ),
+                Positioned(
+                  top: -20,
+                  left: -50,
+                  child: Container(
+                    width: 250,
+                    height: 250,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)),
+                  ),
+                ),
+                Positioned(
+                  bottom: 100,
+                  right: -60,
+                  child: Container(
+                    width: 300,
+                    height: 300,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
+                  ),
+                ),
 
-                  Padding(
-                    padding: const EdgeInsets.all(20),
+                // 🏢 2. المحتوى الأساسي للواجهة
+                SafeArea(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     child: Column(
                       children: [
+                        // 🧊 قسم خيار الغياب (زجاجي)
+                        _buildGlassContainer(
+                          isDarkMode: isDarkMode,
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                          child: SwitchListTile(
+                            activeColor: Colors.orangeAccent,
+                            value: absent,
+                            title: Text("تسجيل غياب في هذا اليوم", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 15)),
+                            secondary: Icon(absent ? Icons.person_off : Icons.person, color: isDarkMode ? Colors.white70 : primaryColor),
+                            onChanged: (v) => setState(() => absent = v),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // 🧊 أقسام التعديل الرئيسية
                         if (!absent) ...[
                           _buildSectionCard(
                             title: isCompletedStudent ? "تعديل مراجعة الختمة الشاملة 👑" : "تعديل الإنجاز القرآني",
@@ -252,42 +284,43 @@ class _EditSessionPageState extends State<EditSessionPage> {
                             child: Column(
                               children: [
                                 if (!isCompletedStudent) ...[
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: newMemorization, decoration: _inputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode)),
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: newMemorization, decoration: _glassInputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode)),
                                   const SizedBox(height: 15),
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: newReview, decoration: _inputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode)),
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: newReview, decoration: _glassInputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode)),
                                   const SizedBox(height: 15),
                                 ],
                                 
                                 TextField(
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), 
+                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
                                   controller: oldReview, 
-                                  decoration: _inputDecoration(
+                                  decoration: _glassInputDecoration(
                                     isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
                                     isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
                                     isDarkMode
                                   )
                                 ),
                                 const SizedBox(height: 15),
-                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: readingBySight, decoration: _inputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
+                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: readingBySight, decoration: _glassInputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
                                 const SizedBox(height: 15),
-                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: homework, decoration: _inputDecoration(isCompletedStudent ? "المقدار المطلوب للمرة القادمة" : "الواجب", Icons.edit_note, isDarkMode)),
+                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: homework, decoration: _glassInputDecoration(isCompletedStudent ? "المقدار المطلوب للمرة القادمة" : "الواجب", Icons.edit_note, isDarkMode)),
                                 
                                 if (!isCompletedStudent) ...[
                                   const SizedBox(height: 20), 
-                                  const Divider(),
+                                  Divider(color: isDarkMode ? Colors.white24 : Colors.black12),
                                   const SizedBox(height: 10),
                                   TextField(
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'), 
                                     controller: totalMemorizedPagesController, 
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"^\d+\.?\d*"))],
-                                    decoration: _inputDecoration("إجمالي عدد الصفحات المحفوظة حتى الآن", Icons.analytics_outlined, isDarkMode)
+                                    decoration: _glassInputDecoration("إجمالي عدد الصفحات المحفوظة حتى الآن", Icons.analytics_outlined, isDarkMode)
                                   ),
                                 ],
                               ],
                             ),
                           ),
                           const SizedBox(height: 15),
+                          
                           _buildSectionCard(
                             title: "تعديل السلوك والتقييم",
                             icon: Icons.thumbs_up_down_outlined,
@@ -297,9 +330,9 @@ class _EditSessionPageState extends State<EditSessionPage> {
                                 if (!isCompletedStudent) ...[
                                   DropdownButtonFormField<String>(
                                     value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(memorizationRating) ? memorizationRating : "جيد",
-                                    dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'),
-                                    decoration: _inputDecoration("تقييم الحفظ الجديد", Icons.stars, isDarkMode),
+                                    dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                    decoration: _glassInputDecoration("تقييم الحفظ الجديد", Icons.stars, isDarkMode),
                                     items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
                                     onChanged: (v) => setState(() => memorizationRating = v!),
                                   ),
@@ -308,18 +341,18 @@ class _EditSessionPageState extends State<EditSessionPage> {
                                 
                                 DropdownButtonFormField<String>(
                                   value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(reviewRating) ? reviewRating : "جيد",
-                                  dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'),
-                                  decoration: _inputDecoration(isCompletedStudent ? "تقييم مراجعة الختمة" : "تقييم المراجعة (الماضى)", Icons.rate_review_outlined, isDarkMode),
+                                  dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                  decoration: _glassInputDecoration(isCompletedStudent ? "تقييم مراجعة الختمة" : "تقييم المراجعة (الماضي)", Icons.rate_review_outlined, isDarkMode),
                                   items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
                                   onChanged: (v) => setState(() => reviewRating = v!),
                                 ),
                                 const SizedBox(height: 15),
                                 DropdownButtonFormField<String>(
                                   value: studentStatus,
-                                  dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'),
-                                  decoration: _inputDecoration("حالة الطالب", Icons.mood, isDarkMode),
+                                  dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                  decoration: _glassInputDecoration("حالة الطالب", Icons.mood, isDarkMode),
                                   items: ["مهذب", "منضبط", "مشاغب", "كثير الحركة"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
                                   onChanged: (v) => setState(() => studentStatus = v!),
                                 ),
@@ -327,11 +360,12 @@ class _EditSessionPageState extends State<EditSessionPage> {
                             ),
                           ),
                           const SizedBox(height: 15),
+
                           _buildSectionCard(
                             title: "نشاطات إضافية",
                             icon: Icons.mosque_outlined,
                             isDarkMode: isDarkMode,
-                            child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: religiousActivities, decoration: _inputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode)),
+                            child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: religiousActivities, decoration: _glassInputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode)),
                           ),
                         ],
 
@@ -366,9 +400,9 @@ class _EditSessionPageState extends State<EditSessionPage> {
 
                               return DropdownButtonFormField<String>(
                                 value: selectedSupervisorId,
-                                dropdownColor: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.w600, fontFamily: 'Cairo'),
-                                decoration: _inputDecoration("اسم المشرف الحالي / البديل", Icons.person_search_rounded, isDarkMode),
+                                dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                decoration: _glassInputDecoration("اسم المشرف الحالي / البديل", Icons.person_search_rounded, isDarkMode),
                                 items: items,
                                 onChanged: (v) {
                                   setState(() {
@@ -389,76 +423,109 @@ class _EditSessionPageState extends State<EditSessionPage> {
                           isDarkMode: isDarkMode,
                           child: Column(
                             children: [
-                              if (absent) const SizedBox(height: 15),
-                              TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo'), controller: notes, maxLines: 3, decoration: _inputDecoration("الملاحظات العامة", Icons.comment, isDarkMode)),
+                              if (absent) const SizedBox(height: 5),
+                              TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: notes, maxLines: 3, decoration: _glassInputDecoration("الملاحظات العامة", Icons.comment, isDarkMode)),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 30),
+                        
+                        const SizedBox(height: 35),
+                        
+                        // 🚀 زر الحفظ الزجاجي
                         SizedBox(
                           width: double.infinity,
                           height: 55,
                           child: ElevatedButton(
                             onPressed: loading ? null : save,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: absent ? Colors.orange : (isDarkMode ? Colors.orange : primaryColor),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                              backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9)),
+                              foregroundColor: Colors.white,
+                              elevation: 5,
+                              shadowColor: Colors.black38,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                             ),
                             child: loading
                                 ? const CircularProgressIndicator(color: Colors.white)
-                                : const Text("تحديث البيانات", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
+                                : const Text("تحديث البيانات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo', letterSpacing: 0.5)),
                           ),
                         ),
+                        const SizedBox(height: 30),
                       ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
     );
   }
 
-  InputDecoration _inputDecoration(String label, IconData icon, bool isDarkMode) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(color: isDarkMode ? Colors.grey[400] : Colors.grey[700], fontFamily: 'Cairo', fontSize: 12),
-      prefixIcon: Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 18),
-      filled: true,
-      fillColor: isDarkMode ? const Color(0xff2b2b2b) : Colors.white,
-      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.transparent : Colors.grey.shade200)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDarkMode ? Colors.orange : primaryColor, width: 1.5)),
+  // 🧊 أداة تغليف الأقسام بتأثير الزجاج (Glassmorphism)
+  Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = const EdgeInsets.all(16)}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(25),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.03),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
     );
   }
 
+  // 🧊 أداة بطاقة القسم (تستخدم التغليف الزجاجي)
   Widget _buildSectionCard({required String title, required IconData icon, required Widget child, required bool isDarkMode}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xff1e1e1e) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          )
-        ],
-      ),
+    return _buildGlassContainer(
+      isDarkMode: isDarkMode,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: isDarkMode ? Colors.orange : primaryColor, size: 18),
-              const SizedBox(width: 8),
-              Text(title, style: TextStyle(color: isDarkMode ? Colors.orange : primaryColor, fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo')),
+              Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
+              const SizedBox(width: 10),
+              Text(title, style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
             ],
           ),
-          Divider(height: 25, color: isDarkMode ? Colors.grey[800] : Colors.grey[200]),
+          Divider(height: 25, color: isDarkMode ? Colors.white24 : Colors.black12),
           child,
         ],
+      ),
+    );
+  }
+
+  // 🧊 أداة حقول الإدخال الزجاجية
+  InputDecoration _glassInputDecoration(String label, IconData icon, bool isDarkMode) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.w600, fontFamily: 'Cairo', fontSize: 13),
+      prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
+      filled: true,
+      fillColor: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), 
+      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15), 
+        borderSide: BorderSide(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15), 
+        borderSide: BorderSide(color: isDarkMode ? accentGold : primaryColor, width: 1.5),
       ),
     );
   }

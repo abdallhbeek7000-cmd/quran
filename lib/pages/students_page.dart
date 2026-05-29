@@ -1,15 +1,18 @@
 import 'dart:io'; 
+import 'dart:ui'; // 🎯 ضرورية لتأثير الزجاج (Blur)
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as excel_lib; 
 import 'package:path_provider/path_provider.dart'; 
 import 'package:share_plus/share_plus.dart'; 
 import 'package:cached_network_image/cached_network_image.dart'; 
+import 'package:provider/provider.dart'; // 🎯 لقراءة المظهر
 import '../models/cycle_model.dart';
 import 'add_student_page.dart';
 import 'edit_student_page.dart';
 import 'add_session_page.dart';
 import 'student_sessions_page.dart';
+import '../services/theme_provider.dart';
 
 class StudentsPage extends StatefulWidget {
   final CycleModel cycle;
@@ -33,6 +36,7 @@ class _StudentsPageState extends State<StudentsPage> {
   String search = '';
   String selectedSupervisor = '';
   final Color primaryColor = const Color(0xff425c75);
+  final Color accentGold = const Color(0xffd4af37); // لون الإنعكاس الزجاجي
 
   // 🎯 خريطة الأعلام لباقي الجنسيات
   final Map<String, String> _flags = {
@@ -48,25 +52,26 @@ class _StudentsPageState extends State<StudentsPage> {
     'جنسية أخرى': '🌍',
   };
 
-  void _showDeleteStudentDialog(BuildContext context, String studentId, String studentName) {
+  void _showDeleteStudentDialog(BuildContext context, String studentId, String studentName, bool isDarkMode) {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
+          backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
-            children: const [
-              Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
-              SizedBox(width: 10),
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+              const SizedBox(width: 10),
               Text(
                 "حذف ملف الطالب",
-                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16),
+                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16, color: isDarkMode ? Colors.white : Colors.black87),
               ),
             ],
           ),
           content: Text(
             "هل أنت متأكد من حذف الطالب ($studentName) نهائياً من هذه الدورة؟\n\n🚨 تنبيه: سيتم مسح بيانات الطالب وسجل التسميع الخاص به تماماً ولا يمكن التراجع عن هذا الإجراء.",
-            style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, height: 1.4, color: Colors.black87),
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 13, height: 1.4, color: isDarkMode ? Colors.white70 : Colors.black87),
           ),
           actions: [
             TextButton(
@@ -76,7 +81,7 @@ class _StudentsPageState extends State<StudentsPage> {
             TextButton(
               child: const Text(
                 "حذف نهائي", 
-                style: TextStyle(color: Colors.red, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
               ),
               onPressed: () async {
                 Navigator.pop(dialogContext); 
@@ -105,7 +110,7 @@ class _StudentsPageState extends State<StudentsPage> {
   Future<void> exportToExcel() async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("جاري تجهيز ملف الإكسل...")),
+        const SnackBar(content: Text("جاري تجهيز ملف الإكسل...", style: TextStyle(fontFamily: 'Cairo'))),
       );
 
       final snapshot = await FirebaseFirestore.instance
@@ -115,7 +120,7 @@ class _StudentsPageState extends State<StudentsPage> {
 
       if (snapshot.docs.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("لا يوجد طلاب لتصديرهم")),
+          const SnackBar(content: Text("لا يوجد طلاب لتصديرهم", style: TextStyle(fontFamily: 'Cairo'))),
         );
         return;
       }
@@ -127,7 +132,7 @@ class _StudentsPageState extends State<StudentsPage> {
       sheetObject.appendRow([
         excel_lib.TextCellValue('التسلسلي'),
         excel_lib.TextCellValue('اسم الطالب'),
-        excel_lib.TextCellValue('الجنسية'), // 🎯 أضفنا الجنسية لملف الإكسل
+        excel_lib.TextCellValue('الجنسية'), // 🎯 التصدير
         excel_lib.TextCellValue('اسم الأب'),
         excel_lib.TextCellValue('اسم الأم'),
         excel_lib.TextCellValue('المشرف'),
@@ -138,7 +143,7 @@ class _StudentsPageState extends State<StudentsPage> {
         sheetObject.appendRow([
           excel_lib.TextCellValue(data['serial']?.toString() ?? ''),
           excel_lib.TextCellValue(data['name']?.toString() ?? ''),
-          excel_lib.TextCellValue(data['nationality']?.toString() ?? 'سوري'), // 🎯 التصدير
+          excel_lib.TextCellValue(data['nationality']?.toString() ?? 'سوري'), 
           excel_lib.TextCellValue(data['fatherName']?.toString() ?? ''),
           excel_lib.TextCellValue(data['motherName']?.toString() ?? ''),
           excel_lib.TextCellValue(data['supervisorName'] ?? 'غير موزع'),
@@ -155,7 +160,7 @@ class _StudentsPageState extends State<StudentsPage> {
 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("حدث خطأ أثناء التصدير: $e")),
+        SnackBar(content: Text("حدث خطأ أثناء التصدير: $e", style: const TextStyle(fontFamily: 'Cairo'))),
       );
     }
   }
@@ -169,7 +174,7 @@ class _StudentsPageState extends State<StudentsPage> {
     }
   }
 
-  // 🎯 برمجة علم الثورة السورية ليتناسب مع حجم الخط
+  // 🎯 برمجة علم الثورة السورية
   Widget _buildSyrianRevolutionFlag() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(3),
@@ -177,7 +182,7 @@ class _StudentsPageState extends State<StudentsPage> {
         width: 24,
         height: 16,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade400, width: 0.5),
+          border: Border.all(color: Colors.white54, width: 0.5),
         ),
         child: Column(
           children: [
@@ -214,6 +219,8 @@ class _StudentsPageState extends State<StudentsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+
     Query query = FirebaseFirestore.instance
         .collection('students')
         .where('cycleId', isEqualTo: widget.cycle.id);
@@ -227,19 +234,21 @@ class _StudentsPageState extends State<StudentsPage> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية خلف الـ AppBar لجمالية الزجاج
+      backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: primaryColor,
+        backgroundColor: Colors.transparent, // AppBar شفاف بالكامل
         title: Text(
           widget.isArchivedFromHistory ? "أرشيف: ${widget.cycle.name}" : "قائمة الطلاب", 
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo', fontSize: 16)
+          style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+        centerTitle: true,
         actions: [
           if (widget.role == "manager") 
             IconButton(
-              icon: const Icon(Icons.file_download),
+              icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor),
               tooltip: "تصدير Excel",
               onPressed: exportToExcel,
             ),
@@ -247,77 +256,112 @@ class _StudentsPageState extends State<StudentsPage> {
       ),
       floatingActionButton: (widget.role == "manager" && !widget.isArchivedFromHistory)
           ? FloatingActionButton(
-              backgroundColor: primaryColor,
+              backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9),
               onPressed: () => _nav(AddStudentPage(cycle: widget.cycle)),
               child: const Icon(Icons.person_add_alt_1, color: Colors.white),
             )
           : null,
-      body: Column(
+      body: Stack(
         children: [
+          // 🎨 1. الخلفية المتدرجة الانسيابية مع الدوائر العائمة (Blobs)
           Container(
-            padding: const EdgeInsets.all(15),
+            width: double.infinity,
+            height: double.infinity,
             decoration: BoxDecoration(
-              color: primaryColor,
-              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+              gradient: LinearGradient(
+                colors: isDarkMode
+                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
+                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-            child: Column(
-              children: [
-                TextField(
-                  style: const TextStyle(color: Colors.black, fontFamily: 'Cairo', fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'ابحث عن اسم الطالب...',
-                    hintStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
-                    prefixIcon: const Icon(Icons.search, color: Color(0xff425c75)),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-                  ),
-                  onChanged: (v) => setState(() => search = v.trim().toLowerCase()),
-                ),
-                if (widget.role == "manager") ...[
-                  const SizedBox(height: 10),
-                  _buildSupervisorFilter(),
-                ],
-              ],
+          ),
+          Positioned(
+            top: -20,
+            left: -50,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)),
+            ),
+          ),
+          Positioned(
+            bottom: 100,
+            right: -60,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
             ),
           ),
 
-          if (widget.role == "manager" && !widget.isArchivedFromHistory)
-            _buildAbsentAlertSection(),
+          // 🏢 2. المحتوى الأساسي للواجهة
+          SafeArea(
+            child: Column(
+              children: [
+                // 🧊 لوحة التحكم העلوي (البحث والفلترة) زجاجية
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                  child: _buildGlassContainer(
+                    isDarkMode: isDarkMode,
+                    padding: const EdgeInsets.all(15),
+                    child: Column(
+                      children: [
+                        TextField(
+                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                          decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
+                          onChanged: (v) => setState(() => search = v.trim().toLowerCase()),
+                        ),
+                        if (widget.role == "manager") ...[
+                          const SizedBox(height: 12),
+                          _buildSupervisorFilter(isDarkMode),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
 
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: query.snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                
-                final docs = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  
-                  final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
-                  final nameMatches = studentName.contains(search);
-                  
-                  bool supervisorMatches = true;
-                  
-                  if (selectedSupervisor.isNotEmpty) {
-                    final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
-                    final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
-                    
-                    supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
-                  }
-                  
-                  return nameMatches && supervisorMatches;
-                }).toList();
+                if (widget.role == "manager" && !widget.isArchivedFromHistory)
+                  _buildAbsentAlertSection(isDarkMode),
 
-                if (docs.isEmpty) return _buildEmptyState();
+                // 🧊 قائمة الطلاب الزجاجية
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: query.snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                      
+                      final docs = snapshot.data!.docs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        
+                        final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
+                        final nameMatches = studentName.contains(search);
+                        
+                        bool supervisorMatches = true;
+                        
+                        if (selectedSupervisor.isNotEmpty) {
+                          final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
+                          final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
+                          
+                          supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
+                        }
+                        
+                        return nameMatches && supervisorMatches;
+                      }).toList();
 
-                return ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.all(15),
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) => _buildStudentCard(docs[index]),
-                );
-              },
+                      if (docs.isEmpty) return _buildEmptyState(isDarkMode);
+
+                      return ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.only(left: 15, right: 15, top: 10, bottom: 80),
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) => _buildStudentCard(docs[index], isDarkMode),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -325,7 +369,58 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  Widget _buildAbsentAlertSection() {
+  // 🧊 أداة مساعدة لتغليف العناصر وتأثير الزجاج (Glassmorphism)
+  Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: customColor ?? (isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4)),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: customBorderColor ?? (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6)),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.02),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  // 🧊 تنسيق حقول الإدخال والفلترة
+  InputDecoration _glassInputDecoration(String hint, IconData icon, bool isDarkMode) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontFamily: 'Cairo', fontSize: 13),
+      prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
+      filled: true,
+      fillColor: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), 
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15), 
+        borderSide: BorderSide(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15), 
+        borderSide: BorderSide(color: isDarkMode ? accentGold : primaryColor, width: 1.5),
+      ),
+    );
+  }
+
+  // 🧊 كرت تنبيه الغياب المتكرر الزجاجي
+  Widget _buildAbsentAlertSection(bool isDarkMode) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('students')
@@ -339,260 +434,272 @@ class _StudentsPageState extends State<StudentsPage> {
         final alertStudents = snapshot.data!.docs;
 
         return Container(
-          margin: const EdgeInsets.fromLTRB(15, 15, 15, 0),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.red.shade50,
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: Colors.red.shade200, width: 1.5),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.gpp_maybe_rounded, color: Colors.red.shade700, size: 20),
-                  const SizedBox(width: 6),
-                  Text(
-                    "تنبيه غياب متكرر (🚨 يحتاج متابعة إدارية)",
-                    style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 65,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: alertStudents.length,
-                  itemBuilder: (context, idx) {
-                    final sData = alertStudents[idx].data() as Map<String, dynamic>;
-                    final String sName = sData['name'] ?? 'طالب';
-                    final int count = sData['consecutiveAbsences'] ?? 3;
-                    final String pPhone = sData['parentPhone'] ?? ''; 
-
-                    return Container(
-                      margin: const EdgeInsets.only(left: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4)],
-                      ),
-                      child: Row(
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(sName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87, fontFamily: 'Cairo')),
-                              Text("منقطع لـ $count أيام ⚠️", style: TextStyle(color: Colors.red.shade700, fontSize: 10, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
-                            ],
-                          ),
-                          if (pPhone.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            CircleAvatar(
-                              radius: 16,
-                              backgroundColor: Colors.green.shade50,
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                icon: const Icon(Icons.phone_forwarded_rounded, size: 16, color: Colors.green),
-                                tooltip: "اتصال بولي الأمر",
-                                onPressed: () => _makePhoneCall(pPhone),
-                              ),
-                            ),
-                          ]
-                        ],
-                      ),
-                    );
-                  },
+          margin: const EdgeInsets.fromLTRB(15, 5, 15, 10),
+          child: _buildGlassContainer(
+            isDarkMode: isDarkMode,
+            padding: const EdgeInsets.all(12),
+            customColor: Colors.redAccent.withOpacity(isDarkMode ? 0.15 : 0.1),
+            customBorderColor: Colors.redAccent.withOpacity(0.4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.gpp_maybe_rounded, color: Colors.redAccent.shade200, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      "تنبيه غياب متكرر (🚨 يحتاج متابعة إدارية)",
+                      style: TextStyle(color: isDarkMode ? Colors.red.shade300 : Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo'),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 65,
+                  child: ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: alertStudents.length,
+                    itemBuilder: (context, idx) {
+                      final sData = alertStudents[idx].data() as Map<String, dynamic>;
+                      final String sName = sData['name'] ?? 'طالب';
+                      final int count = sData['consecutiveAbsences'] ?? 3;
+                      final String pPhone = sData['parentPhone'] ?? ''; 
+
+                      return Container(
+                        margin: const EdgeInsets.only(left: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(sName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo')),
+                                Text("منقطع لـ $count أيام ⚠️", style: TextStyle(color: Colors.redAccent.shade400, fontSize: 10, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
+                              ],
+                            ),
+                            if (pPhone.isNotEmpty) ...[
+                              const SizedBox(width: 10),
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: Colors.green.withOpacity(0.15),
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(Icons.phone_forwarded_rounded, size: 16, color: Colors.green),
+                                  tooltip: "اتصال بولي الأمر",
+                                  onPressed: () => _makePhoneCall(pPhone),
+                                ),
+                              ),
+                            ]
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildStudentCard(DocumentSnapshot doc) {
+  // 🧊 كرت الطالب الزجاجي
+  Widget _buildStudentCard(DocumentSnapshot doc, bool isDarkMode) {
     final data = doc.data() as Map<String, dynamic>;
     final String imageUrl = data['imageUrl'] ?? '';
     final String studentName = data['name'] ?? 'بدون اسم';
-    final String nationality = data['nationality'] ?? 'سوري'; // 🎯 جلب الجنسية
+    final String nationality = data['nationality'] ?? 'سوري'; 
     final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.transparent),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        children: [
-          ListTile(
-            contentPadding: const EdgeInsets.all(15),
-            leading: Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: primaryColor.withOpacity(0.1),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(25),
-                child: imageUrl.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => const Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+      child: _buildGlassContainer(
+        isDarkMode: isDarkMode,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          children: [
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+              leading: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDarkMode ? Colors.white10 : primaryColor.withOpacity(0.1),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(25),
+                  child: imageUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => const Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                           ),
-                        ),
-                        errorWidget: (context, url, error) => Center(
+                          errorWidget: (context, url, error) => Center(
+                            child: Text(
+                              firstLetter,
+                              style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'),
+                            ),
+                          ),
+                        )
+                      : Center(
                           child: Text(
                             firstLetter,
-                            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'),
+                            style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'),
                           ),
                         ),
-                      )
-                    : Center(
-                        child: Text(
-                          firstLetter,
-                          style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'),
+                ),
+              ),
+              title: Row(
+                children: [
+                  _getNationalityFlag(nationality),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      studentName, 
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo'),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 6.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              trailing: widget.isArchivedFromHistory 
+                  ? Icon(Icons.archive_outlined, color: isDarkMode ? Colors.white54 : Colors.grey, size: 22)
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.edit_note_rounded, color: isDarkMode ? accentGold : primaryColor, size: 26),
+                          tooltip: "تعديل بيانات الطالب",
+                          onPressed: () => _nav(EditStudentPage(student: doc)),
                         ),
-                      ),
+                        if (widget.role == "manager") 
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 24),
+                            tooltip: "حذف الطالب",
+                            onPressed: () => _showDeleteStudentDialog(context, doc.id, studentName, isDarkMode),
+                          ),
+                      ],
+                    ),
+            ),
+            Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  if (!widget.isArchivedFromHistory)
+                    _buildActionButton(Icons.add_task, "جلسة جديدة", Colors.greenAccent.shade400, isDarkMode, () {
+                      _nav(AddSessionPage(
+                        studentId: doc.id,
+                        studentName: data['name'] ?? '',
+                        supervisorId: data['supervisorId'] ?? '',
+                        supervisorName: data['supervisorName'] ?? '',
+                      ));
+                    }),
+                    
+                  _buildActionButton(
+                    widget.isArchivedFromHistory ? Icons.folder_open_rounded : Icons.history, 
+                    widget.isArchivedFromHistory ? "استعراض السجل القديم" : "السجل", 
+                    isDarkMode ? Colors.lightBlueAccent : Colors.blue, 
+                    isDarkMode,
+                    () {
+                      _nav(StudentSessionsPage(
+                        studentId: doc.id, 
+                        studentName: data['name'] ?? '', 
+                        role: widget.isArchivedFromHistory ? "readonly" : widget.role
+                      ));
+                    }
+                  ),
+                ],
               ),
             ),
-            // 🎯 تم إدراج العلم بجانب الاسم بشكل احترافي وأنيق
-            title: Row(
-              children: [
-                _getNationalityFlag(nationality),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    studentName, 
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo'),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 5),
-                Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: Colors.grey[600], fontSize: 12, fontFamily: 'Cairo')),
-                Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: primaryColor, fontSize: 12, fontFamily: 'Cairo')),
-              ],
-            ),
-            trailing: widget.isArchivedFromHistory 
-                ? const Icon(Icons.archive_outlined, color: Colors.grey, size: 20)
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: Icon(Icons.edit_note_rounded, color: primaryColor, size: 24),
-                        tooltip: "تعديل بيانات الطالب",
-                        onPressed: () => _nav(EditStudentPage(student: doc)),
-                      ),
-                      if (widget.role == "manager") 
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
-                          tooltip: "حذف الطالب",
-                          onPressed: () => _showDeleteStudentDialog(context, doc.id, studentName),
-                        ),
-                    ],
-                  ),
-          ),
-          const Divider(height: 0),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                if (!widget.isArchivedFromHistory)
-                  _buildActionButton(Icons.add_task, "جلسة جديد", Colors.green, () {
-                    _nav(AddSessionPage(
-                      studentId: doc.id,
-                      studentName: data['name'] ?? '',
-                      supervisorId: data['supervisorId'] ?? '',
-                      supervisorName: data['supervisorName'] ?? '',
-                    ));
-                  }),
-                  
-                _buildActionButton(
-                  widget.isArchivedFromHistory ? Icons.folder_open_rounded : Icons.history, 
-                  widget.isArchivedFromHistory ? "استعراض السجل القديم" : "السجل", 
-                  Colors.blue, 
-                  () {
-                    _nav(StudentSessionsPage(
-                      studentId: doc.id, 
-                      studentName: data['name'] ?? '', 
-                      role: widget.isArchivedFromHistory ? "readonly" : widget.role
-                    ));
-                  }
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, Color color, VoidCallback onTap) {
+  Widget _buildActionButton(IconData icon, String label, Color color, bool isDarkMode, VoidCallback onTap) {
     return TextButton.icon(
+      style: TextButton.styleFrom(
+        backgroundColor: color.withOpacity(isDarkMode ? 0.1 : 0.05),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+      ),
       onPressed: onTap,
       icon: Icon(icon, size: 18, color: color),
-      label: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'Cairo')),
+      label: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo')),
     );
   }
 
-  Widget _buildSupervisorFilter() {
+  Widget _buildSupervisorFilter(bool isDarkMode) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox();
         final supervisors = snapshot.data!.docs;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedSupervisor.isEmpty ? null : selectedSupervisor,
-              hint: const Text("فلترة بالمشرف", style: TextStyle(color: Colors.white70, fontSize: 13, fontFamily: 'Cairo')),
-              dropdownColor: primaryColor,
-              icon: const Icon(Icons.filter_list, color: Colors.white),
-              items: [
-                const DropdownMenuItem(value: '', child: Text("كل المشرفين", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 13))),
-                ...supervisors.map((sup) => DropdownMenuItem(
-                  value: sup['name'].toString(), 
-                  child: Text(sup['name'], style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 13)),
-                )),
-              ],
-              onChanged: (v) => setState(() => selectedSupervisor = v!),
-            ),
-          ),
+        return DropdownButtonFormField<String>(
+          value: selectedSupervisor.isEmpty ? null : selectedSupervisor,
+          hint: Text("فلترة بحسب المشرف...", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontSize: 13, fontFamily: 'Cairo')),
+          dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+          decoration: _glassInputDecoration("", Icons.filter_list_rounded, isDarkMode),
+          items: [
+            const DropdownMenuItem(value: '', child: Text("كل المشرفين")),
+            ...supervisors.map((sup) => DropdownMenuItem(
+              value: sup['name'].toString(), 
+              child: Text(sup['name']),
+            )),
+          ],
+          onChanged: (v) => setState(() => selectedSupervisor = v ?? ''),
         );
       },
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isDarkMode) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.person_search, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 10),
-          Text("لم نجد أي طلاب بهذا الاسم", style: TextStyle(color: Colors.grey[600], fontFamily: 'Cairo', fontSize: 14)),
-        ],
+      child: _buildGlassContainer(
+        isDarkMode: isDarkMode,
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_search_rounded, size: 80, color: isDarkMode ? accentGold.withOpacity(0.6) : primaryColor.withOpacity(0.4)),
+            const SizedBox(height: 15),
+            Text(
+              "لم نجد أي طلاب يطابقون بحثك", 
+              style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold)
+            ),
+          ],
+        ),
       ),
     );
   }
