@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart'; 
 import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:quran_habal/services/cloudinary_helper.dart';
-import 'dart:ui'; // 🎯 ضرورية لتأثير الزجاج (Blur)
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🎯 استدعاء مكتبة الإشعارات
+import 'dart:ui'; 
 
 import 'login_page.dart';
 import 'create_cycle_page.dart';
@@ -19,6 +20,8 @@ import 'honor_board_page.dart';
 import 'dashboard_page.dart';
 import 'daily_stats_page.dart';
 import 'supervisor_page.dart';
+import 'inspirations_manage_page.dart'; 
+import 'supervisor_inbox_page.dart'; 
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -40,13 +43,49 @@ class _HomePageState extends State<HomePage> {
   CycleModel? currentCycleModel;
 
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37); // لون إضافي للانعكاسات
+  final Color accentGold = const Color(0xffd4af37); 
   bool _isUploadingManagerImage = false; 
 
   @override
   void initState() {
     super.initState();
     loadCycle(); 
+    _setupNotifications(); // 🎯 تفعيل الإشعارات فور دخول المشرف
+  }
+
+  // 🎯 الدالة المسؤولة عن إعداد الإشعارات والمنبثقات
+  Future<void> _setupNotifications() async {
+    try {
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      
+      // 1. طلب الصلاحية من النظام (مهم جداً لأندرويد 13+ وآيفون)
+      await messaging.requestPermission(
+        alert: true, 
+        badge: true, 
+        sound: true
+      );
+
+      // 2. إجبار الفلاتر على إظهار الإشعار منبثقاً حتى لو التطبيق مفتوح حالياً بالواجهة
+      await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+        alert: true, 
+        badge: true, 
+        sound: true, 
+      );
+
+      // 3. جلب التوكن الخاص بجهاز المشرف لضمان وصول الرسائل إليه
+      String? token = await messaging.getToken();
+      
+      if (token != null) {
+        final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
+        await FirebaseFirestore.instance.collection(currentCollection).doc(widget.uid).set(
+          {'fcmToken': token}, 
+          SetOptions(merge: true) // دمج لحفظ التوكن دون مسح البيانات القديمة
+        );
+        print("✅ تم حفظ توكن الإشعارات للمشرف بنجاح!");
+      }
+    } catch (e) {
+      print("❌ خطأ في إعداد الإشعارات: $e");
+    }
   }
 
   loadCycle() async {
@@ -97,11 +136,11 @@ class _HomePageState extends State<HomePage> {
     final bool isDark = themeProvider.isDarkMode;
 
     return Scaffold(
-      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية لتشمل الـ AppBar لجمالية الزجاج
+      extendBodyBehindAppBar: true, 
       backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, // 🎯 AppBar شفاف بالكامل
+        backgroundColor: Colors.transparent, 
         centerTitle: true,
         title: Text(
           widget.role == "manager" ? "لوحة المدير" : "لوحة المشرف",
@@ -124,46 +163,34 @@ class _HomePageState extends State<HomePage> {
       ),
       body: Stack(
         children: [
-          // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة (Blobs)
           Container(
             width: double.infinity,
             height: double.infinity,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isDark
-                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] // ليلي فخم
-                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], // نهاري منعش
+                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
+                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
             ),
           ),
           Positioned(
-            top: -50,
-            left: -50,
+            top: -50, left: -50,
             child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2),
-              ),
+              width: 300, height: 300,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
             ),
           ),
           Positioned(
-            top: 200,
-            right: -80,
+            top: 200, right: -80,
             child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15),
-              ),
+              width: 250, height: 250,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15)),
             ),
           ),
 
-          // 🏢 2. المحتوى الأساسي للواجهة
           SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -171,17 +198,13 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: Column(
                   children: [
-                    // 🧊 هيدر زجاجي (صورة المدير واسم الدورة)
                     _buildGlassContainer(
                       isDark: isDark,
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         children: [
                           StreamBuilder<DocumentSnapshot>(
-                            stream: FirebaseFirestore.instance
-                                .collection(currentCollection)
-                                .doc(widget.uid)
-                                .snapshots(),
+                            stream: FirebaseFirestore.instance.collection(currentCollection).doc(widget.uid).snapshots(),
                             builder: (context, snapshot) {
                               String? imageUrl;
                               if (snapshot.hasData && snapshot.data!.exists) {
@@ -190,18 +213,14 @@ class _HomePageState extends State<HomePage> {
                               }
 
                               return GestureDetector(
-                                onTap: widget.role == "manager" && !_isUploadingManagerImage
-                                    ? _updateManagerImage
-                                    : null,
+                                onTap: widget.role == "manager" && !_isUploadingManagerImage ? _updateManagerImage : null,
                                 child: Stack(
                                   alignment: Alignment.center,
                                   children: [
                                     CircleAvatar(
                                       radius: 42,
                                       backgroundColor: isDark ? Colors.white12 : Colors.white54,
-                                      backgroundImage: imageUrl != null && imageUrl.isNotEmpty
-                                          ? NetworkImage(imageUrl)
-                                          : null,
+                                      backgroundImage: imageUrl != null && imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
                                       child: (imageUrl == null || imageUrl.isEmpty) && !_isUploadingManagerImage
                                           ? Icon(Icons.person, size: 45, color: isDark ? Colors.white : primaryColor)
                                           : null,
@@ -215,8 +234,7 @@ class _HomePageState extends State<HomePage> {
                                       ),
                                     if (widget.role == "manager" && !_isUploadingManagerImage)
                                       Positioned(
-                                        bottom: 0,
-                                        right: 0,
+                                        bottom: 0, right: 0,
                                         child: CircleAvatar(
                                           radius: 14,
                                           backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white,
@@ -231,15 +249,10 @@ class _HomePageState extends State<HomePage> {
                           const SizedBox(height: 12),
                           Text(
                             widget.role == "manager" ? "أهلاً مدير المعهد" : "أهلاً أيها المشرف",
-                            style: TextStyle(
-                              color: isDark ? Colors.white : primaryColor,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(color: isDark ? Colors.white : primaryColor, fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 15),
                           
-                          // بطاقة الدورة الحالية داخل الزجاج
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
                             decoration: BoxDecoration(
@@ -258,11 +271,7 @@ class _HomePageState extends State<HomePage> {
                                       Text("الدورة الحالية", style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[700])),
                                       Text(
                                         currentCycle,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                          color: isDark ? Colors.white : primaryColor,
-                                        ),
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : primaryColor),
                                       ),
                                     ],
                                   ),
@@ -275,7 +284,6 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 25),
 
-                    // 🧊 شبكة الأزرار الزجاجية
                     GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -288,6 +296,8 @@ class _HomePageState extends State<HomePage> {
                           _buildGlassMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
                           _buildGlassMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), isDark),
                           _buildGlassMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), isDark),
+                          _buildGlassMenuCard(Icons.wb_sunny_rounded, "إدارة الإشراقات", () => _nav(const InspirationsManagePage()), isDark),
+                          
                           if (currentCycleModel != null)
                             _buildGlassMenuCard(Icons.person_add_alt_1, "إضافة طالب", () => _nav(AddStudentPage(cycle: currentCycleModel!)), isDark),
                           _buildGlassMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage()), isDark),
@@ -297,6 +307,8 @@ class _HomePageState extends State<HomePage> {
                         if (currentCycleModel != null)
                           _buildGlassMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
                         
+                        _buildGlassMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
+
                         _buildGlassMenuCard(Icons.bar_chart, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
                         _buildGlassMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                         _buildGlassMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
@@ -317,7 +329,6 @@ class _HomePageState extends State<HomePage> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
-  // 🧊 أداة مساعدة لإنشاء أي حاوية زجاجية (Glassmorphism)
   Widget _buildGlassContainer({required Widget child, required bool isDark, EdgeInsetsGeometry padding = EdgeInsets.zero}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),
@@ -346,7 +357,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🧊 كرت القائمة بستايل الزجاج
   Widget _buildGlassMenuCard(IconData icon, String title, VoidCallback onTap, bool isDark) {
     return InkWell(
       onTap: onTap,

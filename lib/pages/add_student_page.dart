@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:convert'; 
-import 'dart:ui'; // 🎯 ضرورية جداً لتأثير الزجاج
+import 'dart:ui'; 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http; 
@@ -39,7 +39,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
   bool loading = false;
   String studentType = "new";
   
-  // 🎯 المتغيرات الخاصة بالجنسية
   String selectedNationality = "سوري";
   final List<Map<String, dynamic>> nationalities = [
     {'name': 'سوري', 'flag': 'custom'}, 
@@ -60,7 +59,7 @@ class _AddStudentPageState extends State<AddStudentPage> {
   final ImagePicker _picker = ImagePicker();
 
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37); // 🎯 لون الزجاج المكمل
+  final Color accentGold = const Color(0xffd4af37); 
 
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(
@@ -131,7 +130,9 @@ class _AddStudentPageState extends State<AddStudentPage> {
       } else {
         int maxSerial = 0;
         for (var doc in studentsSnapshot.docs) {
-          String currentSerial = doc.data()['serial'] ?? "";
+          // 🎯 هنا كان الخطأ وتم إصلاحه بإضافة toString() لضمان تحويل الرقم إلى نص
+          String currentSerial = doc.data()['serial']?.toString() ?? "";
+          
           if (currentSerial.startsWith(prefix)) {
             int parsed = int.tryParse(currentSerial) ?? 0;
             if (parsed > maxSerial) maxSerial = parsed;
@@ -191,7 +192,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
     }
   }
 
-  // 🎯 برمجة علم الثورة السورية باستخدام Flutter Containers
   Widget _buildSyrianRevolutionFlag() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
@@ -199,7 +199,7 @@ class _AddStudentPageState extends State<AddStudentPage> {
         width: 26,
         height: 18,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.white60, width: 0.5), // تعديل لون الإطار ليناسب الزجاج
+          border: Border.all(color: Colors.white60, width: 0.5), 
         ),
         child: Column(
           children: [
@@ -229,18 +229,17 @@ class _AddStudentPageState extends State<AddStudentPage> {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية للزجاج
+      extendBodyBehindAppBar: true, 
       backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, // AppBar شفاف
+        backgroundColor: Colors.transparent, 
         title: Text("إضافة طالب جديد", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
       ),
       body: Stack(
         children: [
-          // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -273,14 +272,12 @@ class _AddStudentPageState extends State<AddStudentPage> {
             ),
           ),
 
-          // 🏢 2. المحتوى الأساسي للواجهة
           SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Column(
                 children: [
-                  // 🧊 3. قسم الصورة الشخصية (بتأثير زجاجي خفيف خلفها)
                   _buildGlassContainer(
                     isDarkMode: isDarkMode,
                     padding: const EdgeInsets.all(20),
@@ -322,7 +319,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 🧊 4. الأقسام الزجاجية
                   _buildSectionCard(
                     title: "معلومات التسجيل",
                     icon: Icons.app_registration,
@@ -452,7 +448,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
 
                   const SizedBox(height: 35),
 
-                  // 🚀 زر الحفظ الزجاجي الفخم
                   SizedBox(
                     width: double.infinity,
                     height: 55,
@@ -480,7 +475,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
     );
   }
 
-  // 🧊 أداة تغليف الأقسام بتأثير الزجاج (Glassmorphism)
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = const EdgeInsets.all(16)}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),
@@ -509,7 +503,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
     );
   }
 
-  // 🧊 أداة بطاقة القسم (تستخدم التغليف الزجاجي)
   Widget _buildSectionCard({required String title, required IconData icon, required Widget child, required bool isDarkMode}) {
     return _buildGlassContainer(
       isDarkMode: isDarkMode,
@@ -530,7 +523,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
     );
   }
 
-  // 🧊 أداة حقول الإدخال الزجاجية
   InputDecoration _glassInputDecoration(String label, IconData icon, bool isDarkMode) {
     return InputDecoration(
       labelText: label,
@@ -551,7 +543,6 @@ class _AddStudentPageState extends State<AddStudentPage> {
     );
   }
 
-  // 🧊 أداة اختيار التاريخ (بستايل زجاجي)
   Widget _buildDatePicker({required String label, required IconData icon, required bool isDarkMode, required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
