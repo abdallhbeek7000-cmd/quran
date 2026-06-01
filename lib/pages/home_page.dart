@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart'; 
 import 'package:cloud_firestore/cloud_firestore.dart'; 
-import 'package:shared_preferences/shared_preferences.dart'; // 🎯 استدعاء مكتبة الذاكرة المحلية
+import 'package:shared_preferences/shared_preferences.dart'; 
 import 'package:quran_habal/services/cloudinary_helper.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
 import 'dart:ui'; 
@@ -47,38 +47,150 @@ class _HomePageState extends State<HomePage> {
   final Color accentGold = const Color(0xffd4af37); 
   bool _isUploadingManagerImage = false; 
 
+  // 🚀 متغير للتحقق إذا كان المشرف الحالي هو بالأساس مدير (God Mode)
+  bool isAlsoManager = false;
+
   @override
   void initState() {
     super.initState();
     loadCycle(); 
     _setupNotifications(); 
+    _checkIfManager(); // التحقق الصامت بالخلفية
+  }
+
+  // 🚀 دالة الفحص: تتأكد هل الحساب الأساسي هو حساب مدير؟
+  Future<void> _checkIfManager() async {
+    String realUid = FirebaseAuth.instance.currentUser?.uid ?? widget.uid;
+    
+    if (widget.role == "manager") {
+      if (mounted) setState(() => isAlsoManager = true);
+    } else {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(realUid).get();
+        if (doc.exists && mounted) {
+          setState(() => isAlsoManager = true);
+        }
+      } catch (e) {
+        print("خطأ في التحقق من الإدارة: $e");
+      }
+    }
+  }
+
+  // 🚀 نافذة اختيار المشرفين للمدير
+  void _showSupervisorsList(bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xff1e293b) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+          ),
+          child: Column(
+            children: [
+              Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(10))),
+              const SizedBox(height: 20),
+              Text("الدخول كـ مشرف", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+              const SizedBox(height: 10),
+              Text("اختر المشرف الذي تود إدارة حسابه:", style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : Colors.black54, fontFamily: 'Cairo')),
+              const SizedBox(height: 15),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                    final docs = snapshot.data!.docs;
+                    if (docs.isEmpty) return const Center(child: Text("لا يوجد مشرفين", style: TextStyle(fontFamily: 'Cairo')));
+                    
+                    return ListView.builder(
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        var sup = docs[index].data() as Map<String, dynamic>;
+                        String supId = docs[index].id;
+                        String name = sup['name'] ?? 'مشرف';
+                        String phone = sup['phone'] ?? '';
+                        
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                          ),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: primaryColor.withOpacity(0.2),
+                              child: Icon(Icons.person, color: primaryColor),
+                            ),
+                            title: Text(name, style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87)),
+                            subtitle: Text(phone, style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54, fontSize: 12)),
+                            trailing: Icon(Icons.login_rounded, color: accentGold),
+                            onTap: () => _impersonateSupervisor(supId),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    );
+  }
+
+  // 🚀 تنفيذ الدخول لحساب المشرف
+  void _impersonateSupervisor(String supId) async {
+    Navigator.pop(context); // إغلاق القائمة
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('role', 'supervisor');
+    await prefs.setString('userId', supId); // نوهم التطبيق أن الـ ID الحالي هو للمشرف
+
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => HomePage(uid: supId, role: 'supervisor')),
+    );
+  }
+
+  // 🚀 العودة للوحة الإدارة
+  void _returnToManager() async {
+    String realUid = FirebaseAuth.instance.currentUser?.uid ?? widget.uid;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('role', 'manager');
+    await prefs.setString('userId', realUid);
+
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => HomePage(uid: realUid, role: 'manager')),
+    );
   }
 
   Future<void> _setupNotifications() async {
     try {
-      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      String realUid = FirebaseAuth.instance.currentUser?.uid ?? '';
       
-      await messaging.requestPermission(
-        alert: true, 
-        badge: true, 
-        sound: true
-      );
+      // 🛡️ حماية أمنية: لا تقم بتحديث توكن الإشعارات إذا كان المدير متخفياً كحساب مشرف
+      if (widget.uid != realUid && widget.role == 'supervisor') return;
 
-      await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-        alert: true, 
-        badge: true, 
-        sound: true, 
-      );
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(alert: true, badge: true, sound: true);
 
       String? token = await messaging.getToken();
-      
       if (token != null) {
         final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
         await FirebaseFirestore.instance.collection(currentCollection).doc(widget.uid).set(
-          {'fcmToken': token}, 
-          SetOptions(merge: true) 
+          {'fcmToken': token}, SetOptions(merge: true) 
         );
-        print("✅ تم حفظ توكن الإشعارات للمشرف بنجاح!");
       }
     } catch (e) {
       print("❌ خطأ في إعداد الإشعارات: $e");
@@ -95,21 +207,12 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 🚀 دالة الخروج بعد التعديل لتنظيف الذاكرة
   logout() async {
-    // 1. مسح الذاكرة المحلية (غسيل دماغ للتطبيق لينسى الرتبة السابقة)
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear(); 
-
-    // 2. تسجيل الخروج من الفايربيز
     await FirebaseAuth.instance.signOut();
-    
-    // 3. التوجيه لصفحة الدخول
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-    );
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginPage()));
   }
 
   Future<void> _updateManagerImage() async {
@@ -117,18 +220,12 @@ class _HomePageState extends State<HomePage> {
     try {
       String? url = await CloudinaryHelper.pickAndUploadProfileImage();
       if (url != null) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.uid)
-            .set({'imageUrl': url}, SetOptions(merge: true));
-
+        await FirebaseFirestore.instance.collection(widget.role == "manager" ? "users" : "supervisors").doc(widget.uid).set({'imageUrl': url}, SetOptions(merge: true));
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث صورتك الشخصية بنجاح 🎉")),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث الصورة بنجاح 🎉", style: TextStyle(fontFamily: 'Cairo'))));
       }
     } catch (e) {
-      print("خطأ في رفع صورة المدير: $e");
+      print("خطأ في رفع الصورة: $e");
     } finally {
       setState(() => _isUploadingManagerImage = false);
     }
@@ -149,14 +246,18 @@ class _HomePageState extends State<HomePage> {
         centerTitle: true,
         title: Text(
           widget.role == "manager" ? "لوحة المدير" : "لوحة المشرف",
-          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor),
+          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo'),
         ),
         actions: [
-          IconButton(
-            icon: Icon(
-              isDark ? Icons.light_mode : Icons.dark_mode,
-              color: isDark ? Colors.orangeAccent : primaryColor,
+          // 🚀 زر الدخول لحسابات المشرفين (يظهر للمدير فقط في وضع الإدارة)
+          if (widget.role == "manager")
+            IconButton(
+              icon: Icon(Icons.people_alt_rounded, color: isDark ? accentGold : primaryColor),
+              tooltip: "الدخول كـ مشرف",
+              onPressed: () => _showSupervisorsList(isDark),
             ),
+          IconButton(
+            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode, color: isDark ? Colors.orangeAccent : primaryColor),
             tooltip: "تغيير المظهر",
             onPressed: () => themeProvider.toggleTheme(),
           ),
@@ -169,32 +270,16 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         children: [
           Container(
-            width: double.infinity,
-            height: double.infinity,
+            width: double.infinity, height: double.infinity,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: isDark
-                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
-                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+                colors: isDark ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
               ),
             ),
           ),
-          Positioned(
-            top: -50, left: -50,
-            child: Container(
-              width: 300, height: 300,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
-            ),
-          ),
-          Positioned(
-            top: 200, right: -80,
-            child: Container(
-              width: 250, height: 250,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15)),
-            ),
-          ),
+          Positioned(top: -50, left: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))),
+          Positioned(top: 200, right: -80, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15)))),
 
           SafeArea(
             child: SingleChildScrollView(
@@ -212,52 +297,43 @@ class _HomePageState extends State<HomePage> {
                             stream: FirebaseFirestore.instance.collection(currentCollection).doc(widget.uid).snapshots(),
                             builder: (context, snapshot) {
                               String? imageUrl;
+                              String? currentName;
                               if (snapshot.hasData && snapshot.data!.exists) {
                                 var userData = snapshot.data!.data() as Map<String, dynamic>?;
                                 imageUrl = userData?['imageUrl'];
+                                currentName = userData?['name'];
                               }
 
-                              return GestureDetector(
-                                onTap: widget.role == "manager" && !_isUploadingManagerImage ? _updateManagerImage : null,
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 42,
-                                      backgroundColor: isDark ? Colors.white12 : Colors.white54,
-                                      backgroundImage: imageUrl != null && imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
-                                      child: (imageUrl == null || imageUrl.isEmpty) && !_isUploadingManagerImage
-                                          ? Icon(Icons.person, size: 45, color: isDark ? Colors.white : primaryColor)
-                                          : null,
+                              return Column(
+                                children: [
+                                  GestureDetector(
+                                    onTap: !_isUploadingManagerImage ? _updateManagerImage : null,
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 42,
+                                          backgroundColor: isDark ? Colors.white12 : Colors.white54,
+                                          backgroundImage: imageUrl != null && imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+                                          child: (imageUrl == null || imageUrl.isEmpty) && !_isUploadingManagerImage ? Icon(Icons.person, size: 45, color: isDark ? Colors.white : primaryColor) : null,
+                                        ),
+                                        if (_isUploadingManagerImage) const Positioned.fill(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(color: Colors.white))),
+                                        if (!_isUploadingManagerImage)
+                                          Positioned(bottom: 0, right: 0, child: CircleAvatar(radius: 14, backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white, child: Icon(Icons.camera_alt, size: 16, color: primaryColor))),
+                                      ],
                                     ),
-                                    if (_isUploadingManagerImage)
-                                      const Positioned.fill(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(8.0),
-                                          child: CircularProgressIndicator(color: Colors.white),
-                                        ),
-                                      ),
-                                    if (widget.role == "manager" && !_isUploadingManagerImage)
-                                      Positioned(
-                                        bottom: 0, right: 0,
-                                        child: CircleAvatar(
-                                          radius: 14,
-                                          backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white,
-                                          child: Icon(Icons.camera_alt, size: 16, color: primaryColor),
-                                        ),
-                                      ),
-                                  ],
-                                ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    widget.role == "manager" ? "أهلاً مدير المعهد" : (currentName != null ? "المشرف: $currentName" : "أهلاً أيها المشرف"),
+                                    style: TextStyle(color: isDark ? Colors.white : primaryColor, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                  ),
+                                ],
                               );
                             },
                           ),
-                          const SizedBox(height: 12),
-                          Text(
-                            widget.role == "manager" ? "أهلاً مدير المعهد" : "أهلاً أيها المشرف",
-                            style: TextStyle(color: isDark ? Colors.white : primaryColor, fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 15),
                           
+                          const SizedBox(height: 15),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
                             decoration: BoxDecoration(
@@ -273,11 +349,8 @@ class _HomePageState extends State<HomePage> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text("الدورة الحالية", style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[700])),
-                                      Text(
-                                        currentCycle,
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : primaryColor),
-                                      ),
+                                      Text("الدورة الحالية", style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[700], fontFamily: 'Cairo')),
+                                      Text(currentCycle, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
                                     ],
                                   ),
                                 ),
@@ -287,7 +360,39 @@ class _HomePageState extends State<HomePage> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 25),
+                    
+                    const SizedBox(height: 20),
+
+                    // 🚀 زر العودة للمدير (يظهر فقط إذا كان المدير داخل حساب مشرف)
+                    if (isAlsoManager && widget.role == 'supervisor') ...[
+                      InkWell(
+                        onTap: _returnToManager,
+                        borderRadius: BorderRadius.circular(20),
+                        child: _buildGlassContainer(
+                          isDark: isDark,
+                          customColor: Colors.orangeAccent.withOpacity(isDark ? 0.2 : 0.1),
+                          customBorderColor: Colors.orangeAccent.withOpacity(0.5),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.admin_panel_settings_rounded, color: isDark ? Colors.orangeAccent : Colors.orange.shade800, size: 28),
+                              const SizedBox(width: 12),
+                              Text(
+                                "العودة للوحة الإدارة",
+                                style: TextStyle(
+                                  fontSize: 16, 
+                                  fontWeight: FontWeight.bold, 
+                                  fontFamily: 'Cairo', 
+                                  color: isDark ? Colors.orangeAccent : Colors.orange.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
 
                     GridView.count(
                       shrinkWrap: true,
@@ -334,7 +439,7 @@ class _HomePageState extends State<HomePage> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
-  Widget _buildGlassContainer({required Widget child, required bool isDark, EdgeInsetsGeometry padding = EdgeInsets.zero}) {
+  Widget _buildGlassContainer({required Widget child, required bool isDark, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),
       child: BackdropFilter(
@@ -342,19 +447,10 @@ class _HomePageState extends State<HomePage> {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.3),
+            color: customColor ?? (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.3)),
             borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            border: Border.all(color: customBorderColor ?? (isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6)), width: 1.5),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.05), blurRadius: 15, offset: const Offset(0, 8))],
           ),
           child: child,
         ),
@@ -371,21 +467,9 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 38,
-              color: isDark ? accentGold : primaryColor,
-            ),
+            Icon(icon, size: 38, color: isDark ? accentGold : primaryColor),
             const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white.withOpacity(0.9) : primaryColor,
-              ),
-            ),
+            Text(title, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white.withOpacity(0.9) : primaryColor)),
           ],
         ),
       ),
