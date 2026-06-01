@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart'; 
-import 'package:flutter/material.dart'; // 🎯 ضروري لإظهار رسائل الخطأ على الشاشة
+import 'package:flutter/material.dart'; 
 import 'package:googleapis_auth/auth_io.dart';
 
 class NotificationService {
@@ -26,18 +26,41 @@ class NotificationService {
     }
   }
 
-  // 🚀 الدالة الشغالة لإرسال الإشعار الخارجي وحفظه بمركز التنبيهات لايف
+  // 🚀 الدالة الجوكر: ترسل الإشعار للطالب أو المشرف بذكاء
   static Future<void> sendAndSaveNotification({
-    required String studentId,
+    required String studentId, // يعمل كمعرف عام (يستقبل آي دي طالب أو مشرف)
     required String title,
     required String body,
     required String type, 
-    BuildContext? context, // 🎯 تمت الإضافة كاختياري لكي تظهر الأخطاء المنبثقة إن أردت
+    BuildContext? context, 
   }) async {
     try {
-      // 1. حقن وتوثيق التنبيه في الفايرستور أولاً
+      // 🎯 1. البحث الذكي لتحديد نوع المستلم
+      String targetCollection = 'students';
+      DocumentSnapshot targetDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
+
+      // إن لم يكن طالباً، ابحث في المشرفين
+      if (!targetDoc.exists) {
+        targetDoc = await FirebaseFirestore.instance.collection('supervisors').doc(studentId).get();
+        if (targetDoc.exists) {
+          targetCollection = 'supervisors';
+        } else {
+          // إن لم يكن مشرفاً، ابحث في المدراء
+          targetDoc = await FirebaseFirestore.instance.collection('users').doc(studentId).get();
+          if (targetDoc.exists) {
+            targetCollection = 'users';
+          }
+        }
+      }
+
+      if (!targetDoc.exists || targetDoc.data() == null) {
+        print("❌ المستلم غير موجود في أي جدول. تم إلغاء الإشعار.");
+        return;
+      }
+
+      // 🎯 2. توثيق التنبيه في مجموعة المستلم الصحيحة
       await FirebaseFirestore.instance
-          .collection('students')
+          .collection(targetCollection)
           .doc(studentId)
           .collection('notifications')
           .add({
@@ -47,87 +70,79 @@ class NotificationService {
         'timestamp': FieldValue.serverTimestamp(),
         'isRead': false,
       });
-      print("Notification documented in Firestore successfully! ✅");
+      print("Notification documented in [$targetCollection] successfully! ✅");
 
-      // 2. جلب الـ FCM Token الخاص بجوال الأهل
-      DocumentSnapshot studentDoc = await FirebaseFirestore.instance
-          .collection('students')
-          .doc(studentId)
-          .get();
+      // 🎯 3. جلب التوكن وإرسال الإشعار
+      var data = targetDoc.data() as Map<String, dynamic>;
+      String? fcmToken = data['fcmToken'];
 
-      if (studentDoc.exists && studentDoc.data() != null) {
-        var data = studentDoc.data() as Map<String, dynamic>;
-        String? fcmToken = data['fcmToken'];
-
-        if (fcmToken != null && fcmToken.isNotEmpty) {
-          final String accessToken = await _getAccessToken();
-          if (accessToken.isEmpty) {
-            print("Access token generation failed.");
-            if (context != null && context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(backgroundColor: Colors.red, content: Text("فشل في قراءة ملف المفتاح السري.")),
-              );
-            }
-            return;
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        final String accessToken = await _getAccessToken();
+        if (accessToken.isEmpty) {
+          print("Access token generation failed.");
+          if (context != null && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(backgroundColor: Colors.red, content: Text("فشل في قراءة ملف المفتاح السري.")),
+            );
           }
-          
-          const String projectId = 'quran-habal';
-          var url = Uri.parse('https://fcm.googleapis.com/v1/projects/$projectId/messages:send');
+          return;
+        }
+        
+        const String projectId = 'quran-habal';
+        var url = Uri.parse('https://fcm.googleapis.com/v1/projects/$projectId/messages:send');
 
-          var headers = {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $accessToken',
-          };
+        var headers = {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        };
 
-          // 🎯 الهيكلية الرسمية والمثالية لـ V1 المتطابقة مع تطبيق الأهل
-          var requestBody = jsonEncode({
-            'message': {
-              'token': fcmToken,
+        var requestBody = jsonEncode({
+          'message': {
+            'token': fcmToken,
+            'notification': {
+              'title': title,
+              'body': body,
+            },
+            'data': {
+              'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+              'studentId': studentId,
+              'type': type,
+            },
+            'android': {
+              'priority': 'high',
               'notification': {
-                'title': title,
-                'body': body,
-              },
-              'data': {
+                'channel_id': 'high_importance_channel',
+                'sound': 'default',
                 'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-                'studentId': studentId,
-                'type': type,
-              },
-              'android': {
-                'priority': 'high',
-                'notification': {
-                  'channel_id': 'high_importance_channel',
-                  'sound': 'default',
-                  'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-                }
-              },
-            }
-          });
+              }
+            },
+          }
+        });
 
-          var response = await http.post(url, headers: headers, body: requestBody);
-          
-          // 🎯 التحقق الاستخباراتي لمعرفة رد جوجل
-          if (response.statusCode == 200) {
-            print("Push Notification fired successfully outside the app! 🔔🚀");
-            if (context != null && context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(backgroundColor: Colors.green, content: Text("🚀 تم إرسال الإشعار بنجاح!")),
-              );
-            }
-          } else {
-            print("FCM V1 Broadcast Error: ${response.statusCode} - ${response.body}");
-            if (context != null && context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: Colors.red, 
-                  duration: const Duration(seconds: 10),
-                  content: Text("❌ خطأ من جوجل: ${response.statusCode}\n${response.body}")
-                ),
-              );
-            }
+        var response = await http.post(url, headers: headers, body: requestBody);
+        
+        if (response.statusCode == 200) {
+          print("Push Notification fired successfully to $targetCollection! 🔔🚀");
+          if (context != null && context.mounted) {
+            // يمكنك تفعيل هذه الرسالة إن أردت
+            // ScaffoldMessenger.of(context).showSnackBar(
+            //   const SnackBar(backgroundColor: Colors.green, content: Text("🚀 تم إرسال الإشعار بنجاح!")),
+            // );
           }
         } else {
-          print("FCM Token is empty for this student doc. الأهل لم يسجلوا بالهاتف بعد.");
+          print("FCM V1 Broadcast Error: ${response.statusCode} - ${response.body}");
+          if (context != null && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                backgroundColor: Colors.red, 
+                duration: const Duration(seconds: 10),
+                content: Text("❌ خطأ من جوجل: ${response.statusCode}\n${response.body}")
+              ),
+            );
+          }
         }
+      } else {
+        print("FCM Token is empty for this user ($targetCollection). لم يتم تسجيل الدخول لتلقي الإشعارات.");
       }
     } catch (e) {
       print("Error inside V1 Notification Service: $e");
