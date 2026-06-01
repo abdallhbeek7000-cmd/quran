@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart'; 
 import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:shared_preferences/shared_preferences.dart'; // 🎯 استدعاء مكتبة الذاكرة المحلية
 import 'package:quran_habal/services/cloudinary_helper.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // 🎯 استدعاء مكتبة الإشعارات
+import 'package:firebase_messaging/firebase_messaging.dart'; 
 import 'dart:ui'; 
 
 import 'login_page.dart';
@@ -50,36 +51,32 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     loadCycle(); 
-    _setupNotifications(); // 🎯 تفعيل الإشعارات فور دخول المشرف
+    _setupNotifications(); 
   }
 
-  // 🎯 الدالة المسؤولة عن إعداد الإشعارات والمنبثقات
   Future<void> _setupNotifications() async {
     try {
       FirebaseMessaging messaging = FirebaseMessaging.instance;
       
-      // 1. طلب الصلاحية من النظام (مهم جداً لأندرويد 13+ وآيفون)
       await messaging.requestPermission(
         alert: true, 
         badge: true, 
         sound: true
       );
 
-      // 2. إجبار الفلاتر على إظهار الإشعار منبثقاً حتى لو التطبيق مفتوح حالياً بالواجهة
       await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
         alert: true, 
         badge: true, 
         sound: true, 
       );
 
-      // 3. جلب التوكن الخاص بجهاز المشرف لضمان وصول الرسائل إليه
       String? token = await messaging.getToken();
       
       if (token != null) {
         final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
         await FirebaseFirestore.instance.collection(currentCollection).doc(widget.uid).set(
           {'fcmToken': token}, 
-          SetOptions(merge: true) // دمج لحفظ التوكن دون مسح البيانات القديمة
+          SetOptions(merge: true) 
         );
         print("✅ تم حفظ توكن الإشعارات للمشرف بنجاح!");
       }
@@ -98,8 +95,16 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // 🚀 دالة الخروج بعد التعديل لتنظيف الذاكرة
   logout() async {
+    // 1. مسح الذاكرة المحلية (غسيل دماغ للتطبيق لينسى الرتبة السابقة)
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); 
+
+    // 2. تسجيل الخروج من الفايربيز
     await FirebaseAuth.instance.signOut();
+    
+    // 3. التوجيه لصفحة الدخول
     if (!mounted) return;
     Navigator.pushReplacement(
       context,

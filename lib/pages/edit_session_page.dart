@@ -1,4 +1,4 @@
-import 'dart:ui'; // 🎯 ضرورية لتأثير الزجاج والـ Blur
+import 'dart:ui'; 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -26,7 +26,11 @@ class _EditSessionPageState extends State<EditSessionPage> {
   late TextEditingController newMemorization;
   late TextEditingController newReview; 
   late TextEditingController oldReview; 
-  late TextEditingController homework;
+  
+  // 🚀 فصل حقول الواجب في التعديل
+  late TextEditingController newHomeworkController;
+  late TextEditingController reviewHomeworkController;
+
   late TextEditingController readingBySight; 
   late TextEditingController religiousActivities;
   late TextEditingController notes;
@@ -35,6 +39,10 @@ class _EditSessionPageState extends State<EditSessionPage> {
 
   bool absent = false;
   
+  // 🚀 المفاتيح الذكية للتحكم بالظهور
+  bool hasNewMemorization = true;
+  bool hasReview = true;
+
   String memorizationRating = "جيد";
   String reviewRating = "جيد";
   
@@ -48,7 +56,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
   String? selectedSupervisorName;
 
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37); // 🎯 لون الزجاج المكمل
+  final Color accentGold = const Color(0xffd4af37); 
 
   @override
   void initState() {
@@ -57,6 +65,17 @@ class _EditSessionPageState extends State<EditSessionPage> {
 
     absent = data['absent'] ?? false;
     
+    // 🎯 ذكاء تحديد المفاتيح بناءً على البيانات القديمة
+    hasNewMemorization = (data['newMemorization'] ?? '').toString().trim().isNotEmpty;
+    hasReview = (data['nearReview'] ?? '').toString().trim().isNotEmpty || 
+                (data['farReview'] ?? '').toString().trim().isNotEmpty || 
+                (data['review'] ?? '').toString().trim().isNotEmpty;
+
+    if (!hasNewMemorization && !hasReview && !absent) {
+      hasNewMemorization = true;
+      hasReview = true;
+    }
+
     memorizationRating = data['memorizationRating'] ?? data['rating'] ?? "جيد";
     if (memorizationRating.isEmpty) memorizationRating = "جيد";
     
@@ -73,11 +92,30 @@ class _EditSessionPageState extends State<EditSessionPage> {
       newReview = TextEditingController(text: parts[0].trim());
       oldReview = TextEditingController(text: parts[1].trim());
     } else {
-      newReview = TextEditingController(text: fullReview);
-      oldReview = TextEditingController();
+      newReview = TextEditingController(text: data['nearReview'] ?? fullReview);
+      oldReview = TextEditingController(text: data['farReview'] ?? '');
     }
 
-    homework = TextEditingController(text: data['homework']);
+    // 🎯 ذكاء التوافق الرجعي لفصل الواجب القديم والجديد
+    String oldHw = data['homework'] ?? '';
+    String nHw = data['newHomework'] ?? '';
+    String rHw = data['reviewHomework'] ?? '';
+
+    if (nHw.isEmpty && rHw.isEmpty && oldHw.isNotEmpty) {
+      if (oldHw.contains('جديد:') || oldHw.contains('مراجعة:')) {
+        var parts = oldHw.split('|');
+        for (var p in parts) {
+          if (p.contains('جديد:')) nHw = p.replaceAll('جديد:', '').trim();
+          if (p.contains('مراجعة:')) rHw = p.replaceAll('مراجعة:', '').trim();
+        }
+      } else {
+        rHw = oldHw; // نضع الواجب القديم في المراجعة افتراضياً
+      }
+    }
+    
+    newHomeworkController = TextEditingController(text: nHw);
+    reviewHomeworkController = TextEditingController(text: rHw);
+
     readingBySight = TextEditingController(text: data['readingBySight'] ?? ''); 
     religiousActivities = TextEditingController(text: data['religiousActivities']);
     notes = TextEditingController(text: data['notes']);
@@ -123,7 +161,8 @@ class _EditSessionPageState extends State<EditSessionPage> {
     newMemorization.dispose();
     newReview.dispose();
     oldReview.dispose();
-    homework.dispose();
+    newHomeworkController.dispose();
+    reviewHomeworkController.dispose();
     readingBySight.dispose();
     religiousActivities.dispose();
     notes.dispose();
@@ -132,27 +171,56 @@ class _EditSessionPageState extends State<EditSessionPage> {
   }
 
   save() async {
+    if (!absent && !hasNewMemorization && !hasReview) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: Colors.red, content: Text("يجب تفعيل خيار الحفظ أو المراجعة على الأقل")),
+      );
+      return;
+    }
+
     setState(() => loading = true);
 
     double totalPages = isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0);
     String studentId = widget.data['studentId'] ?? '';
 
-    // 1️⃣ تحديث مستند الجلسة الحالي في مجموعة sessions
+    // 🎯 تنظيف البيانات بناءً على المفاتيح الذكية
+    String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent) ? '' : newMemorization.text.trim();
+    String finalNearReview = (!hasReview || absent || isCompletedStudent) ? '' : newReview.text.trim();
+    String finalFarReview = (!hasReview || absent) ? '' : oldReview.text.trim();
+    
+    String finalMemoRating = (!hasNewMemorization || absent || isCompletedStudent) ? '' : memorizationRating;
+    String finalRevRating = (!hasReview || absent) ? '' : reviewRating;
+
+    // 🚀 دمج الواجبين للعرض القديم وحفظهم كحقول منفصلة للجديد
+    String finalNewHW = (absent || isCompletedStudent) ? '' : newHomeworkController.text.trim();
+    String finalRevHW = absent ? '' : reviewHomeworkController.text.trim();
+    String combinedHW = "";
+    
+    if (isCompletedStudent) {
+      combinedHW = finalRevHW; 
+    } else {
+      if (finalNewHW.isNotEmpty) combinedHW += "جديد: $finalNewHW";
+      if (finalRevHW.isNotEmpty) combinedHW += (combinedHW.isNotEmpty ? " | " : "") + "مراجعة: $finalRevHW";
+    }
+
+    // 1️⃣ تحديث مستند الجلسة الحالي
     await sessionService.updateSession(
       sessionId: widget.sessionId,
       data: {
         'absent': absent,
         'supervisorId': selectedSupervisorId, 
         'supervisorName': selectedSupervisorName, 
-        'newMemorization': (absent || isCompletedStudent) ? '' : newMemorization.text.trim(),
-        'review': absent ? '' : (isCompletedStudent ? oldReview.text.trim() : "${newReview.text.trim()} | ${oldReview.text.trim()}"),
-        'nearReview': (absent || isCompletedStudent) ? '' : newReview.text.trim(), 
-        'farReview': absent ? '' : oldReview.text.trim(),   
-        'homework': absent ? '' : homework.text.trim(),
+        'newMemorization': finalNewMemo,
+        'review': absent || !hasReview ? '' : (isCompletedStudent ? finalFarReview : "$finalNearReview | $finalFarReview"),
+        'nearReview': finalNearReview, 
+        'farReview': finalFarReview,   
+        'homework': combinedHW,
+        'newHomework': finalNewHW,
+        'reviewHomework': finalRevHW,
         'readingBySight': absent ? '' : readingBySight.text.trim(), 
-        'memorizationRating': (absent || isCompletedStudent) ? '' : memorizationRating,
-        'reviewRating': absent ? '' : reviewRating,
-        'rating': absent ? '' : (isCompletedStudent ? reviewRating : memorizationRating), 
+        'memorizationRating': finalMemoRating,
+        'reviewRating': finalRevRating,
+        'rating': absent ? '' : (isCompletedStudent ? finalRevRating : (hasNewMemorization ? finalMemoRating : finalRevRating)), 
         'studentStatus': absent ? '' : studentStatus,
         'religiousActivities': absent ? '' : religiousActivities.text.trim(),
         'notes': notes.text.trim(),
@@ -160,14 +228,14 @@ class _EditSessionPageState extends State<EditSessionPage> {
       },
     );
 
-    // 2️⃣ المزامنة الفورية: تحديث مستند الطالب الرئيسي (فقط لو لم يكن خاتماً)
+    // 2️⃣ المزامنة الفورية: تحديث مستند الطالب الرئيسي
     if (!absent && studentId.isNotEmpty && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
       await FirebaseFirestore.instance.collection('students').doc(studentId).update({
         'memorizedPages': totalPages,
       });
     }
 
-    // 🎯 3️⃣ شحن التحديث السحري لمركز التنبيهات وإرساله كإشعار دفع خارجي معدل للأهل
+    // 🎯 3️⃣ شحن التحديث كإشعار
     if (studentId.isNotEmpty) {
       String notifyTitle = "✏️ تعديل في بيانات الحلقة";
       String notifyBody = "";
@@ -178,9 +246,18 @@ class _EditSessionPageState extends State<EditSessionPage> {
         notifyBody = "تم تعديل الجلسة وتوثيق غياب الطالب اليوم بـ السجل الإداري.";
         notifyType = "absent";
       } else {
-        notifyBody = isCompletedStudent
-            ? "تم تحديث وتعديل سجل مراجعة الختمة الشاملة بنجاح، التقييم الحالي: ($reviewRating)"
-            : "تم تعديل بيانات الإنجاز اليومي بنجاح، الحفظ: ($memorizationRating) والمراجعة: ($reviewRating)";
+        String bodyText = isCompletedStudent
+            ? "تم تحديث وتعديل سجل مراجعة الختمة الشاملة بنجاح"
+            : "تم تعديل بيانات الإنجاز اليومي بنجاح";
+            
+        if (hasNewMemorization && finalMemoRating.isNotEmpty) {
+          bodyText += "، الحفظ: ($finalMemoRating)";
+        }
+        if (hasReview && finalRevRating.isNotEmpty) {
+          bodyText += "، المراجعة: ($finalRevRating)";
+        }
+        
+        notifyBody = bodyText;
         notifyType = "regular";
       }
 
@@ -189,7 +266,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
         title: notifyTitle,
         body: notifyBody,
         type: notifyType,
-        context: context, // 🎯 تمرير الـ context لعرض الشريط
+        context: context, 
       );
     }
 
@@ -197,7 +274,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
     setState(() => loading = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث الجلسة وإخطار الأهل بالتعديل بنجاح", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
+      const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث الجلسة بنجاح", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
     );
 
     Navigator.pop(context);
@@ -208,11 +285,11 @@ class _EditSessionPageState extends State<EditSessionPage> {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية خلف الـ AppBar لجمالية الزجاج
+      extendBodyBehindAppBar: true, 
       backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, // AppBar شفاف
+        backgroundColor: Colors.transparent, 
         title: Text("تعديل بيانات الجلسة", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
@@ -221,7 +298,6 @@ class _EditSessionPageState extends State<EditSessionPage> {
           ? const Center(child: CircularProgressIndicator()) 
           : Stack(
               children: [
-                // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة (Blobs)
                 Container(
                   width: double.infinity,
                   height: double.infinity,
@@ -254,14 +330,12 @@ class _EditSessionPageState extends State<EditSessionPage> {
                   ),
                 ),
 
-                // 🏢 2. المحتوى الأساسي للواجهة
                 SafeArea(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     child: Column(
                       children: [
-                        // 🧊 قسم خيار الغياب (زجاجي)
                         _buildGlassContainer(
                           isDarkMode: isDarkMode,
                           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -275,7 +349,6 @@ class _EditSessionPageState extends State<EditSessionPage> {
                         ),
                         const SizedBox(height: 20),
 
-                        // 🧊 أقسام التعديل الرئيسية
                         if (!absent) ...[
                           _buildSectionCard(
                             title: isCompletedStudent ? "تعديل مراجعة الختمة الشاملة 👑" : "تعديل الإنجاز القرآني",
@@ -283,26 +356,73 @@ class _EditSessionPageState extends State<EditSessionPage> {
                             isDarkMode: isDarkMode,
                             child: Column(
                               children: [
+                                // 🚀 أزرار التحكم بالمفاتيح
                                 if (!isCompletedStudent) ...[
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
+                                          child: CheckboxListTile(
+                                            activeColor: Colors.blueAccent,
+                                            title: Text("حفظ جديد", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
+                                            value: hasNewMemorization,
+                                            onChanged: (v) => setState(() => hasNewMemorization = v!),
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
+                                          child: CheckboxListTile(
+                                            activeColor: Colors.green,
+                                            title: Text("مراجعة", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
+                                            value: hasReview,
+                                            onChanged: (v) => setState(() => hasReview = v!),
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 20),
+                                ],
+
+                                if (!isCompletedStudent && hasNewMemorization) ...[
                                   TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: newMemorization, decoration: _glassInputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode)),
-                                  const SizedBox(height: 15),
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: newReview, decoration: _glassInputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode)),
                                   const SizedBox(height: 15),
                                 ],
                                 
-                                TextField(
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                  controller: oldReview, 
-                                  decoration: _glassInputDecoration(
-                                    isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
-                                    isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
-                                    isDarkMode
-                                  )
-                                ),
-                                const SizedBox(height: 15),
+                                if (hasReview) ...[
+                                  if (!isCompletedStudent) ...[
+                                    TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: newReview, decoration: _glassInputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode)),
+                                    const SizedBox(height: 15),
+                                  ],
+                                  TextField(
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
+                                    controller: oldReview, 
+                                    decoration: _glassInputDecoration(
+                                      isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
+                                      isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
+                                      isDarkMode
+                                    )
+                                  ),
+                                  const SizedBox(height: 15),
+                                ],
+
                                 TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: readingBySight, decoration: _glassInputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
                                 const SizedBox(height: 15),
-                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: homework, decoration: _glassInputDecoration(isCompletedStudent ? "المقدار المطلوب للمرة القادمة" : "الواجب", Icons.edit_note, isDarkMode)),
+                                
+                                // 🚀 الواجب المفصول
+                                if (isCompletedStudent) ...[
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: reviewHomeworkController, decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode)),
+                                ] else ...[
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: newHomeworkController, decoration: _glassInputDecoration("واجب الحفظ الجديد القادم", Icons.edit_document, isDarkMode)),
+                                  const SizedBox(height: 15),
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: reviewHomeworkController, decoration: _glassInputDecoration("واجب المراجعة القادم", Icons.import_contacts_rounded, isDarkMode)),
+                                ],
                                 
                                 if (!isCompletedStudent) ...[
                                   const SizedBox(height: 20), 
@@ -327,7 +447,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                             isDarkMode: isDarkMode,
                             child: Column(
                               children: [
-                                if (!isCompletedStudent) ...[
+                                if (!isCompletedStudent && hasNewMemorization) ...[
                                   DropdownButtonFormField<String>(
                                     value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(memorizationRating) ? memorizationRating : "جيد",
                                     dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
@@ -339,15 +459,18 @@ class _EditSessionPageState extends State<EditSessionPage> {
                                   const SizedBox(height: 15),
                                 ],
                                 
-                                DropdownButtonFormField<String>(
-                                  value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(reviewRating) ? reviewRating : "جيد",
-                                  dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                                  decoration: _glassInputDecoration(isCompletedStudent ? "تقييم مراجعة الختمة" : "تقييم المراجعة (الماضي)", Icons.rate_review_outlined, isDarkMode),
-                                  items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                                  onChanged: (v) => setState(() => reviewRating = v!),
-                                ),
-                                const SizedBox(height: 15),
+                                if (hasReview) ...[
+                                  DropdownButtonFormField<String>(
+                                    value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(reviewRating) ? reviewRating : "جيد",
+                                    dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                    decoration: _glassInputDecoration(isCompletedStudent ? "تقييم مراجعة الختمة" : "تقييم المراجعة", Icons.rate_review_outlined, isDarkMode),
+                                    items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                                    onChanged: (v) => setState(() => reviewRating = v!),
+                                  ),
+                                  const SizedBox(height: 15),
+                                ],
+
                                 DropdownButtonFormField<String>(
                                   value: studentStatus,
                                   dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
@@ -459,7 +582,6 @@ class _EditSessionPageState extends State<EditSessionPage> {
     );
   }
 
-  // 🧊 أداة تغليف الأقسام بتأثير الزجاج (Glassmorphism)
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = const EdgeInsets.all(16)}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),
@@ -488,7 +610,6 @@ class _EditSessionPageState extends State<EditSessionPage> {
     );
   }
 
-  // 🧊 أداة بطاقة القسم (تستخدم التغليف الزجاجي)
   Widget _buildSectionCard({required String title, required IconData icon, required Widget child, required bool isDarkMode}) {
     return _buildGlassContainer(
       isDarkMode: isDarkMode,
@@ -509,7 +630,6 @@ class _EditSessionPageState extends State<EditSessionPage> {
     );
   }
 
-  // 🧊 أداة حقول الإدخال الزجاجية
   InputDecoration _glassInputDecoration(String label, IconData icon, bool isDarkMode) {
     return InputDecoration(
       labelText: label,

@@ -215,7 +215,6 @@ class _StudentsPageState extends State<StudentsPage> {
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
-    // 🎯 أزلنا ה- orderBy من قاعدة البيانات لتجنب أخطاء الـ Index
     Query query = FirebaseFirestore.instance
         .collection('students')
         .where('cycleId', isEqualTo: widget.cycle.id);
@@ -313,7 +312,6 @@ class _StudentsPageState extends State<StudentsPage> {
                         return nameMatches && supervisorMatches;
                       }).toList();
 
-                      // 🎯 الترتيب برمجياً (حسب السيريال) لحل مشكلة الفايربيز
                       docs.sort((a, b) {
                         final aData = a.data() as Map<String, dynamic>;
                         final bData = b.data() as Map<String, dynamic>;
@@ -478,7 +476,8 @@ class _StudentsPageState extends State<StudentsPage> {
                     child: Text(
                       studentName, 
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo'),
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2, // 👈 السطر السحري: بيسمح للاسم ياخد سطرين
+                      overflow: TextOverflow.ellipsis, // 👈 بيحط ... بس إذا صار طويل لدرجة يخرب التصميم
                     ),
                   ),
                   if (!widget.isArchivedFromHistory)

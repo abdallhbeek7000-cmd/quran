@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:ui'; // 🎯 ضرورية جداً لتأثير الزجاج والـ Blur
+import 'dart:ui'; 
+import 'home_page.dart'; // 🎯 استدعاء صفحة الهوم مباشرة لتجنب أي أخطاء بالتوجيه
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,9 +20,7 @@ class _LoginPageState extends State<LoginPage> {
   bool rememberMe = false;
   bool isPasswordVisible = false;
 
-  // اللون المعتمد الفخم الخاص بك
   final Color primaryColor = const Color(0xff425c75);
-  // لون ذهبي مكمل يعطي انعكاس فخم تحت الزجاج
   final Color accentGold = const Color(0xffd4af37);
 
   login() async {
@@ -38,35 +37,49 @@ class _LoginPageState extends State<LoginPage> {
     try {
       setState(() => loading = true);
 
+      // 1. تسجيل الدخول عبر الفايربيز
       final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
       final uid = credential.user!.uid;
+      
+      // 2. البحث عن المستخدم في الجداول
       DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      String collectionName = 'users';
 
       if (!userDoc.exists) {
         userDoc = await FirebaseFirestore.instance.collection('supervisors').doc(uid).get();
+        collectionName = 'supervisors';
       }
 
-      if (!userDoc.exists) throw Exception("المستخدم غير موجود");
+      if (!userDoc.exists) throw Exception("حساب المستخدم غير موجود في النظام");
 
-      final role = userDoc['role'];
+      // 3. 🛡️ استخراج الرتبة بأمان تام (حتى لو الحقل ناقص بالداتا بيز)
+      final data = userDoc.data() as Map<String, dynamic>? ?? {};
+      String role = data.containsKey('role') ? data['role'] : (collectionName == 'users' ? 'manager' : 'supervisor');
 
+      // 4. 💾 حفظ البيانات بالذاكرة (إجباري لعمل زر التبديل السحري)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userRole', role); 
+      await prefs.setString('role', role); // حفظناها بالاسمين للاحتياط
+      await prefs.setString('userId', uid);    
+      
       if (rememberMe) {
-        final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isLoggedIn', true);
-        await prefs.setString('userRole', role); 
-        await prefs.setString('userId', uid);    
       }
 
       if (!mounted) return;
-      Navigator.pushReplacementNamed(
+      
+      // 5. 🚀 التوجيه المباشر والآمن لصفحة الهوم (حل مشكلة عدم الاستجابة)
+      Navigator.pushReplacement(
         context,
-        '/home',
-        arguments: {'uid': uid, 'role': role},
+        MaterialPageRoute(
+          builder: (_) => HomePage(uid: uid, role: role),
+        ),
       );
+      
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -74,13 +87,15 @@ class _LoginPageState extends State<LoginPage> {
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           content: Text(
-            "خطأ: ${e.toString().replaceAll('Exception: ', '')}", 
+            "خطأ في تسجيل الدخول: تأكد من صحة الإيميل وكلمة المرور", 
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
           ),
         ),
       );
     } finally {
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
 
@@ -89,7 +104,6 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // 🎨 1. الخلفية الجديدة: تدرج لوني أعمق لإبراز الزجاج
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -105,8 +119,6 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
-
-          // 📐 2. الأشكال العائمة (Blobs) لخلق انعكاسات تحت الزجاج
           Positioned(
             top: -50,
             left: -50,
@@ -127,12 +139,11 @@ class _LoginPageState extends State<LoginPage> {
               height: 350,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: accentGold.withOpacity(0.2), // لمسة ذهبية خفيفة
+                color: accentGold.withOpacity(0.2), 
               ),
             ),
           ),
 
-          // 🏢 3. المحتوى الأساسي للواجهة
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -142,8 +153,6 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: 10),
-
-                    // 🏢 شعار المعهد الملوكي
                     ShaderMask(
                       shaderCallback: (bounds) => LinearGradient(
                         colors: [primaryColor, const Color(0xff1e293b)], 
@@ -172,19 +181,18 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 40),
 
-                    // 🧊 4. كرت تسجيل الدخول الزجاجي (Liquid Glass)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(30),
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // قوة التغبيش الزجاجي
+                        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), 
                         child: Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 32),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.25), // شفافية الزجاج
+                            color: Colors.white.withOpacity(0.25), 
                             borderRadius: BorderRadius.circular(30),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.5), // لمعة حافة الزجاج
+                              color: Colors.white.withOpacity(0.5), 
                               width: 1.5,
                             ),
                           ),
@@ -206,7 +214,6 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               const SizedBox(height: 28),
 
-                              // ✉️ حقل الإيميل (نصف شفاف)
                               TextField(
                                 controller: emailController,
                                 keyboardType: TextInputType.emailAddress,
@@ -215,7 +222,6 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               const SizedBox(height: 16),
 
-                              // 🔒 حقل كلمة المرور (نصف شفاف)
                               TextField(
                                 controller: passwordController,
                                 obscureText: !isPasswordVisible,
@@ -233,7 +239,6 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               const SizedBox(height: 14),
 
-                              // ☑️ خيار البقاء مسجلاً (Remember Me)
                               Theme(
                                 data: Theme.of(context).copyWith(
                                   unselectedWidgetColor: primaryColor.withOpacity(0.5),
@@ -260,14 +265,13 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               const SizedBox(height: 28),
 
-                              // 🚀 زر الدخول الزجاجي الأنيق
                               SizedBox(
                                 width: double.infinity,
                                 height: 52,
                                 child: ElevatedButton(
                                   onPressed: loading ? null : login,
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: primaryColor.withOpacity(0.9), // لون شبه صلب ليبرز فوق الزجاج
+                                    backgroundColor: primaryColor.withOpacity(0.9), 
                                     foregroundColor: Colors.white,
                                     disabledBackgroundColor: primaryColor.withOpacity(0.5),
                                     shape: RoundedRectangleBorder(
@@ -306,14 +310,13 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // 🧊 دالة مخصصة لتنسيق الحقول بستايل زجاجي
   InputDecoration _glassInputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
       labelStyle: GoogleFonts.cairo(color: primaryColor.withOpacity(0.7), fontSize: 13, fontWeight: FontWeight.w600),
       prefixIcon: Icon(icon, color: primaryColor, size: 20),
       filled: true,
-      fillColor: Colors.white.withOpacity(0.4), // لون زجاجي بلوري للحقل
+      fillColor: Colors.white.withOpacity(0.4), 
       contentPadding: const EdgeInsets.symmetric(vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),

@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:ui'; // 🎯 ضرورية لتأثير الزجاج (Blur)
+import 'dart:ui'; 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as pkg_excel;
@@ -23,16 +23,15 @@ class StudentSessionsPage extends StatelessWidget {
   });
 
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37); // لون الإنعكاس الزجاجي
+  final Color accentGold = const Color(0xffd4af37); 
 
-  // 📊 دالة التصدير للإكسل (ذكية ومحدثة للتمييز بين الطالب الخاتم والعادي)
+  // 📊 دالة التصدير للإكسل
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("جاري تجهيز سجل الجلسات الشامل...", style: TextStyle(fontFamily: 'Cairo'))),
       );
 
-      // 1. جلب حالة الطالب أولاً لمعرفة هل هو خاتم أم لا
       DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
       bool isCompleted = false;
       if (studentDoc.exists && studentDoc.data() != null) {
@@ -56,7 +55,6 @@ class StudentSessionsPage extends StatelessWidget {
       pkg_excel.Sheet sheetObject = excel['سجل التسميع'];
       excel.delete('Sheet1');
 
-      // 📜 تكييف رؤوس الأعمدة بالإكسل حسب وضعية الختمة
       sheetObject.appendRow([
         pkg_excel.TextCellValue('التاريخ'),
         pkg_excel.TextCellValue('نوع الجلسة'),
@@ -81,25 +79,28 @@ class StudentSessionsPage extends StatelessWidget {
         String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : 'حلقة عادية');
         String supervisorResult = data['supervisorName'] ?? 'غير محدد';
 
-        String memRatingResult = isAbsent ? '---' : (isExam ? '---' : (data['memorizationRating'] ?? data['rating'] ?? '---'));
-        String revRatingResult = isAbsent ? '---' : (isExam ? '---' : (data['reviewRating'] ?? data['rating'] ?? '---'));
+        String memRatingResult = data['memorizationRating'] ?? data['rating'] ?? '';
+        String revRatingResult = data['reviewRating'] ?? data['rating'] ?? '';
         
         if (isExam && !isAbsent) {
           memRatingResult = 'علامة: ${data['examScore'] ?? 0} من 100';
           revRatingResult = 'اختبار';
+        } else if (isAbsent) {
+          memRatingResult = '---';
+          revRatingResult = '---';
         }
 
         sheetObject.appendRow([
           pkg_excel.TextCellValue(data['date']?.toString() ?? ''),
           pkg_excel.TextCellValue(sessionType),
           pkg_excel.TextCellValue(supervisorResult), 
-          pkg_excel.TextCellValue(isCompleted ? revRatingResult : memRatingResult),
-          pkg_excel.TextCellValue(isCompleted ? (isAbsent ? '---' : 'خاتم 👑') : revRatingResult),
+          pkg_excel.TextCellValue(isCompleted ? revRatingResult : (memRatingResult.isEmpty ? '---' : memRatingResult)),
+          pkg_excel.TextCellValue(isCompleted ? (isAbsent ? '---' : 'خاتم 👑') : (revRatingResult.isEmpty ? '---' : revRatingResult)),
           pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : (data['newMemorization'] ?? '')),
           pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : (data['nearReview'] ?? '')),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['farReview'] ?? (isCompleted ? data['review'] : ''))),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['farReview'] ?? (isCompleted ? (data['review'] ?? '') : ''))),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['readingBySight'] ?? '')),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['homework'] ?? '')),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['homework'] ?? '')), // الإكسل يستخدم الحقل المدمج القديم للسهولة
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['religiousActivities'] ?? '')), 
           pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---'))), 
           pkg_excel.TextCellValue(data['notes']?.toString() ?? ''),
@@ -123,11 +124,11 @@ class StudentSessionsPage extends StatelessWidget {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية خلف الـ AppBar لجمالية الزجاج
+      extendBodyBehindAppBar: true, 
       backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, // AppBar شفاف بالكامل
+        backgroundColor: Colors.transparent, 
         title: Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
@@ -141,7 +142,6 @@ class StudentSessionsPage extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة (Blobs)
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -174,7 +174,6 @@ class StudentSessionsPage extends StatelessWidget {
             ),
           ),
 
-          // 🏢 2. المحتوى الأساسي للواجهة
           SafeArea(
             child: FutureBuilder<DocumentSnapshot>(
               future: FirebaseFirestore.instance.collection('students').doc(studentId).get(),
@@ -220,16 +219,33 @@ class StudentSessionsPage extends StatelessWidget {
     );
   }
 
-  // 🧊 تصميم بطاقة الجلسة بستايل الزجاج (Liquid Glass)
   Widget _buildSessionTimelineItem(BuildContext context, String sessionId, Map<String, dynamic> data, bool isDarkMode, bool isCompletedStudent) {
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
 
-    String memRating = data['memorizationRating'] ?? data['rating'] ?? "غير مقيم";
-    if (memRating.isEmpty) memRating = "غير مقيم";
+    // 🚀 جلب التقييمات (إذا كانت مطفية في الجلسة ستكون فارغة)
+    String memRating = data['memorizationRating'] ?? "";
+    String revRating = data['reviewRating'] ?? "";
     
-    String revRating = data['reviewRating'] ?? data['rating'] ?? "غير مقيم";
-    if (revRating.isEmpty) revRating = "غير مقيم";
+    // التوافق الرجعي للجلسات القديمة التي تستخدم 'rating' فقط
+    if (memRating.isEmpty && data['rating'] != null && data['rating'].toString().isNotEmpty && data['newMemorization'] != null && data['newMemorization'].toString().isNotEmpty) {
+      memRating = data['rating'];
+    }
+    if (revRating.isEmpty && data['rating'] != null && data['rating'].toString().isNotEmpty && !isCompletedStudent && memRating.isEmpty) {
+      revRating = data['rating'];
+    } else if (revRating.isEmpty && data['rating'] != null && data['rating'].toString().isNotEmpty && isCompletedStudent) {
+      revRating = data['rating']; // الخاتم له تقييم واحد
+    }
+
+    // 🚀 جلب حقول الحفظ والمراجعة (للتحقق من وجودها)
+    String nMemo = data['newMemorization']?.toString().trim() ?? '';
+    String nRev = data['nearReview']?.toString().trim() ?? '';
+    String fRev = data['farReview']?.toString().trim() ?? (isCompletedStudent ? (data['review']?.toString().trim() ?? '') : '');
+    
+    // 🚀 جلب حقول الواجب
+    String nHw = data['newHomework']?.toString().trim() ?? '';
+    String rHw = data['reviewHomework']?.toString().trim() ?? '';
+    String oldHw = data['homework']?.toString().trim() ?? '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -238,7 +254,6 @@ class StudentSessionsPage extends StatelessWidget {
         customBorderColor: isAbsent ? Colors.red.withOpacity(0.4) : (isExam ? Colors.teal.withOpacity(0.4) : null),
         child: Column(
           children: [
-            // هيدر البطاقة الزجاجية
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
@@ -273,15 +288,18 @@ class StudentSessionsPage extends StatelessWidget {
                   else if (isExam)
                     _buildBadge("جلسة اختبار 📝", Colors.teal) 
                   else 
-                    // 🎯 تكييف شارات التقييم العلوية
+                    // 🎯 عرض الشارات بذكاء (تظهر فقط إذا كان التقييم موجوداً)
                     Row(
                       children: [
-                        if (isCompletedStudent)
-                          _buildBadge("مراجعة الختمة: $revRating", _getRatingColor(revRating))
-                        else ...[
-                          _buildBadge("حفظ: $memRating", _getRatingColor(memRating)),
-                          const SizedBox(width: 5),
-                          _buildBadge("مراجعة: $revRating", _getRatingColor(revRating)),
+                        if (isCompletedStudent && revRating.isNotEmpty)
+                          _buildBadge("مراجعة الختمة: $revRating", _getRatingColor(revRating)),
+                        if (!isCompletedStudent) ...[
+                          if (memRating.isNotEmpty) ...[
+                            _buildBadge("حفظ: $memRating", _getRatingColor(memRating)),
+                            const SizedBox(width: 5),
+                          ],
+                          if (revRating.isNotEmpty)
+                            _buildBadge("مراجعة: $revRating", _getRatingColor(revRating)),
                         ],
                       ],
                     ),
@@ -289,7 +307,6 @@ class StudentSessionsPage extends StatelessWidget {
               ),
             ),
             
-            // بيانات الجلسة 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               child: Column(
@@ -298,28 +315,52 @@ class StudentSessionsPage extends StatelessWidget {
                   Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
 
                   if (!isAbsent && !isExam) ...[
+                    // 🎯 عرض حقول الحفظ والمراجعة بذكاء
                     if (!isCompletedStudent) ...[
-                      _buildInfoRow(Icons.star_rounded, "الحفظ الجديد", data['newMemorization'], isDarkMode),
-                      Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
-                      _buildInfoRow(Icons.auto_stories_outlined, "مراجعة جديد", data['nearReview'], isDarkMode),
+                      if (nMemo.isNotEmpty) ...[
+                        _buildInfoRow(Icons.star_rounded, "الحفظ الجديد", nMemo, isDarkMode),
+                        Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                      ],
+                      if (nRev.isNotEmpty) ...[
+                        _buildInfoRow(Icons.auto_stories_outlined, "مراجعة جديد", nRev, isDarkMode),
+                        Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                      ],
+                    ],
+                    
+                    if (fRev.isNotEmpty) ...[
+                      _buildInfoRow(
+                        isCompletedStudent ? Icons.verified_user_rounded : Icons.history_edu, 
+                        isCompletedStudent ? "مراجعة الختمة الشاملة" : "مراجعة قديم", 
+                        fRev, 
+                        isDarkMode
+                      ),
                       Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
                     ],
                     
-                    _buildInfoRow(
-                      isCompletedStudent ? Icons.verified_user_rounded : Icons.history_edu, 
-                      isCompletedStudent ? "مراجعة الختمة الشاملة" : "مراجعة قديم", 
-                      isCompletedStudent ? (data['farReview'] ?? data['review']) : data['farReview'], 
-                      isDarkMode
-                    ),
-                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    if (data['readingBySight'] != null && data['readingBySight'].toString().isNotEmpty) ...[
+                      _buildInfoRow(Icons.menu_book_outlined, "قراءة نظراً", data['readingBySight'], isDarkMode),
+                      Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    ],
                     
-                    _buildInfoRow(Icons.menu_book_outlined, "قراءة نظراً", data['readingBySight'], isDarkMode),
-                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
-                    _buildInfoRow(Icons.edit_note, "الواجب", data['homework'], isDarkMode),
-                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    // 🎯 عرض حقول الواجب المنفصلة أو القديمة
+                    if (nHw.isNotEmpty || rHw.isNotEmpty) ...[
+                      if (nHw.isNotEmpty) ...[
+                        _buildInfoRow(Icons.edit_document, "واجب الحفظ الجديد", nHw, isDarkMode),
+                        Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                      ],
+                      if (rHw.isNotEmpty) ...[
+                        _buildInfoRow(Icons.import_contacts_rounded, isCompletedStudent ? "المقدار المطلوب للمرة القادمة" : "واجب المراجعة", rHw, isDarkMode),
+                        Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                      ],
+                    ] else if (oldHw.isNotEmpty) ...[
+                      _buildInfoRow(Icons.edit_note, "الواجب (السابق)", oldHw, isDarkMode),
+                      Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    ],
                     
-                    _buildInfoRow(Icons.mosque_outlined, "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
-                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    if (data['religiousActivities'] != null && data['religiousActivities'].toString().isNotEmpty) ...[
+                      _buildInfoRow(Icons.mosque_outlined, "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
+                      Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    ],
 
                     _buildInfoRow(
                       Icons.analytics_outlined, 
@@ -329,7 +370,8 @@ class StudentSessionsPage extends StatelessWidget {
                     ),
                     Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
 
-                    _buildInfoRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
+                    if (data['studentStatus'] != null && data['studentStatus'].toString().isNotEmpty)
+                      _buildInfoRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
                   ],
 
                   if (isExam && !isAbsent) ...[
@@ -387,7 +429,6 @@ class StudentSessionsPage extends StatelessWidget {
     );
   }
 
-  // 🧊 أداة مساعدة لتغليف العناصر وتأثير الزجاج الأساسية (Glassmorphism)
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),
