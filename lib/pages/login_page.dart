@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui'; 
-import 'home_page.dart'; // 🎯 استدعاء صفحة الهوم مباشرة لتجنب أي أخطاء بالتوجيه
+import 'home_page.dart'; 
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -45,25 +45,29 @@ class _LoginPageState extends State<LoginPage> {
 
       final uid = credential.user!.uid;
       
-      // 2. البحث عن المستخدم في الجداول
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      String collectionName = 'users';
+      // 2. الفحص الصارم: نبحث في جدول المشرفين أولاً
+      DocumentSnapshot supervisorDoc = await FirebaseFirestore.instance.collection('supervisors').doc(uid).get();
+      String role = '';
 
-      if (!userDoc.exists) {
-        userDoc = await FirebaseFirestore.instance.collection('supervisors').doc(uid).get();
-        collectionName = 'supervisors';
+      if (supervisorDoc.exists) {
+        role = 'supervisor';
+      } else {
+        // إذا لم يكن مشرفاً، نبحث في جدول المدراء
+        DocumentSnapshot managerDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        if (managerDoc.exists) {
+          role = 'manager';
+        } else {
+          throw Exception("حساب المستخدم غير موجود في النظام");
+        }
       }
 
-      if (!userDoc.exists) throw Exception("حساب المستخدم غير موجود في النظام");
-
-      // 3. 🛡️ استخراج الرتبة بأمان تام (حتى لو الحقل ناقص بالداتا بيز)
-      final data = userDoc.data() as Map<String, dynamic>? ?? {};
-      String role = data.containsKey('role') ? data['role'] : (collectionName == 'users' ? 'manager' : 'supervisor');
-
-      // 4. 💾 حفظ البيانات بالذاكرة (إجباري لعمل زر التبديل السحري)
+      // 3. 🧹 تنظيف الذاكرة القديمة بالكامل قبل الحفظ لمنع التداخل!
       final prefs = await SharedPreferences.getInstance();
+      await prefs.clear(); 
+
+      // 4. 💾 حفظ البيانات الجديدة بشكل نظيف
       await prefs.setString('userRole', role); 
-      await prefs.setString('role', role); // حفظناها بالاسمين للاحتياط
+      await prefs.setString('role', role); 
       await prefs.setString('userId', uid);    
       
       if (rememberMe) {
@@ -72,7 +76,7 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
       
-      // 5. 🚀 التوجيه المباشر والآمن لصفحة الهوم (حل مشكلة عدم الاستجابة)
+      // 5. 🚀 التوجيه الآمن لصفحة الهوم
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(

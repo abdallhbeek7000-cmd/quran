@@ -27,9 +27,10 @@ class _EditSessionPageState extends State<EditSessionPage> {
   late TextEditingController newReview; 
   late TextEditingController oldReview; 
   
-  // 🚀 فصل حقول الواجب في التعديل
+  // 🚀 فصل حقول الواجب في التعديل (3 حقول)
   late TextEditingController newHomeworkController;
-  late TextEditingController reviewHomeworkController;
+  late TextEditingController newReviewHomeworkController; // واجب مراجعة جديد
+  late TextEditingController oldReviewHomeworkController; // واجب مراجعة قديم
 
   late TextEditingController readingBySight; 
   late TextEditingController religiousActivities;
@@ -96,25 +97,33 @@ class _EditSessionPageState extends State<EditSessionPage> {
       oldReview = TextEditingController(text: data['farReview'] ?? '');
     }
 
-    // 🎯 ذكاء التوافق الرجعي لفصل الواجب القديم والجديد
+    // 🎯 ذكاء التوافق الرجعي لفصل الواجب القديم والجديد والمراجعات
     String oldHw = data['homework'] ?? '';
     String nHw = data['newHomework'] ?? '';
-    String rHw = data['reviewHomework'] ?? '';
+    String nRevHw = data['newReviewHomework'] ?? '';
+    String oRevHw = data['oldReviewHomework'] ?? '';
 
-    if (nHw.isEmpty && rHw.isEmpty && oldHw.isNotEmpty) {
-      if (oldHw.contains('جديد:') || oldHw.contains('مراجعة:')) {
-        var parts = oldHw.split('|');
-        for (var p in parts) {
-          if (p.contains('جديد:')) nHw = p.replaceAll('جديد:', '').trim();
-          if (p.contains('مراجعة:')) rHw = p.replaceAll('مراجعة:', '').trim();
-        }
+    // إذا لم تكن الحقول الجديدة موجودة، نحاول استخراجها من النسخ الأقدم
+    if (nHw.isEmpty && nRevHw.isEmpty && oRevHw.isEmpty && oldHw.isNotEmpty) {
+      String rHwLegacy = data['reviewHomework'] ?? ''; // من التعديل السابق
+      if (rHwLegacy.isNotEmpty) {
+        oRevHw = rHwLegacy; // نضع المراجعة القديمة في حقل المراجعة القديم كافتراضي
       } else {
-        rHw = oldHw; // نضع الواجب القديم في المراجعة افتراضياً
+        if (oldHw.contains('جديد:') || oldHw.contains('مراجعة:')) {
+          var parts = oldHw.split(RegExp(r'\n|\|'));
+          for (var p in parts) {
+            if (p.contains('حفظ:') || p.contains('جديد:')) nHw = p.replaceAll(RegExp(r'حفظ:|جديد:'), '').trim();
+            if (p.contains('مراجعة:')) oRevHw = p.replaceAll('مراجعة:', '').trim();
+          }
+        } else {
+          oRevHw = oldHw; 
+        }
       }
     }
     
     newHomeworkController = TextEditingController(text: nHw);
-    reviewHomeworkController = TextEditingController(text: rHw);
+    newReviewHomeworkController = TextEditingController(text: nRevHw);
+    oldReviewHomeworkController = TextEditingController(text: oRevHw);
 
     readingBySight = TextEditingController(text: data['readingBySight'] ?? ''); 
     religiousActivities = TextEditingController(text: data['religiousActivities']);
@@ -162,7 +171,8 @@ class _EditSessionPageState extends State<EditSessionPage> {
     newReview.dispose();
     oldReview.dispose();
     newHomeworkController.dispose();
-    reviewHomeworkController.dispose();
+    newReviewHomeworkController.dispose();
+    oldReviewHomeworkController.dispose();
     readingBySight.dispose();
     religiousActivities.dispose();
     notes.dispose();
@@ -191,16 +201,26 @@ class _EditSessionPageState extends State<EditSessionPage> {
     String finalMemoRating = (!hasNewMemorization || absent || isCompletedStudent) ? '' : memorizationRating;
     String finalRevRating = (!hasReview || absent) ? '' : reviewRating;
 
-    // 🚀 دمج الواجبين للعرض القديم وحفظهم كحقول منفصلة للجديد
+    // 🚀 دمج الواجبات للعرض القديم وحفظهم كحقول منفصلة للجديد
     String finalNewHW = (absent || isCompletedStudent) ? '' : newHomeworkController.text.trim();
-    String finalRevHW = absent ? '' : reviewHomeworkController.text.trim();
+    String finalNewRevHW = (absent || isCompletedStudent) ? '' : newReviewHomeworkController.text.trim();
+    String finalOldRevHW = absent ? '' : oldReviewHomeworkController.text.trim();
+    
     String combinedHW = "";
     
     if (isCompletedStudent) {
-      combinedHW = finalRevHW; 
+      combinedHW = finalOldRevHW; 
     } else {
-      if (finalNewHW.isNotEmpty) combinedHW += "جديد: $finalNewHW";
-      if (finalRevHW.isNotEmpty) combinedHW += (combinedHW.isNotEmpty ? " | " : "") + "مراجعة: $finalRevHW";
+      if (finalNewHW.isNotEmpty) combinedHW += "حفظ: $finalNewHW";
+      
+      List<String> revParts = [];
+      if (finalNewRevHW.isNotEmpty) revParts.add(finalNewRevHW);
+      if (finalOldRevHW.isNotEmpty) revParts.add(finalOldRevHW);
+      String combinedRev = revParts.join(" | ");
+
+      if (combinedRev.isNotEmpty) {
+        combinedHW += (combinedHW.isNotEmpty ? " \n " : "") + "مراجعة: $combinedRev";
+      }
     }
 
     // 1️⃣ تحديث مستند الجلسة الحالي
@@ -216,7 +236,8 @@ class _EditSessionPageState extends State<EditSessionPage> {
         'farReview': finalFarReview,   
         'homework': combinedHW,
         'newHomework': finalNewHW,
-        'reviewHomework': finalRevHW,
+        'newReviewHomework': finalNewRevHW,
+        'oldReviewHomework': finalOldRevHW,
         'readingBySight': absent ? '' : readingBySight.text.trim(), 
         'memorizationRating': finalMemoRating,
         'reviewRating': finalRevRating,
@@ -356,7 +377,6 @@ class _EditSessionPageState extends State<EditSessionPage> {
                             isDarkMode: isDarkMode,
                             child: Column(
                               children: [
-                                // 🚀 أزرار التحكم بالمفاتيح
                                 if (!isCompletedStudent) ...[
                                   Row(
                                     children: [
@@ -415,13 +435,15 @@ class _EditSessionPageState extends State<EditSessionPage> {
                                 TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: readingBySight, decoration: _glassInputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
                                 const SizedBox(height: 15),
                                 
-                                // 🚀 الواجب المفصول
+                                // 🚀 عرض حقول الواجب المفصولة لـ 3 أقسام
                                 if (isCompletedStudent) ...[
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: reviewHomeworkController, decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode)),
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: oldReviewHomeworkController, decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode)),
                                 ] else ...[
                                   TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: newHomeworkController, decoration: _glassInputDecoration("واجب الحفظ الجديد القادم", Icons.edit_document, isDarkMode)),
                                   const SizedBox(height: 15),
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: reviewHomeworkController, decoration: _glassInputDecoration("واجب المراجعة القادم", Icons.import_contacts_rounded, isDarkMode)),
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: newReviewHomeworkController, decoration: _glassInputDecoration("واجب المراجعة الجديد القادم", Icons.menu_book_rounded, isDarkMode)),
+                                  const SizedBox(height: 15),
+                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: oldReviewHomeworkController, decoration: _glassInputDecoration("واجب المراجعة القديم القادم", Icons.history_edu_rounded, isDarkMode)),
                                 ],
                                 
                                 if (!isCompletedStudent) ...[

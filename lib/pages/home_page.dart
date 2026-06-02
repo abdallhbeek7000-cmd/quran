@@ -47,7 +47,7 @@ class _HomePageState extends State<HomePage> {
   final Color accentGold = const Color(0xffd4af37); 
   bool _isUploadingManagerImage = false; 
 
-  // 🚀 متغير للتحقق إذا كان المشرف الحالي هو بالأساس مدير (God Mode)
+  // 🚀 متغير للتحقق إذا كان المستخدم الحالي هو بالأساس مدير (God Mode)
   bool isAlsoManager = false;
 
   @override
@@ -55,28 +55,27 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     loadCycle(); 
     _setupNotifications(); 
-    _checkIfManager(); // التحقق الصامت بالخلفية
+    _checkIfManager(); // التحقق الصامت الذكي
   }
 
-  // 🚀 دالة الفحص: تتأكد هل الحساب الأساسي هو حساب مدير؟
-  Future<void> _checkIfManager() async {
-    String realUid = FirebaseAuth.instance.currentUser?.uid ?? widget.uid;
+  // 🚀 الفحص الذكي والقطعي (بدون استعلامات قاعدة بيانات تسبب تداخل)
+  void _checkIfManager() {
+    String realUid = FirebaseAuth.instance.currentUser?.uid ?? '';
     
     if (widget.role == "manager") {
       if (mounted) setState(() => isAlsoManager = true);
-    } else {
-      try {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(realUid).get();
-        if (doc.exists && mounted) {
-          setState(() => isAlsoManager = true);
-        }
-      } catch (e) {
-        print("خطأ في التحقق من الإدارة: $e");
-      }
+    } 
+    // إذا كان الحساب الأصلي النشط بالهاتف يختلف عن حساب المشرف المعروض، فهو حتماً مدير متخفي
+    else if (realUid.isNotEmpty && realUid != widget.uid) {
+      if (mounted) setState(() => isAlsoManager = true);
+    } 
+    // غير هيك، فهو مشرف نظامي ١٠٠٪ ونخفي الزر
+    else {
+      if (mounted) setState(() => isAlsoManager = false);
     }
   }
 
-  // 🚀 نافذة اختيار المشرفين للمدير
+  // 🚀 نافذة تبديل الحسابات (الخاصة بالمدير فقط)
   void _showSupervisorsList(bool isDark) {
     showModalBottomSheet(
       context: context,
@@ -95,10 +94,41 @@ class _HomePageState extends State<HomePage> {
             children: [
               Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(10))),
               const SizedBox(height: 20),
-              Text("الدخول كـ مشرف", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+              Text("إدارة الحسابات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+              
+              // 🚀 زر العودة للمدير إذا كان داخل حساب مشرف
+              if (isAlsoManager && widget.role == 'supervisor') ...[
+                const SizedBox(height: 15),
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _returnToManager();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.admin_panel_settings_rounded, color: Colors.orange.shade800),
+                        const SizedBox(width: 10),
+                        Text("العودة للوحة الإدارة الأساسية", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.orange.shade800)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Divider(color: isDark ? Colors.white24 : Colors.black12),
+              ],
+
               const SizedBox(height: 10),
-              Text("اختر المشرف الذي تود إدارة حسابه:", style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : Colors.black54, fontFamily: 'Cairo')),
-              const SizedBox(height: 15),
+              Text("الدخول كـ مشرف:", style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : Colors.black54, fontFamily: 'Cairo')),
+              const SizedBox(height: 10),
+              
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
@@ -115,6 +145,7 @@ class _HomePageState extends State<HomePage> {
                         String supId = docs[index].id;
                         String name = sup['name'] ?? 'مشرف';
                         String phone = sup['phone'] ?? '';
+                        String? imageUrl = sup['imageUrl']; // 🚀 جلب الصورة
                         
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
@@ -126,7 +157,8 @@ class _HomePageState extends State<HomePage> {
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: primaryColor.withOpacity(0.2),
-                              child: Icon(Icons.person, color: primaryColor),
+                              backgroundImage: imageUrl != null && imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+                              child: (imageUrl == null || imageUrl.isEmpty) ? Icon(Icons.person, color: primaryColor) : null,
                             ),
                             title: Text(name, style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87)),
                             subtitle: Text(phone, style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54, fontSize: 12)),
@@ -146,12 +178,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🚀 تنفيذ الدخول لحساب المشرف
+  // 🚀 تنفيذ الدخول لحساب المشرف (وهمي)
   void _impersonateSupervisor(String supId) async {
-    Navigator.pop(context); // إغلاق القائمة
+    Navigator.pop(context); 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('role', 'supervisor');
-    await prefs.setString('userId', supId); // نوهم التطبيق أن الـ ID الحالي هو للمشرف
+    await prefs.setString('userId', supId); 
 
     if (!mounted) return;
     Navigator.pushReplacement(
@@ -160,7 +192,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🚀 العودة للوحة الإدارة
+  // 🚀 العودة للوحة الإدارة الحقيقية
   void _returnToManager() async {
     String realUid = FirebaseAuth.instance.currentUser?.uid ?? widget.uid;
     final prefs = await SharedPreferences.getInstance();
@@ -178,7 +210,6 @@ class _HomePageState extends State<HomePage> {
     try {
       String realUid = FirebaseAuth.instance.currentUser?.uid ?? '';
       
-      // 🛡️ حماية أمنية: لا تقم بتحديث توكن الإشعارات إذا كان المدير متخفياً كحساب مشرف
       if (widget.uid != realUid && widget.role == 'supervisor') return;
 
       FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -207,6 +238,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // 🚀 تسجيل الخروج النهائي وتنظيف كامل
   logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear(); 
@@ -249,11 +281,11 @@ class _HomePageState extends State<HomePage> {
           style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo'),
         ),
         actions: [
-          // 🚀 زر الدخول لحسابات المشرفين (يظهر للمدير فقط في وضع الإدارة)
-          if (widget.role == "manager")
+          // 🚀 زر الدخول لحسابات المشرفين (يظهر فقط وفقط إذا كان الحساب الأصلي مدير)
+          if (isAlsoManager)
             IconButton(
               icon: Icon(Icons.people_alt_rounded, color: isDark ? accentGold : primaryColor),
-              tooltip: "الدخول كـ مشرف",
+              tooltip: "إدارة الحسابات",
               onPressed: () => _showSupervisorsList(isDark),
             ),
           IconButton(
@@ -360,39 +392,7 @@ class _HomePageState extends State<HomePage> {
                         ],
                       ),
                     ),
-                    
                     const SizedBox(height: 20),
-
-                    // 🚀 زر العودة للمدير (يظهر فقط إذا كان المدير داخل حساب مشرف)
-                    if (isAlsoManager && widget.role == 'supervisor') ...[
-                      InkWell(
-                        onTap: _returnToManager,
-                        borderRadius: BorderRadius.circular(20),
-                        child: _buildGlassContainer(
-                          isDark: isDark,
-                          customColor: Colors.orangeAccent.withOpacity(isDark ? 0.2 : 0.1),
-                          customBorderColor: Colors.orangeAccent.withOpacity(0.5),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.admin_panel_settings_rounded, color: isDark ? Colors.orangeAccent : Colors.orange.shade800, size: 28),
-                              const SizedBox(width: 12),
-                              Text(
-                                "العودة للوحة الإدارة",
-                                style: TextStyle(
-                                  fontSize: 16, 
-                                  fontWeight: FontWeight.bold, 
-                                  fontFamily: 'Cairo', 
-                                  color: isDark ? Colors.orangeAccent : Colors.orange.shade800,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
 
                     GridView.count(
                       shrinkWrap: true,

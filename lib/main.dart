@@ -3,6 +3,8 @@ import 'package:flutter/services.dart'; // 🎯 استيراد للتحكم بش
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart'; 
+// 🚀 استدعاء مكتبة اللغات لقلب التطبيق من اليمين لليسار
+import 'package:flutter_localizations/flutter_localizations.dart'; 
 import 'firebase_options.dart';
 import 'utils/app_colors.dart';
 import 'pages/login_page.dart';
@@ -86,6 +88,17 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       title: "معهد الشيخ سعيد العبدالله",
       themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+
+      // 🚀 الأسطر السحرية لقلب التطبيق بالكامل ليصبح عربي (RTL)
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('ar', 'AE'), // 👈 دعم اللغة العربية
+      ],
+      locale: const Locale('ar', 'AE'), // 👈 فرض العربية كلغة أساسية وإجبارية
 
       // ☀️ السمة النهارية (الزجاج الفاتح)
       theme: ThemeData(
