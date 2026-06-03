@@ -59,7 +59,7 @@ class StudentSessionsPage extends StatelessWidget {
       sheetObject.appendRow([
         pkg_excel.TextCellValue('التاريخ'),
         pkg_excel.TextCellValue('نوع الجلسة'),
-        pkg_excel.TextCellValue('المشرف المسجِّل'), 
+        pkg_excel.TextCellValue('المشرف / المشرفين'), 
         pkg_excel.TextCellValue(isCompleted ? 'تقييم مراجعة الختمة' : 'تقييم الحفظ الجديد'), 
         pkg_excel.TextCellValue(isCompleted ? 'الحالة' : 'تقييم المراجعة'),    
         pkg_excel.TextCellValue('الحفظ الجديد'),
@@ -80,7 +80,12 @@ class StudentSessionsPage extends StatelessWidget {
         bool isExam = data['isExam'] ?? false;
 
         String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : 'حلقة عادية');
-        String supervisorResult = data['supervisorName'] ?? 'غير محدد';
+        
+        // 🚀 معالجة تعدد المشرفين في التصدير
+        List<dynamic>? supNamesList = data['supervisorNames'];
+        String supervisorResult = (supNamesList != null && supNamesList.isNotEmpty) 
+            ? supNamesList.join(' ، ') 
+            : (data['supervisorName'] ?? 'غير محدد');
 
         String memRatingResult = data['memorizationRating'] ?? data['rating'] ?? '';
         String revRatingResult = data['reviewRating'] ?? data['rating'] ?? '';
@@ -247,6 +252,12 @@ class StudentSessionsPage extends StatelessWidget {
     String oRevHw = data['oldReviewHomework']?.toString().trim() ?? '';
     String oldHw = data['homework']?.toString().trim() ?? '';
 
+    // 🚀 معالجة أسماء المشرفين المتعددين للواجهة
+    List<dynamic>? supNamesList = data['supervisorNames'];
+    String supervisorsDisplay = (supNamesList != null && supNamesList.isNotEmpty) 
+        ? supNamesList.join(' ، ') 
+        : (data['supervisorName'] ?? 'غير محدد');
+
     // بناء مربعات الإنجاز الديناميكية (الشبكة)
     List<Widget> activeBoxes = [];
     if (isCompletedStudent && fRev.isNotEmpty) {
@@ -320,7 +331,13 @@ class StudentSessionsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildMinimalistDetailRow(Icons.person_outline, "المشرف المسجِّل", data['supervisorName'] ?? "غير محدد", isDarkMode, isBold: true),
+                  _buildMinimalistDetailRow(
+                    Icons.person_outline, 
+                    (supNamesList != null && supNamesList.length > 1) ? "المشرفين" : "المشرف المسجِّل", 
+                    supervisorsDisplay, 
+                    isDarkMode, 
+                    isBold: true
+                  ),
                   Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
 
                   if (!isAbsent && !isExam) ...[
@@ -434,7 +451,6 @@ class StudentSessionsPage extends StatelessWidget {
     );
   }
 
-  // أداة فرعية لعرض سطر من سطور صندوق الواجب
   Widget _buildHomeworkRow(String label, String value, bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4, right: 22),

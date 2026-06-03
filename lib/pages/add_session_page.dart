@@ -33,10 +33,9 @@ class _AddSessionPageState extends State<AddSessionPage> {
   final newReview = TextEditingController(); 
   final oldReview = TextEditingController(); 
   
-  // 🚀 فصل حقول الواجب إلى 3 أقسام
   final newHomeworkController = TextEditingController();
-  final newReviewHomeworkController = TextEditingController(); // واجب مراجعة جديد
-  final oldReviewHomeworkController = TextEditingController(); // واجب مراجعة قديم
+  final newReviewHomeworkController = TextEditingController(); 
+  final oldReviewHomeworkController = TextEditingController(); 
 
   final readingBySight = TextEditingController(); 
   final religiousActivities = TextEditingController();
@@ -63,8 +62,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
   bool isCompletedStudent = false;
   bool checkingStudentType = true;
 
-  String? selectedSupervisorId;
-  String? selectedSupervisorName;
+  List<Map<String, String>> selectedSupervisors = [];
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37); 
@@ -72,56 +70,225 @@ class _AddSessionPageState extends State<AddSessionPage> {
   @override
   void initState() {
     super.initState();
-    selectedSupervisorId = widget.supervisorId;
-    selectedSupervisorName = widget.supervisorName;
+    selectedSupervisors.add({
+      'id': widget.supervisorId,
+      'name': widget.supervisorName
+    });
+    
+    // 🚀 مراقبة حقل الحفظ الجديد لاستخراج أعلى رقم تلقائياً
+    newMemorization.addListener(_extractHighestPageNumber);
+
     _checkIfStudentIsCompleted();
+    _loadPreviousSessionData(); 
+  }
+
+  @override
+  void dispose() {
+    newMemorization.removeListener(_extractHighestPageNumber);
+    newMemorization.dispose();
+    newReview.dispose();
+    oldReview.dispose();
+    newHomeworkController.dispose();
+    newReviewHomeworkController.dispose();
+    oldReviewHomeworkController.dispose();
+    readingBySight.dispose();
+    religiousActivities.dispose();
+    notes.dispose();
+    absenceReasonController.dispose();
+    examScoreController.dispose();
+    totalMemorizedPagesController.dispose();
+    super.dispose();
+  }
+
+  // 🚀 دالة ذكية لاستخراج أعلى رقم من النص ووضعه في الإجمالي
+  void _extractHighestPageNumber() {
+    if (isCompletedStudent || absent || isExam) return;
+    
+    String text = newMemorization.text;
+    RegExp regExp = RegExp(r'\d+');
+    Iterable<Match> matches = regExp.allMatches(text);
+    
+    if (matches.isNotEmpty) {
+      List<int> numbers = matches.map((m) => int.parse(m.group(0)!)).toList();
+      int maxNumber = numbers.reduce((a, b) => a > b ? a : b);
+      
+      // تأكد أن الرقم ضمن صفحات المصحف المنطقية
+      if (maxNumber > 0 && maxNumber <= 604) {
+        // نستخدم text بدلاً من setState حتى لا نعيد بناء الواجهة مع كل حرف نكتبه
+        if (totalMemorizedPagesController.text != maxNumber.toString()) {
+          totalMemorizedPagesController.text = maxNumber.toString();
+        }
+      }
+    }
+  }
+
+  // 🚀 دالة جلب الواجبات من الجلسة السابقة بدقة عالية
+  Future<void> _loadPreviousSessionData() async {
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('sessions')
+          .where('studentId', isEqualTo: widget.studentId)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        var docs = querySnapshot.docs.toList();
+        
+        docs.sort((a, b) {
+          var dataA = a.data();
+          var dataB = b.data();
+
+          Timestamp? tA = dataA['timestamp'] as Timestamp?;
+          Timestamp? tB = dataB['timestamp'] as Timestamp?;
+          
+          if (tA != null && tB != null) return tB.compareTo(tA);
+          
+          String dateA = dataA['date'] ?? '';
+          String dateB = dataB['date'] ?? '';
+          return dateB.compareTo(dateA); 
+        });
+
+        final lastSession = docs.first.data();
+        
+        if (mounted) {
+          setState(() {
+            newMemorization.text = lastSession['newHomework'] ?? '';
+            newReview.text = lastSession['newReviewHomework'] ?? '';
+            oldReview.text = lastSession['oldReviewHomework'] ?? '';
+          });
+          // 🚀 استدعاء الاستخراج بعد التعبئة التلقائية لتحديث الإجمالي
+          _extractHighestPageNumber();
+        }
+      }
+    } catch (e) {
+      print("❌ خطأ في جلب الجلسة السابقة: $e");
+    }
   }
 
   Future<void> _checkIfStudentIsCompleted() async {
     try {
-      DocumentSnapshot studentDoc = await FirebaseFirestore.instance
-          .collection('students')
-          .doc(widget.studentId)
-          .get();
-          
+      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(widget.studentId).get();
       if (studentDoc.exists && studentDoc.data() != null) {
         Map<String, dynamic> data = studentDoc.data() as Map<String, dynamic>;
         if (data['studentType'] == 'completed') {
-          setState(() {
-            isCompletedStudent = true;
-          });
+          setState(() => isCompletedStudent = true);
         }
       }
     } catch (e) {
       print("Error checking student type: $e");
     } finally {
-      setState(() {
-        checkingStudentType = false;
-      });
+      setState(() => checkingStudentType = false);
     }
+  }
+
+  void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  height: MediaQuery.of(context).size.height * 0.7,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.95),
+                    border: Border(top: BorderSide(color: isDarkMode ? Colors.white24 : Colors.white, width: 1.5)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
+                      const SizedBox(height: 20),
+                      Text("حدد المشرفين المشاركين", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                      const SizedBox(height: 15),
+                      Expanded(
+                        child: FutureBuilder<List<QuerySnapshot>>(
+                          future: Future.wait([
+                            FirebaseFirestore.instance.collection('users').get(),
+                            FirebaseFirestore.instance.collection('supervisors').get()
+                          ]),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                            
+                            List<Map<String, String>> allStaff = [];
+                            if (snapshot.hasData) {
+                              for (var doc in snapshot.data![0].docs) {
+                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
+                              }
+                              for (var doc in snapshot.data![1].docs) {
+                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
+                              }
+                            }
+
+                            return ListView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: allStaff.length,
+                              itemBuilder: (context, index) {
+                                final staff = allStaff[index];
+                                final isSelected = selectedSupervisors.any((s) => s['id'] == staff['id']);
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                                    borderRadius: BorderRadius.circular(15),
+                                    border: Border.all(color: isSelected ? accentGold : Colors.transparent),
+                                  ),
+                                  child: CheckboxListTile(
+                                    activeColor: accentGold,
+                                    title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
+                                    value: isSelected,
+                                    onChanged: (val) {
+                                      setModalState(() {
+                                        if (val == true) {
+                                          selectedSupervisors.add(staff);
+                                        } else {
+                                          if (selectedSupervisors.length > 1) {
+                                            selectedSupervisors.removeWhere((s) => s['id'] == staff['id']);
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب اختيار مشرف واحد على الأقل")));
+                                          }
+                                        }
+                                      });
+                                      setState(() {}); 
+                                    },
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+        );
+      }
+    );
   }
 
   addSession() async {
     final hasToday = await sessionService.hasSessionToday(widget.studentId);
     if (hasToday) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Colors.orange, content: Text("تم تسجيل جلسة اليوم مسبقًا")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.orange, content: Text("تم تسجيل جلسة اليوم مسبقًا")));
       return;
     }
 
     if (isExam && !absent && examScoreController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Colors.red, content: Text("يرجى إدخال علامة الاختبار أولاً")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.red, content: Text("يرجى إدخال علامة الاختبار أولاً")));
       return;
     }
 
     if (!absent && !isExam && !hasNewMemorization && !hasReview) {
-       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Colors.red, content: Text("يجب تفعيل خيار الحفظ أو المراجعة على الأقل")),
-      );
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.red, content: Text("يجب تفعيل خيار الحفظ أو المراجعة على الأقل")));
       return;
     }
 
@@ -136,19 +303,15 @@ class _AddSessionPageState extends State<AddSessionPage> {
     String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent) ? '' : memorizationRating;
     String finalRevRating = (!hasReview || absent || isExam) ? '' : reviewRating;
 
-    // 🚀 دمج الواجبات بشكل ذكي لتظهر مرتبة
     String finalNewHW = (absent || isExam || isCompletedStudent) ? '' : newHomeworkController.text.trim();
     String finalNewRevHW = (absent || isExam || isCompletedStudent) ? '' : newReviewHomeworkController.text.trim();
     String finalOldRevHW = (absent || isExam) ? '' : oldReviewHomeworkController.text.trim();
     
     String combinedHW = "";
-    
     if (isCompletedStudent) {
-      combinedHW = finalOldRevHW; // طالب الختمة لديه واجب مراجعة فقط ونستخدم حقل القديم برمجياً
+      combinedHW = finalOldRevHW; 
     } else {
       if (finalNewHW.isNotEmpty) combinedHW += "حفظ: $finalNewHW";
-      
-      // دمج المراجعة الجديد والقديم إذا وجدوا
       List<String> revParts = [];
       if (finalNewRevHW.isNotEmpty) revParts.add(finalNewRevHW);
       if (finalOldRevHW.isNotEmpty) revParts.add(finalOldRevHW);
@@ -163,13 +326,13 @@ class _AddSessionPageState extends State<AddSessionPage> {
       id: '',
       studentId: widget.studentId,
       studentName: widget.studentName,
-      supervisorId: selectedSupervisorId ?? widget.supervisorId, 
-      supervisorName: selectedSupervisorName ?? widget.supervisorName, 
+      supervisorId: selectedSupervisors.first['id']!, 
+      supervisorName: selectedSupervisors.first['name']!, 
       date: date,
       absent: absent,
       newMemorization: finalNewMemo,
       review: (absent || isExam || !hasReview) ? '' : (isCompletedStudent ? finalFarReview : "$finalNearReview | $finalFarReview"),
-      homework: combinedHW, // تمرير الواجب المدمج للنموذج القديم
+      homework: combinedHW,
       rating: (absent || isExam) ? '' : (isCompletedStudent ? finalRevRating : (hasNewMemorization ? finalMemoRating : finalRevRating)),
       studentStatus: (absent || isExam) ? '' : studentStatus,
       religiousActivities: (absent || isExam) ? '' : religiousActivities.text.trim(),
@@ -178,11 +341,17 @@ class _AddSessionPageState extends State<AddSessionPage> {
 
     double totalPages = isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0);
 
+    List<String> supervisorIdsList = selectedSupervisors.map((e) => e['id']!).toList();
+    List<String> supervisorNamesList = selectedSupervisors.map((e) => e['name']!).toList();
+
     final Map<String, dynamic> sessionData = {
       'studentId': session.studentId,
       'studentName': session.studentName,
-      'supervisorId': session.supervisorId,
+      'supervisorId': session.supervisorId, 
       'supervisorName': session.supervisorName,
+      'supervisorIds': supervisorIdsList,     
+      'supervisorNames': supervisorNamesList, 
+      'timestamp': FieldValue.serverTimestamp(), 
       'date': session.date,
       'absent': session.absent,
       'isExam': isExam, 
@@ -192,8 +361,8 @@ class _AddSessionPageState extends State<AddSessionPage> {
       'farReview': finalFarReview,   
       'homework': session.homework,
       'newHomework': finalNewHW, 
-      'newReviewHomework': finalNewRevHW, // 🚀 الواجب المراجعة الجديد
-      'oldReviewHomework': finalOldRevHW, // 🚀 الواجب المراجعة القديم
+      'newReviewHomework': finalNewRevHW, 
+      'oldReviewHomework': finalOldRevHW, 
       'readingBySight': (absent || isExam) ? '' : readingBySight.text.trim(), 
       'memorizationRating': finalMemoRating,
       'reviewRating': finalRevRating,
@@ -211,18 +380,12 @@ class _AddSessionPageState extends State<AddSessionPage> {
     final studentRef = FirebaseFirestore.instance.collection('students').doc(widget.studentId);
     
     if (absent) {
-      await studentRef.update({
-        'consecutiveAbsences': FieldValue.increment(1),
-      });
+      await studentRef.update({'consecutiveAbsences': FieldValue.increment(1)});
     } else {
-      final Map<String, dynamic> updateData = {
-        'consecutiveAbsences': 0,
-      };
-      
+      final Map<String, dynamic> updateData = {'consecutiveAbsences': 0};
       if (!isExam && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
         updateData['memorizedPages'] = totalPages;
       }
-      
       await studentRef.update(updateData);
     }
 
@@ -240,36 +403,21 @@ class _AddSessionPageState extends State<AddSessionPage> {
       notifyType = "exam";
     } else {
       notifyTitle = "📢 تحديث يومي من الحلقة";
-      
-      String bodyText = isCompletedStudent 
-          ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح"
-          : "تم تسجيل يومية جديدة لـ ${widget.studentName}";
-          
-      if (hasNewMemorization && finalMemoRating.isNotEmpty) {
-        bodyText += "، الحفظ: ($finalMemoRating)";
-      }
-      if (hasReview && finalRevRating.isNotEmpty) {
-        bodyText += "، المراجعة: ($finalRevRating)";
-      }
-      
+      String bodyText = isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}";
+      if (hasNewMemorization && finalMemoRating.isNotEmpty) bodyText += "، الحفظ: ($finalMemoRating)";
+      if (hasReview && finalRevRating.isNotEmpty) bodyText += "، المراجعة: ($finalRevRating)";
       notifyBody = bodyText;
       notifyType = "regular";
     }
 
     await NotificationService.sendAndSaveNotification(
-      studentId: widget.studentId,
-      title: notifyTitle,
-      body: notifyBody,
-      type: notifyType,
-      context: context, 
+      studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType, context: context, 
     );
 
     if (!mounted) return;
     setState(() => loading = false);
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(backgroundColor: Colors.green, content: Text("تمت إضافة الجلسة بنجاح")),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text("تمت إضافة الجلسة بنجاح")));
     Navigator.pop(context);
   }
 
@@ -292,36 +440,11 @@ class _AddSessionPageState extends State<AddSessionPage> {
           : Stack(
               children: [
                 Container(
-                  width: double.infinity,
-                  height: double.infinity,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isDarkMode
-                          ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
-                          : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
+                  width: double.infinity, height: double.infinity,
+                  decoration: BoxDecoration(gradient: LinearGradient(colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
                 ),
-                Positioned(
-                  top: -50,
-                  right: -50,
-                  child: Container(
-                    width: 300,
-                    height: 300,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)),
-                  ),
-                ),
-                Positioned(
-                  bottom: 100,
-                  left: -80,
-                  child: Container(
-                    width: 250,
-                    height: 250,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
-                  ),
-                ),
+                Positioned(top: -50, right: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))),
+                Positioned(bottom: 100, left: -80, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))),
 
                 SafeArea(
                   child: SingleChildScrollView(
@@ -335,40 +458,27 @@ class _AddSessionPageState extends State<AddSessionPage> {
                           child: Column(
                             children: [
                               Container(
-                                decoration: BoxDecoration(
-                                  color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
+                                decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
                                 child: SwitchListTile(
                                   activeColor: Colors.orange,
                                   value: absent,
                                   title: Text("تسجيل الطالب غائب؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
                                   secondary: Icon(absent ? Icons.person_off : Icons.person, color: isDarkMode ? Colors.white70 : primaryColor),
                                   onChanged: (v) {
-                                    setState(() {
-                                      absent = v;
-                                      if (absent) isExam = false; 
-                                    });
+                                    setState(() { absent = v; if (absent) isExam = false; });
                                   },
                                 ),
                               ),
                               if (!absent) ...[
                                 const SizedBox(height: 10),
                                 Container(
-                                  decoration: BoxDecoration(
-                                    color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
+                                  decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
                                   child: SwitchListTile(
                                     activeColor: Colors.teal,
                                     value: isExam,
                                     title: Text("تسجيل كـ (جلسة اختبار) ؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
                                     secondary: Icon(Icons.assignment_turned_in, color: isExam ? Colors.teal : (isDarkMode ? Colors.white70 : primaryColor)),
-                                    onChanged: (v) {
-                                      setState(() {
-                                        isExam = v;
-                                      });
-                                    },
+                                    onChanged: (v) { setState(() { isExam = v; }); },
                                   ),
                                 ),
                               ],
@@ -442,7 +552,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                                 TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: readingBySight, decoration: _glassInputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
                                 const SizedBox(height: 15),
                                 
-                                // 🚀 عرض حقول الواجب المنفصلة لـ 3 أقسام
                                 if (isCompletedStudent) ...[
                                   TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: oldReviewHomeworkController, decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode)),
                                 ] else ...[
@@ -521,49 +630,39 @@ class _AddSessionPageState extends State<AddSessionPage> {
                         ],
 
                         const SizedBox(height: 20),
+                        
                         _buildSectionCard(
-                          title: "المشرف المسجِّل للجلسة",
-                          icon: Icons.assignment_ind_outlined,
+                          title: "المشرفين المشاركين بالتسميع",
+                          icon: Icons.groups_rounded,
                           isDarkMode: isDarkMode,
-                          child: FutureBuilder<QuerySnapshot>(
-                            future: FirebaseFirestore.instance.collection('supervisors').get(),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting) {
-                                return const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)));
-                              }
-                              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                                  return Text("لم يتم العثور على مشرفين", style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.black54));
-                              }
-
-                              List<DropdownMenuItem<String>> items = snapshot.data!.docs.map((doc) {
-                                String id = doc.id;
-                                String name = doc['name'] ?? 'مشرف غير معروف';
-                                return DropdownMenuItem<String>(
-                                  value: id,
-                                  child: Text(name),
-                                );
-                              }).toList();
-
-                              bool hasValue = snapshot.data!.docs.any((doc) => doc.id == selectedSupervisorId);
-                              if (!hasValue && items.isNotEmpty) {
-                                selectedSupervisorId = items.first.value;
-                              }
-
-                              return DropdownButtonFormField<String>(
-                                value: selectedSupervisorId,
-                                dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.w600),
-                                decoration: _glassInputDecoration("اسم المشرف الحالي / البديل", Icons.person_search_rounded, isDarkMode),
-                                items: items,
-                                onChanged: (v) {
-                                  setState(() {
-                                    selectedSupervisorId = v;
-                                    final selectedDoc = snapshot.data!.docs.firstWhere((doc) => doc.id == v);
-                                    selectedSupervisorName = selectedDoc['name'] ?? 'مشرف غير معروف';
-                                  });
-                                },
-                              );
-                            },
+                          child: InkWell(
+                            onTap: () => _showStaffSelectionBottomSheet(context, isDarkMode),
+                            borderRadius: BorderRadius.circular(15),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: selectedSupervisors.map((s) => Chip(
+                                        label: Text(s['name']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                        backgroundColor: accentGold,
+                                        elevation: 2,
+                                        padding: const EdgeInsets.all(0),
+                                      )).toList(),
+                                    ),
+                                  ),
+                                  Icon(Icons.edit_rounded, color: isDarkMode ? accentGold : primaryColor),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
 
@@ -577,10 +676,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
                               style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
                               controller: examScoreController,
                               keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(3),
-                              ],
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
                               decoration: _glassInputDecoration("علامة الطالب من 100", Icons.percent, isDarkMode),
                             ),
                           ),

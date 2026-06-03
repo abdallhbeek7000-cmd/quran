@@ -16,7 +16,6 @@ import 'assign_students_page.dart';
 import '../models/cycle_model.dart';
 import '../services/cycle_service.dart';
 import '../services/theme_provider.dart'; 
-import 'statistics_page.dart';
 import 'honor_board_page.dart';
 import 'dashboard_page.dart';
 import 'daily_stats_page.dart';
@@ -419,7 +418,6 @@ class _HomePageState extends State<HomePage> {
                         
                         _buildGlassMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
 
-                        _buildGlassMenuCard(Icons.bar_chart, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
                         _buildGlassMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                         _buildGlassMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
                       ],

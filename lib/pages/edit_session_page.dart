@@ -53,8 +53,8 @@ class _EditSessionPageState extends State<EditSessionPage> {
   bool isCompletedStudent = false;
   bool checkingStudentType = true;
 
-  String? selectedSupervisorId;
-  String? selectedSupervisorName;
+  // 🚀 قائمة المشرفين المتعددين
+  List<Map<String, String>> selectedSupervisors = [];
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37); 
@@ -91,7 +91,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
     if (fullReview.contains('|')) {
       var parts = fullReview.split('|');
       newReview = TextEditingController(text: parts[0].trim());
-      oldReview = TextEditingController(text: parts[1].trim());
+      oldReview = TextEditingController(text: parts.length > 1 ? parts[1].trim() : '');
     } else {
       newReview = TextEditingController(text: data['nearReview'] ?? fullReview);
       oldReview = TextEditingController(text: data['farReview'] ?? '');
@@ -103,11 +103,10 @@ class _EditSessionPageState extends State<EditSessionPage> {
     String nRevHw = data['newReviewHomework'] ?? '';
     String oRevHw = data['oldReviewHomework'] ?? '';
 
-    // إذا لم تكن الحقول الجديدة موجودة، نحاول استخراجها من النسخ الأقدم
     if (nHw.isEmpty && nRevHw.isEmpty && oRevHw.isEmpty && oldHw.isNotEmpty) {
-      String rHwLegacy = data['reviewHomework'] ?? ''; // من التعديل السابق
+      String rHwLegacy = data['reviewHomework'] ?? ''; 
       if (rHwLegacy.isNotEmpty) {
-        oRevHw = rHwLegacy; // نضع المراجعة القديمة في حقل المراجعة القديم كافتراضي
+        oRevHw = rHwLegacy; 
       } else {
         if (oldHw.contains('جديد:') || oldHw.contains('مراجعة:')) {
           var parts = oldHw.split(RegExp(r'\n|\|'));
@@ -132,8 +131,23 @@ class _EditSessionPageState extends State<EditSessionPage> {
     var initialPages = data['total_memorized_pages']?.toString() ?? '';
     totalMemorizedPagesController = TextEditingController(text: initialPages);
 
-    selectedSupervisorId = data['supervisorId'] ?? '';
-    selectedSupervisorName = data['supervisorName'] ?? '';
+    // 🚀 ذكاء التوافق الرجعي لقراءة المشرفين (سواء كان مشرف واحد قديماً أو قائمة حديثاً)
+    if (data.containsKey('supervisorIds') && data['supervisorIds'] is List && (data['supervisorIds'] as List).isNotEmpty) {
+      List ids = data['supervisorIds'];
+      List names = data['supervisorNames'] ?? [];
+      for (int i = 0; i < ids.length; i++) {
+        selectedSupervisors.add({
+          'id': ids[i].toString(),
+          'name': i < names.length ? names[i].toString() : 'مشرف',
+        });
+      }
+    } else {
+      String sId = data['supervisorId'] ?? '';
+      String sName = data['supervisorName'] ?? 'مشرف غير معروف';
+      if (sId.isNotEmpty) {
+        selectedSupervisors.add({'id': sId, 'name': sName});
+      }
+    }
 
     _checkIfStudentIsCompleted();
   }
@@ -180,6 +194,101 @@ class _EditSessionPageState extends State<EditSessionPage> {
     super.dispose();
   }
 
+  // 🚀 قائمة اختيار المشرفين المتعددة (BottomSheet)
+  void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  height: MediaQuery.of(context).size.height * 0.7,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.95),
+                    border: Border(top: BorderSide(color: isDarkMode ? Colors.white24 : Colors.white, width: 1.5)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
+                      const SizedBox(height: 20),
+                      Text("تعديل المشرفين المشاركين", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                      const SizedBox(height: 15),
+                      Expanded(
+                        child: FutureBuilder<List<QuerySnapshot>>(
+                          future: Future.wait([
+                            FirebaseFirestore.instance.collection('users').get(),
+                            FirebaseFirestore.instance.collection('supervisors').get()
+                          ]),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                            
+                            List<Map<String, String>> allStaff = [];
+                            if (snapshot.hasData) {
+                              for (var doc in snapshot.data![0].docs) {
+                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
+                              }
+                              for (var doc in snapshot.data![1].docs) {
+                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
+                              }
+                            }
+
+                            return ListView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: allStaff.length,
+                              itemBuilder: (context, index) {
+                                final staff = allStaff[index];
+                                final isSelected = selectedSupervisors.any((s) => s['id'] == staff['id']);
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                                    borderRadius: BorderRadius.circular(15),
+                                    border: Border.all(color: isSelected ? accentGold : Colors.transparent),
+                                  ),
+                                  child: CheckboxListTile(
+                                    activeColor: accentGold,
+                                    title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
+                                    value: isSelected,
+                                    onChanged: (val) {
+                                      setModalState(() {
+                                        if (val == true) {
+                                          selectedSupervisors.add(staff);
+                                        } else {
+                                          if (selectedSupervisors.length > 1) {
+                                            selectedSupervisors.removeWhere((s) => s['id'] == staff['id']);
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب إبقاء مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
+                                          }
+                                        }
+                                      });
+                                      setState(() {}); 
+                                    },
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
+
   save() async {
     if (!absent && !hasNewMemorization && !hasReview) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -193,7 +302,6 @@ class _EditSessionPageState extends State<EditSessionPage> {
     double totalPages = isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0);
     String studentId = widget.data['studentId'] ?? '';
 
-    // 🎯 تنظيف البيانات بناءً على المفاتيح الذكية
     String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent) ? '' : newMemorization.text.trim();
     String finalNearReview = (!hasReview || absent || isCompletedStudent) ? '' : newReview.text.trim();
     String finalFarReview = (!hasReview || absent) ? '' : oldReview.text.trim();
@@ -201,7 +309,6 @@ class _EditSessionPageState extends State<EditSessionPage> {
     String finalMemoRating = (!hasNewMemorization || absent || isCompletedStudent) ? '' : memorizationRating;
     String finalRevRating = (!hasReview || absent) ? '' : reviewRating;
 
-    // 🚀 دمج الواجبات للعرض القديم وحفظهم كحقول منفصلة للجديد
     String finalNewHW = (absent || isCompletedStudent) ? '' : newHomeworkController.text.trim();
     String finalNewRevHW = (absent || isCompletedStudent) ? '' : newReviewHomeworkController.text.trim();
     String finalOldRevHW = absent ? '' : oldReviewHomeworkController.text.trim();
@@ -223,13 +330,19 @@ class _EditSessionPageState extends State<EditSessionPage> {
       }
     }
 
+    // 🚀 تجهيز مصفوفة المشرفين للحفظ
+    List<String> supervisorIdsList = selectedSupervisors.map((e) => e['id']!).toList();
+    List<String> supervisorNamesList = selectedSupervisors.map((e) => e['name']!).toList();
+
     // 1️⃣ تحديث مستند الجلسة الحالي
     await sessionService.updateSession(
       sessionId: widget.sessionId,
       data: {
         'absent': absent,
-        'supervisorId': selectedSupervisorId, 
-        'supervisorName': selectedSupervisorName, 
+        'supervisorId': supervisorIdsList.isNotEmpty ? supervisorIdsList.first : '', // للأنظمة القديمة
+        'supervisorName': supervisorNamesList.isNotEmpty ? supervisorNamesList.first : '', // للأنظمة القديمة
+        'supervisorIds': supervisorIdsList, // مصفوفة الآيديهات المحدثة
+        'supervisorNames': supervisorNamesList, // مصفوفة الأسماء المحدثة
         'newMemorization': finalNewMemo,
         'review': absent || !hasReview ? '' : (isCompletedStudent ? finalFarReview : "$finalNearReview | $finalFarReview"),
         'nearReview': finalNearReview, 
@@ -515,49 +628,40 @@ class _EditSessionPageState extends State<EditSessionPage> {
                         ],
 
                         const SizedBox(height: 15),
+
+                        // 🚀 بطاقة عرض وتعديل المشرفين المتعددين
                         _buildSectionCard(
-                          title: "المشرف المسجِّل للجلسة",
-                          icon: Icons.assignment_ind_outlined,
+                          title: "المشرفين المشاركين بالتسميع",
+                          icon: Icons.groups_rounded,
                           isDarkMode: isDarkMode,
-                          child: FutureBuilder<QuerySnapshot>(
-                            future: FirebaseFirestore.instance.collection("supervisors").get(),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting) {
-                                return const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)));
-                              }
-                              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                                return Text("لم يتم العثور على مشرفين", style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.black54, fontFamily: 'Cairo'));
-                              }
-
-                              List<DropdownMenuItem<String>> items = snapshot.data!.docs.map((doc) {
-                                String id = doc.id;
-                                String name = doc["name"] ?? "مشرف غير معروف";
-                                return DropdownMenuItem<String>(
-                                  value: id,
-                                  child: Text(name, style: const TextStyle(fontFamily: 'Cairo')),
-                                );
-                              }).toList();
-
-                              bool hasValue = snapshot.data!.docs.any((doc) => doc.id == selectedSupervisorId);
-                              if (!hasValue && items.isNotEmpty) {
-                                selectedSupervisorId = items.first.value;
-                              }
-
-                              return DropdownButtonFormField<String>(
-                                value: selectedSupervisorId,
-                                dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                decoration: _glassInputDecoration("اسم المشرف الحالي / البديل", Icons.person_search_rounded, isDarkMode),
-                                items: items,
-                                onChanged: (v) {
-                                  setState(() {
-                                    selectedSupervisorId = v;
-                                    final selectedDoc = snapshot.data!.docs.firstWhere((doc) => doc.id == v);
-                                    selectedSupervisorName = selectedDoc["name"] ?? "مشرف غير معروف";
-                                  });
-                                },
-                              );
-                            },
+                          child: InkWell(
+                            onTap: () => _showStaffSelectionBottomSheet(context, isDarkMode),
+                            borderRadius: BorderRadius.circular(15),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: selectedSupervisors.map((s) => Chip(
+                                        label: Text(s['name']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                        backgroundColor: accentGold,
+                                        elevation: 2,
+                                        padding: const EdgeInsets.all(0),
+                                      )).toList(),
+                                    ),
+                                  ),
+                                  Icon(Icons.edit_rounded, color: isDarkMode ? accentGold : primaryColor),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
 
@@ -576,7 +680,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                         
                         const SizedBox(height: 35),
                         
-                        // 🚀 زر الحفظ الزجاجي
+                        // 🚀 زر الحفظ 
                         SizedBox(
                           width: double.infinity,
                           height: 55,
