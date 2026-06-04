@@ -257,125 +257,129 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
                             final Map<String, dynamic> reactions = msg['reactions'] ?? {};
                             final List<String> displayEmojis = reactions.values.map((e) => e.toString()).toSet().toList();
 
-                            return Align(
-                              alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 22), // مسافة للتفاعل
-                                constraints: BoxConstraints(
-                                  maxWidth: MediaQuery.of(context).size.width * 0.78, // عرض أوسع قليلاً للفقاعة
-                                ),
-                                child: Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    // 🚀 فقاعة الرسالة الزجاجية (مع GestureDetector للضغطة المطولة)
-                                    GestureDetector(
-                                      onLongPress: () => _showReactionMenu(context, msgDoc.id, isDark),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
-                                              blurRadius: 10,
-                                              offset: const Offset(0, 4),
-                                            )
-                                          ]
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.only(
-                                            topLeft: const Radius.circular(22),
-                                            topRight: const Radius.circular(22),
-                                            bottomLeft: Radius.circular(isMe ? 5 : 22), // انحناء حاد لجهة الإرسال
-                                            bottomRight: Radius.circular(isMe ? 22 : 5),
+                            // 🚀 تم إحاطة فقاعة المحادثة بـ _AnimatedMessageBubble
+                            return _AnimatedMessageBubble(
+                              index: index,
+                              isMe: isMe,
+                              child: Align(
+                                alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 22), 
+                                  constraints: BoxConstraints(
+                                    maxWidth: MediaQuery.of(context).size.width * 0.78, 
+                                  ),
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      GestureDetector(
+                                        onLongPress: () => _showReactionMenu(context, msgDoc.id, isDark),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 4),
+                                              )
+                                            ]
                                           ),
-                                          child: BackdropFilter(
-                                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                                            child: Container(
-                                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  colors: isMe 
-                                                      ? [primaryColor.withOpacity(0.85), primaryColor.withOpacity(0.7)] 
-                                                      : (isDark ? [Colors.white.withOpacity(0.15), Colors.white.withOpacity(0.05)] : [Colors.white.withOpacity(0.9), Colors.white.withOpacity(0.7)]),
-                                                  begin: Alignment.topLeft,
-                                                  end: Alignment.bottomRight,
-                                                ),
-                                                border: Border.all(
-                                                  color: isMe 
-                                                      ? Colors.white.withOpacity(0.25) 
-                                                      : (isDark ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.8)),
-                                                  width: 1.2,
-                                                ),
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment: isMe ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-                                                children: [
-                                                  Text(
-                                                    msg['text'] ?? '',
-                                                    style: TextStyle(
-                                                      fontFamily: 'Cairo',
-                                                      color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
-                                                      fontSize: 14.5,
-                                                      height: 1.4,
-                                                    ),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.only(
+                                              topLeft: const Radius.circular(22),
+                                              topRight: const Radius.circular(22),
+                                              bottomLeft: Radius.circular(isMe ? 5 : 22), 
+                                              bottomRight: Radius.circular(isMe ? 22 : 5),
+                                            ),
+                                            child: BackdropFilter(
+                                              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                              child: Container(
+                                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                                                decoration: BoxDecoration(
+                                                  gradient: LinearGradient(
+                                                    colors: isMe 
+                                                        ? [primaryColor.withOpacity(0.85), primaryColor.withOpacity(0.7)] 
+                                                        : (isDark ? [Colors.white.withOpacity(0.15), Colors.white.withOpacity(0.05)] : [Colors.white.withOpacity(0.9), Colors.white.withOpacity(0.7)]),
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment.bottomRight,
                                                   ),
-                                                  const SizedBox(height: 6),
-                                                  Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Text(
-                                                        timeString,
-                                                        style: TextStyle(
-                                                          fontFamily: 'Cairo',
-                                                          fontSize: 10,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: isMe ? Colors.white70 : (isDark ? Colors.white54 : Colors.black54),
-                                                        ),
+                                                  border: Border.all(
+                                                    color: isMe 
+                                                        ? Colors.white.withOpacity(0.25) 
+                                                        : (isDark ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.8)),
+                                                    width: 1.2,
+                                                  ),
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment: isMe ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      msg['text'] ?? '',
+                                                      style: TextStyle(
+                                                        fontFamily: 'Cairo',
+                                                        color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
+                                                        fontSize: 14.5,
+                                                        height: 1.4,
                                                       ),
-                                                      if (isMe) ...[
-                                                        const SizedBox(width: 5),
-                                                        Icon(
-                                                          Icons.done_all_rounded,
-                                                          size: 15,
-                                                          color: isReadByParent ? (isDark ? accentGold : Colors.lightBlueAccent) : Colors.white38,
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Text(
+                                                          timeString,
+                                                          style: TextStyle(
+                                                            fontFamily: 'Cairo',
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: isMe ? Colors.white70 : (isDark ? Colors.white54 : Colors.black54),
+                                                          ),
                                                         ),
-                                                      ]
-                                                    ],
-                                                  ),
-                                                ],
+                                                        if (isMe) ...[
+                                                          const SizedBox(width: 5),
+                                                          Icon(
+                                                            Icons.done_all_rounded,
+                                                            size: 15,
+                                                            color: isReadByParent ? (isDark ? accentGold : Colors.lightBlueAccent) : Colors.white38,
+                                                          ),
+                                                        ]
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    
-                                    // 🚀 شارة التفاعل العائمة بشكل راقي
-                                    if (displayEmojis.isNotEmpty)
-                                      Positioned(
-                                        bottom: -14,
-                                        left: isMe ? 15 : null,
-                                        right: isMe ? null : 15,
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(20),
-                                          child: BackdropFilter(
-                                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: isDark ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.9),
-                                                borderRadius: BorderRadius.circular(20),
-                                                border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300, width: 1.2),
-                                                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-                                              ),
-                                              child: Text(
-                                                displayEmojis.join(' '), 
-                                                style: const TextStyle(fontSize: 14),
+                                      
+                                      // 🚀 شارة التفاعل العائمة بشكل راقي
+                                      if (displayEmojis.isNotEmpty)
+                                        Positioned(
+                                          bottom: -14,
+                                          left: isMe ? 15 : null,
+                                          right: isMe ? null : 15,
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(20),
+                                            child: BackdropFilter(
+                                              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: isDark ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.9),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                  border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300, width: 1.2),
+                                                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                                                ),
+                                                child: Text(
+                                                  displayEmojis.join(' '), 
+                                                  style: const TextStyle(fontSize: 14),
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
@@ -453,6 +457,72 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// 🚀 الكلاس المسؤول عن حركة الرسالة الأنيميشن (السحب والتكبير)
+class _AnimatedMessageBubble extends StatefulWidget {
+  final Widget child;
+  final bool isMe;
+  final int index;
+
+  const _AnimatedMessageBubble({
+    required this.child,
+    required this.isMe,
+    required this.index,
+  });
+
+  @override
+  State<_AnimatedMessageBubble> createState() => _AnimatedMessageBubbleState();
+}
+
+class _AnimatedMessageBubbleState extends State<_AnimatedMessageBubble> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    // ضبط سرعة الأنيميشن لتكون ناعمة جداً
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    
+    // إذا كنت أنا المرسل بتطلع من اليمين، وإذا الطرف التاني بتطلع من اليسار
+    double startDx = widget.isMe ? -0.2 : 0.2; 
+    
+    _slideAnimation = Tween<Offset>(begin: Offset(startDx, 0.5), end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    );
+        
+    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    );
+
+    // 🚀 تطبيق الأنيميشن فقط للرسالة الجديدة (اللي الاندكس تبعها 0) لتجنب إرهاق الجهاز
+    if (widget.index == 0) {
+      _controller.forward();
+    } else {
+      _controller.value = 1.0; 
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SlideTransition(
+      position: _slideAnimation,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        // نقطة بداية الأنيميشن من الأسفل جهة الإرسال
+        alignment: widget.isMe ? Alignment.bottomLeft : Alignment.bottomRight, 
+        child: widget.child,
       ),
     );
   }
