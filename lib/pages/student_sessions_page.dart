@@ -25,6 +25,24 @@ class StudentSessionsPage extends StatelessWidget {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37); 
 
+  // 🚀 دالة ذكية لمعرفة اليوم بالعربي من التاريخ
+  String _getArabicDayName(String dateString) {
+    try {
+      List<String> parts = dateString.split('-');
+      if (parts.length == 3) {
+        int year = int.parse(parts[0]);
+        int month = int.parse(parts[1]);
+        int day = int.parse(parts[2]);
+        DateTime date = DateTime(year, month, day);
+        List<String> arabicDays = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+        return arabicDays[date.weekday - 1];
+      }
+    } catch (e) {
+      return "";
+    }
+    return "";
+  }
+
   // 📊 دالة التصدير للإكسل المُحدّثة
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
@@ -58,6 +76,7 @@ class StudentSessionsPage extends StatelessWidget {
       // 📜 تحديث رؤوس الأعمدة لتشمل تفصيل الواجبات
       sheetObject.appendRow([
         pkg_excel.TextCellValue('التاريخ'),
+        pkg_excel.TextCellValue('اليوم'), // 🚀 عمود جديد لليوم
         pkg_excel.TextCellValue('نوع الجلسة'),
         pkg_excel.TextCellValue('المشرف / المشرفين'), 
         pkg_excel.TextCellValue(isCompleted ? 'تقييم مراجعة الختمة' : 'تقييم الحفظ الجديد'), 
@@ -81,7 +100,11 @@ class StudentSessionsPage extends StatelessWidget {
 
         String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : 'حلقة عادية');
         
-        // 🚀 معالجة تعدد المشرفين في التصدير
+        // 🚀 معالجة اليوم للإكسل
+        String dateStr = data['date']?.toString() ?? '';
+        String dayName = _getArabicDayName(dateStr);
+
+        // معالجة تعدد المشرفين في التصدير
         List<dynamic>? supNamesList = data['supervisorNames'];
         String supervisorResult = (supNamesList != null && supNamesList.isNotEmpty) 
             ? supNamesList.join(' ، ') 
@@ -98,18 +121,18 @@ class StudentSessionsPage extends StatelessWidget {
           revRatingResult = '---';
         }
 
-        // معالجة التوافق الرجعي للواجب القديم في الإكسل
         String hwNew = data['newHomework'] ?? '';
         String hwNewRev = data['newReviewHomework'] ?? '';
         String hwOldRev = data['oldReviewHomework'] ?? '';
         String hwLegacy = data['homework'] ?? '';
 
         if (hwNew.isEmpty && hwNewRev.isEmpty && hwOldRev.isEmpty && hwLegacy.isNotEmpty) {
-          hwOldRev = hwLegacy; // وضع الواجب القديم في عمود المراجعة القديمة
+          hwOldRev = hwLegacy; 
         }
 
         sheetObject.appendRow([
-          pkg_excel.TextCellValue(data['date']?.toString() ?? ''),
+          pkg_excel.TextCellValue(dateStr),
+          pkg_excel.TextCellValue(dayName), // 🚀 إضافة اليوم للإكسل
           pkg_excel.TextCellValue(sessionType),
           pkg_excel.TextCellValue(supervisorResult), 
           pkg_excel.TextCellValue(isCompleted ? revRatingResult : (memRatingResult.isEmpty ? '---' : memRatingResult)),
@@ -227,7 +250,11 @@ class StudentSessionsPage extends StatelessWidget {
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
 
-    // جلب التقييمات
+    // 🚀 جلب ومعالجة التاريخ واليوم
+    String sessionDateRaw = data['date'] ?? '';
+    String dayName = _getArabicDayName(sessionDateRaw);
+    String displayDate = dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
+
     String memRating = data['memorizationRating'] ?? "";
     String revRating = data['reviewRating'] ?? "";
     
@@ -240,25 +267,21 @@ class StudentSessionsPage extends StatelessWidget {
       revRating = data['rating']; 
     }
 
-    // جلب حقول الحفظ والمراجعة
     String nMemo = data['newMemorization']?.toString().trim() ?? '';
     String nRev = data['nearReview']?.toString().trim() ?? '';
     String fRev = data['farReview']?.toString().trim() ?? (isCompletedStudent ? (data['review']?.toString().trim() ?? '') : '');
     String sight = data['readingBySight']?.toString().trim() ?? '';
     
-    // جلب حقول الواجب
     String nHw = data['newHomework']?.toString().trim() ?? '';
     String nRevHw = data['newReviewHomework']?.toString().trim() ?? '';
     String oRevHw = data['oldReviewHomework']?.toString().trim() ?? '';
     String oldHw = data['homework']?.toString().trim() ?? '';
 
-    // 🚀 معالجة أسماء المشرفين المتعددين للواجهة
     List<dynamic>? supNamesList = data['supervisorNames'];
     String supervisorsDisplay = (supNamesList != null && supNamesList.isNotEmpty) 
         ? supNamesList.join(' ، ') 
         : (data['supervisorName'] ?? 'غير محدد');
 
-    // بناء مربعات الإنجاز الديناميكية (الشبكة)
     List<Widget> activeBoxes = [];
     if (isCompletedStudent && fRev.isNotEmpty) {
       activeBoxes.add(_buildGridInfoBox(Icons.verified_user_rounded, "المقدار المسموع من مراجعة الختمة الشاملة", fRev, isDarkMode ? Colors.tealAccent : Colors.teal, isDarkMode));
@@ -276,7 +299,6 @@ class StudentSessionsPage extends StatelessWidget {
         customBorderColor: isAbsent ? Colors.red.withOpacity(0.4) : (isExam ? Colors.teal.withOpacity(0.4) : null),
         child: Column(
           children: [
-            // الهيدر (التاريخ والتقييمات)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
@@ -296,9 +318,10 @@ class StudentSessionsPage extends StatelessWidget {
                         color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? accentGold : primaryColor))
                       ),
                       const SizedBox(width: 8),
+                      // 🚀 هنا نعرض التاريخ مع اسم اليوم المدمج
                       Text(
-                        data['date'] ?? '', 
-                        style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? Colors.white : primaryColor)), fontFamily: 'Cairo')
+                        displayDate, 
+                        style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? Colors.white : primaryColor)), fontFamily: 'Cairo', fontSize: 13)
                       ),
                     ],
                   ),
@@ -325,7 +348,6 @@ class StudentSessionsPage extends StatelessWidget {
               ),
             ),
             
-            // جسم البطاقة
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               child: Column(
@@ -341,7 +363,6 @@ class StudentSessionsPage extends StatelessWidget {
                   Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
 
                   if (!isAbsent && !isExam) ...[
-                    // 🚀 شبكة الإنجاز اليومي الأنيقة
                     if (activeBoxes.isNotEmpty) ...[
                       for (int i = 0; i < activeBoxes.length; i += 2)
                         Padding(
@@ -360,7 +381,6 @@ class StudentSessionsPage extends StatelessWidget {
                       Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
                     ],
 
-                    // 🚀 صندوق الواجب المستقل والأنيق
                     if (nHw.isNotEmpty || nRevHw.isNotEmpty || oRevHw.isNotEmpty || oldHw.isNotEmpty) ...[
                       Container(
                         padding: const EdgeInsets.all(12),

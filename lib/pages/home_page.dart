@@ -22,6 +22,7 @@ import 'daily_stats_page.dart';
 import 'supervisor_page.dart';
 import 'inspirations_manage_page.dart'; 
 import 'supervisor_inbox_page.dart'; 
+import 'statistics_page.dart'; // 🚀 استدعاء صفحة الإحصائيات الجديدة
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -418,6 +419,9 @@ class _HomePageState extends State<HomePage> {
                         
                         _buildGlassMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
 
+                        // 🚀 إضافة زر الإحصائيات الجديد هنا
+                        _buildGlassMenuCard(Icons.pie_chart_rounded, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
+                        
                         _buildGlassMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                         _buildGlassMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
                       ],
