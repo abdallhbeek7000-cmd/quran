@@ -5,6 +5,7 @@ import '../models/session_model.dart';
 import '../services/session_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt; // 🚀 استدعاء مكتبة الصوت
 import '../services/theme_provider.dart'; 
 import '../services/notification_service.dart'; 
 
@@ -29,6 +30,12 @@ class AddSessionPage extends StatefulWidget {
 class _AddSessionPageState extends State<AddSessionPage> {
   final sessionService = SessionService();
   
+  // 🚀 متغيرات الذكاء الصوتي
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+  TextEditingController? _activeController;
+  String _initialText = '';
+
   final newMemorization = TextEditingController();
   final newReview = TextEditingController(); 
   final oldReview = TextEditingController(); 
@@ -70,12 +77,13 @@ class _AddSessionPageState extends State<AddSessionPage> {
   @override
   void initState() {
     super.initState();
+    _speech = stt.SpeechToText(); // 🚀 تهيئة محرك الصوت
+
     selectedSupervisors.add({
       'id': widget.supervisorId,
       'name': widget.supervisorName
     });
     
-    // 🚀 مراقبة حقل الحفظ الجديد لاستخراج أعلى رقم تلقائياً
     newMemorization.addListener(_extractHighestPageNumber);
 
     _checkIfStudentIsCompleted();
@@ -100,7 +108,43 @@ class _AddSessionPageState extends State<AddSessionPage> {
     super.dispose();
   }
 
-  // 🚀 دالة ذكية لاستخراج أعلى رقم من النص ووضعه في الإجمالي
+  // 🎙️ الخوارزمية المسؤولة عن الاستماع وكتابة النص
+  void _listen(TextEditingController controller) async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) {
+          if (val == 'done' || val == 'notListening') {
+            if (mounted) setState(() => _isListening = false);
+          }
+        },
+        onError: (val) => print('onError: $val'),
+      );
+      if (available) {
+        setState(() {
+          _isListening = true;
+          _activeController = controller;
+          _initialText = controller.text; // حفظ النص القديم لعدم حذفه
+        });
+        _speech.listen(
+          onResult: (val) {
+            if (mounted) {
+              setState(() {
+                // دمج النص القديم مع الكلام الجديد المسموع
+                _activeController!.text = _initialText + (val.recognizedWords.isNotEmpty ? ' ' + val.recognizedWords : '');
+                // وضع المؤشر في نهاية النص
+                _activeController!.selection = TextSelection.fromPosition(TextPosition(offset: _activeController!.text.length));
+              });
+            }
+          },
+          localeId: 'ar-SA', // 🚀 إجبار المحرك على التعرف على اللغة العربية بلهجة واضحة
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
+  }
+
   void _extractHighestPageNumber() {
     if (isCompletedStudent || absent || isExam) return;
     
@@ -112,9 +156,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
       List<int> numbers = matches.map((m) => int.parse(m.group(0)!)).toList();
       int maxNumber = numbers.reduce((a, b) => a > b ? a : b);
       
-      // تأكد أن الرقم ضمن صفحات المصحف المنطقية
       if (maxNumber > 0 && maxNumber <= 604) {
-        // نستخدم text بدلاً من setState حتى لا نعيد بناء الواجهة مع كل حرف نكتبه
         if (totalMemorizedPagesController.text != maxNumber.toString()) {
           totalMemorizedPagesController.text = maxNumber.toString();
         }
@@ -122,7 +164,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
     }
   }
 
-  // 🚀 دالة جلب الواجبات من الجلسة السابقة بدقة عالية
   Future<void> _loadPreviousSessionData() async {
     try {
       final querySnapshot = await FirebaseFirestore.instance
@@ -155,7 +196,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
             newReview.text = lastSession['newReviewHomework'] ?? '';
             oldReview.text = lastSession['oldReviewHomework'] ?? '';
           });
-          // 🚀 استدعاء الاستخراج بعد التعبئة التلقائية لتحديث الإجمالي
           _extractHighestPageNumber();
         }
       }
@@ -349,7 +389,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
       'studentName': session.studentName,
       'supervisorId': session.supervisorId, 
       'supervisorName': session.supervisorName,
-      'supervisorIds': supervisorIdsList,     
+      'supervisorIds': supervisorIdsList,      
       'supervisorNames': supervisorNamesList, 
       'timestamp': FieldValue.serverTimestamp(), 
       'date': session.date,
@@ -419,6 +459,22 @@ class _AddSessionPageState extends State<AddSessionPage> {
     
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text("تمت إضافة الجلسة بنجاح")));
     Navigator.pop(context);
+  }
+
+  // 🚀 زر المايكروفون الذي سيتم زراعته داخل كل حقل إدخال
+  Widget _buildMicButton(TextEditingController controller, bool isDarkMode) {
+    bool isActive = _isListening && _activeController == controller;
+    return IconButton(
+      tooltip: "تحدث للإدخال",
+      icon: Icon(
+        isActive ? Icons.mic : Icons.mic_none,
+        color: isActive ? Colors.redAccent : (isDarkMode ? Colors.white60 : Colors.black54),
+      ),
+      onPressed: () {
+        HapticFeedback.lightImpact(); // هزة لطيفة عند التشغيل
+        _listen(controller);
+      },
+    );
   }
 
   @override
@@ -528,38 +584,75 @@ class _AddSessionPageState extends State<AddSessionPage> {
                                 ],
 
                                 if (!isCompletedStudent && hasNewMemorization) ...[
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newMemorization, decoration: _glassInputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode)),
+                                  TextField(
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                    controller: newMemorization, 
+                                    // 🎙️ تم إضافة زر المايكروفون هنا
+                                    decoration: _glassInputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode, suffixIcon: _buildMicButton(newMemorization, isDarkMode))
+                                  ),
                                   const SizedBox(height: 15),
                                 ],
 
                                 if (hasReview) ...[
                                   if (!isCompletedStudent) ...[
-                                    TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newReview, decoration: _glassInputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode)),
+                                    TextField(
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                      controller: newReview, 
+                                      // 🎙️ وهنا
+                                      decoration: _glassInputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode, suffixIcon: _buildMicButton(newReview, isDarkMode))
+                                    ),
                                     const SizedBox(height: 15),
                                   ],
                                   TextField(
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
                                     controller: oldReview, 
+                                    // 🎙️ وهنا
                                     decoration: _glassInputDecoration(
                                       isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
                                       isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
-                                      isDarkMode
+                                      isDarkMode,
+                                      suffixIcon: _buildMicButton(oldReview, isDarkMode)
                                     )
                                   ),
                                   const SizedBox(height: 15),
                                 ],
 
-                                TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: readingBySight, decoration: _glassInputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode)),
+                                TextField(
+                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                  controller: readingBySight, 
+                                  // 🎙️ وهنا
+                                  decoration: _glassInputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode, suffixIcon: _buildMicButton(readingBySight, isDarkMode))
+                                ),
                                 const SizedBox(height: 15),
                                 
                                 if (isCompletedStudent) ...[
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: oldReviewHomeworkController, decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode)),
+                                  TextField(
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                    controller: oldReviewHomeworkController, 
+                                    // 🎙️ وهنا
+                                    decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
+                                  ),
                                 ] else ...[
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newHomeworkController, decoration: _glassInputDecoration("واجب الحفظ الجديد القادم", Icons.edit_document, isDarkMode)),
+                                  TextField(
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                    controller: newHomeworkController, 
+                                    // 🎙️ وهنا
+                                    decoration: _glassInputDecoration("واجب الحفظ الجديد القادم", Icons.edit_document, isDarkMode, suffixIcon: _buildMicButton(newHomeworkController, isDarkMode))
+                                  ),
                                   const SizedBox(height: 15),
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: newReviewHomeworkController, decoration: _glassInputDecoration("واجب المراجعة الجديد القادم", Icons.menu_book_rounded, isDarkMode)),
+                                  TextField(
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                    controller: newReviewHomeworkController, 
+                                    // 🎙️ وهنا
+                                    decoration: _glassInputDecoration("واجب المراجعة الجديد القادم", Icons.menu_book_rounded, isDarkMode, suffixIcon: _buildMicButton(newReviewHomeworkController, isDarkMode))
+                                  ),
                                   const SizedBox(height: 15),
-                                  TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: oldReviewHomeworkController, decoration: _glassInputDecoration("واجب المراجعة القديم القادم", Icons.history_edu_rounded, isDarkMode)),
+                                  TextField(
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                    controller: oldReviewHomeworkController, 
+                                    // 🎙️ وهنا
+                                    decoration: _glassInputDecoration("واجب المراجعة القديم القادم", Icons.history_edu_rounded, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
+                                  ),
                                 ],
                                 
                                 if (!isCompletedStudent) ...[
@@ -625,7 +718,8 @@ class _AddSessionPageState extends State<AddSessionPage> {
                             title: "نشاطات إضافية",
                             icon: Icons.mosque_outlined,
                             isDarkMode: isDarkMode,
-                            child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: religiousActivities, decoration: _glassInputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode)),
+                            // 🎙️ وهنا
+                            child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: religiousActivities, decoration: _glassInputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode, suffixIcon: _buildMicButton(religiousActivities, isDarkMode))),
                           ),
                         ],
 
@@ -718,7 +812,8 @@ class _AddSessionPageState extends State<AddSessionPage> {
                                 TextField(
                                   style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
                                   controller: absenceReasonController,
-                                  decoration: _glassInputDecoration("سبب الغياب (اختياري مثل: مرض، سفر...)", Icons.help_outline, isDarkMode),
+                                  // 🎙️ وهنا
+                                  decoration: _glassInputDecoration("سبب الغياب (اختياري مثل: مرض، سفر...)", Icons.help_outline, isDarkMode, suffixIcon: _buildMicButton(absenceReasonController, isDarkMode)),
                                 ),
                               ],
                             ),
@@ -730,7 +825,8 @@ class _AddSessionPageState extends State<AddSessionPage> {
                           title: "ملاحظات المشرف",
                           icon: Icons.note_alt_outlined,
                           isDarkMode: isDarkMode,
-                          child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: notes, maxLines: 3, decoration: _glassInputDecoration("اكتب ملاحظاتك هنا...", Icons.comment, isDarkMode)),
+                          // 🎙️ وهنا
+                          child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: notes, maxLines: 3, decoration: _glassInputDecoration("اكتب ملاحظاتك هنا...", Icons.comment, isDarkMode, suffixIcon: _buildMicButton(notes, isDarkMode))),
                         ),
                         
                         const SizedBox(height: 35),
@@ -809,11 +905,13 @@ class _AddSessionPageState extends State<AddSessionPage> {
     );
   }
 
-  InputDecoration _glassInputDecoration(String label, IconData icon, bool isDarkMode) {
+  // 🚀 تعديل بسيط لاستقبال أيقونة المايكروفون كـ (suffixIcon)
+  InputDecoration _glassInputDecoration(String label, IconData icon, bool isDarkMode, {Widget? suffixIcon}) {
     return InputDecoration(
       labelText: label,
       labelStyle: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.w600),
       prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
+      suffixIcon: suffixIcon, // 👈 هون بينزل المايكروفون
       filled: true,
       fillColor: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), 
       contentPadding: const EdgeInsets.symmetric(vertical: 16),
