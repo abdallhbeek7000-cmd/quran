@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as excel_lib; 
 import 'package:path_provider/path_provider.dart';
-import 'package:quran_habal/widgets/network_sync_indicator.dart'; 
 import 'package:share_plus/share_plus.dart'; 
 import 'package:cached_network_image/cached_network_image.dart'; 
 import 'package:provider/provider.dart'; 
@@ -253,7 +252,6 @@ class _StudentsPageState extends State<StudentsPage> {
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
         actions: [
-          NetworkSyncIndicator(isDarkMode: isDarkMode),
           if (widget.role == "manager") 
             IconButton(icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor), tooltip: "تصدير Excel", onPressed: exportToExcel),
         ],
