@@ -16,7 +16,6 @@ import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
 import '../widgets/animated_glass_background.dart'; 
 import '../widgets/glass_toast.dart'; 
-import '../widgets/parallax_3d_card.dart'; // 🚀 استدعاء تأثير الـ 3D
 
 class StudentsPage extends StatefulWidget {
   final CycleModel cycle;
@@ -322,10 +321,7 @@ class _StudentsPageState extends State<StudentsPage> {
                       padding: const EdgeInsets.only(left: 15, right: 15, top: 10, bottom: 80),
                       itemCount: docs.length,
                       itemBuilder: (context, index) {
-                        return _AnimatedListItem(
-                          index: index,
-                          child: _buildStudentCard(docs[index], isDarkMode),
-                        );
+                        return _buildStudentCard(docs[index], isDarkMode);
                       },
                     );
                   },
@@ -450,113 +446,110 @@ class _StudentsPageState extends State<StudentsPage> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
-      // 🚀 تم التغليف بـ Parallax3DCard هون لحتى البطاقة تتحرك مع الجوال
-      child: Parallax3DCard(
-        child: _buildGlassContainer(
-          isDarkMode: isDarkMode,
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(
-            children: [
-              ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                leading: GestureDetector(
-                  onTap: () {
-                    if (imageUrl.isNotEmpty) {
-                      Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => Scaffold(
-                          backgroundColor: Colors.black.withOpacity(0.9),
-                          appBar: AppBar(
-                            backgroundColor: Colors.transparent,
-                            elevation: 0,
-                            iconTheme: const IconThemeData(color: Colors.white),
-                          ),
-                          body: Center(
-                            child: Hero(
-                              tag: 'avatar_${doc.id}',
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(15),
-                                child: CachedNetworkImage(
-                                  imageUrl: imageUrl,
-                                  width: MediaQuery.of(context).size.width,
-                                  fit: BoxFit.contain,
-                                ),
+      child: _buildGlassContainer(
+        isDarkMode: isDarkMode,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          children: [
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+              leading: GestureDetector(
+                onTap: () {
+                  if (imageUrl.isNotEmpty) {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        backgroundColor: Colors.black.withOpacity(0.9),
+                        appBar: AppBar(
+                          backgroundColor: Colors.transparent,
+                          elevation: 0,
+                          iconTheme: const IconThemeData(color: Colors.white),
+                        ),
+                        body: Center(
+                          child: Hero(
+                            tag: 'avatar_${doc.id}',
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(15),
+                              child: CachedNetworkImage(
+                                imageUrl: imageUrl,
+                                width: MediaQuery.of(context).size.width,
+                                fit: BoxFit.contain,
                               ),
                             ),
                           ),
                         ),
-                      ));
-                    }
-                  },
-                  child: Hero(
-                    tag: 'avatar_${doc.id}', 
-                    child: Container(
-                      width: 50, height: 50,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? Colors.white10 : primaryColor.withOpacity(0.1), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)]),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(25),
-                        child: imageUrl.isNotEmpty
-                            ? CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover, placeholder: (c, u) => const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))), errorWidget: (c, u, e) => Center(child: Text(firstLetter, style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'))))
-                            : Center(child: Text(firstLetter, style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'))),
                       ),
+                    ));
+                  }
+                },
+                child: Hero(
+                  tag: 'avatar_${doc.id}', 
+                  child: Container(
+                    width: 50, height: 50,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? Colors.white10 : primaryColor.withOpacity(0.1), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)]),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(25),
+                      child: imageUrl.isNotEmpty
+                          ? CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover, placeholder: (c, u) => const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))), errorWidget: (c, u, e) => Center(child: Text(firstLetter, style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'))))
+                          : Center(child: Text(firstLetter, style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'))),
                     ),
                   ),
                 ),
-                title: Row(
-                  children: [
-                    _getNationalityFlag(nationality),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        studentName, 
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo'),
-                        maxLines: 2, 
-                        overflow: TextOverflow.ellipsis, 
-                      ),
+              ),
+              title: Row(
+                children: [
+                  _getNationalityFlag(nationality),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      studentName, 
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo'),
+                      maxLines: 2, 
+                      overflow: TextOverflow.ellipsis, 
                     ),
-                    if (!widget.isArchivedFromHistory)
-                      _buildPulseDot(livePulse, doc.id, studentName, isDarkMode),
+                  ),
+                  if (!widget.isArchivedFromHistory)
+                    _buildPulseDot(livePulse, doc.id, studentName, isDarkMode),
+                ],
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 6.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                   ],
                 ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 6.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-                trailing: widget.isArchivedFromHistory 
-                    ? Icon(Icons.archive_outlined, color: isDarkMode ? Colors.white54 : Colors.grey, size: 22)
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(icon: Icon(Icons.edit_note_rounded, color: isDarkMode ? accentGold : primaryColor, size: 26), tooltip: "تعديل بيانات الطالب", onPressed: () => _nav(EditStudentPage(student: doc))),
-                          if (widget.role == "manager") 
-                            IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 24), tooltip: "حذف الطالب", onPressed: () => _showDeleteStudentDialog(context, doc.id, studentName, isDarkMode)),
-                        ],
-                      ),
               ),
-              Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 1),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    if (!widget.isArchivedFromHistory)
-                      _buildActionButton(Icons.add_task, "جلسة جديدة", Colors.greenAccent.shade400, isDarkMode, () {
-                        _nav(AddSessionPage(studentId: doc.id, studentName: data['name'] ?? '', supervisorId: data['supervisorId'] ?? '', supervisorName: data['supervisorName'] ?? ''));
-                      }),
-                    _buildActionButton(widget.isArchivedFromHistory ? Icons.folder_open_rounded : Icons.history, widget.isArchivedFromHistory ? "استعراض السجل القديم" : "السجل", isDarkMode ? Colors.lightBlueAccent : Colors.blue, isDarkMode, () {
-                      _nav(StudentSessionsPage(studentId: doc.id, studentName: data['name'] ?? '', role: widget.isArchivedFromHistory ? "readonly" : widget.role));
+              trailing: widget.isArchivedFromHistory 
+                  ? Icon(Icons.archive_outlined, color: isDarkMode ? Colors.white54 : Colors.grey, size: 22)
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(icon: Icon(Icons.edit_note_rounded, color: isDarkMode ? accentGold : primaryColor, size: 26), tooltip: "تعديل بيانات الطالب", onPressed: () => _nav(EditStudentPage(student: doc))),
+                        if (widget.role == "manager") 
+                          IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 24), tooltip: "حذف الطالب", onPressed: () => _showDeleteStudentDialog(context, doc.id, studentName, isDarkMode)),
+                      ],
+                    ),
+            ),
+            Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  if (!widget.isArchivedFromHistory)
+                    _buildActionButton(Icons.add_task, "جلسة جديدة", Colors.greenAccent.shade400, isDarkMode, () {
+                      _nav(AddSessionPage(studentId: doc.id, studentName: data['name'] ?? '', supervisorId: data['supervisorId'] ?? '', supervisorName: data['supervisorName'] ?? ''));
                     }),
-                  ],
-                ),
+                  _buildActionButton(widget.isArchivedFromHistory ? Icons.folder_open_rounded : Icons.history, widget.isArchivedFromHistory ? "استعراض السجل القديم" : "السجل", isDarkMode ? Colors.lightBlueAccent : Colors.blue, isDarkMode, () {
+                    _nav(StudentSessionsPage(studentId: doc.id, studentName: data['name'] ?? '', role: widget.isArchivedFromHistory ? "readonly" : widget.role));
+                  }),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -659,63 +652,5 @@ class _StudentsPageState extends State<StudentsPage> {
 
   void _nav(Widget page) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
-  }
-}
-
-class _AnimatedListItem extends StatefulWidget {
-  final int index;
-  final Widget child;
-
-  const _AnimatedListItem({required this.index, required this.child});
-
-  @override
-  State<_AnimatedListItem> createState() => _AnimatedListItemState();
-}
-
-class _AnimatedListItemState extends State<_AnimatedListItem> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<Offset> _slideAnimation;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400), 
-    );
-
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-
-    int delay = widget.index < 12 ? (50 * widget.index) : 0; 
-    
-    Future.delayed(Duration(milliseconds: delay), () {
-      if (mounted) {
-        _controller.forward();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: widget.child,
-      ),
-    );
   }
 }
