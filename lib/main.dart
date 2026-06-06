@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // 🎯 استيراد للتحكم بشريط الحالة (Status Bar)
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🚀 استدعاء مكتبة الفايرستور للتحكم بالأوفلاين
 import 'package:provider/provider.dart'; 
 // 🚀 استدعاء مكتبة اللغات لقلب التطبيق من اليمين لليسار
 import 'package:flutter_localizations/flutter_localizations.dart'; 
@@ -31,6 +32,12 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
+  // 🚀 السحر الحقيقي: تفعيل وضع الأوفلاين وحفظ البيانات محلياً بذاكرة الجوال
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // مساحة لا محدودة لتخزين التعديلات عند انقطاع النت
+  );
+
   FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
   
   runApp(

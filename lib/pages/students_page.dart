@@ -3,7 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as excel_lib; 
-import 'package:path_provider/path_provider.dart'; 
+import 'package:path_provider/path_provider.dart';
+import 'package:quran_habal/widgets/network_sync_indicator.dart'; 
 import 'package:share_plus/share_plus.dart'; 
 import 'package:cached_network_image/cached_network_image.dart'; 
 import 'package:provider/provider.dart'; 
@@ -143,6 +144,8 @@ class _StudentsPageState extends State<StudentsPage> {
         excel_lib.TextCellValue('التسلسلي'),
         excel_lib.TextCellValue('اسم الطالب'),
         excel_lib.TextCellValue('الجنسية'), 
+        excel_lib.TextCellValue('الرقم'),
+        excel_lib.TextCellValue('الصف'),
         excel_lib.TextCellValue('اسم الأب'),
         excel_lib.TextCellValue('اسم الأم'),
         excel_lib.TextCellValue('المشرف'),
@@ -150,10 +153,14 @@ class _StudentsPageState extends State<StudentsPage> {
 
       for (var doc in snapshot.docs) {
         var data = doc.data();
+        String grade = data['grade'] ?? data['schoolGrade'] ?? data['classLevel'] ?? data['studyLevel'] ?? 'غير مسجل';
+
         sheetObject.appendRow([
           excel_lib.TextCellValue(data['serial']?.toString() ?? ''),
           excel_lib.TextCellValue(data['name']?.toString() ?? ''),
           excel_lib.TextCellValue(data['nationality']?.toString() ?? 'سوري'), 
+          excel_lib.TextCellValue(data['serial']?.toString() ?? ''),
+          excel_lib.TextCellValue(grade),
           excel_lib.TextCellValue(data['fatherName']?.toString() ?? ''),
           excel_lib.TextCellValue(data['motherName']?.toString() ?? ''),
           excel_lib.TextCellValue(data['supervisorName'] ?? 'غير موزع'),
@@ -246,6 +253,7 @@ class _StudentsPageState extends State<StudentsPage> {
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
         actions: [
+          NetworkSyncIndicator(isDarkMode: isDarkMode),
           if (widget.role == "manager") 
             IconButton(icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor), tooltip: "تصدير Excel", onPressed: exportToExcel),
         ],
@@ -442,6 +450,10 @@ class _StudentsPageState extends State<StudentsPage> {
     final String studentName = data['name'] ?? 'بدون اسم';
     final String nationality = data['nationality'] ?? 'سوري'; 
     final String livePulse = data['livePulse'] ?? 'none'; 
+    
+    // 🚀 سحب بيانات الصف بتغطية كل الاحتمالات لاسم الحقل بقاعدة البيانات
+    final String grade = data['grade'] ?? data['schoolGrade'] ?? data['classLevel'] ?? data['studyLevel'] ?? 'غير مسجل';
+    
     final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
 
     return Container(
@@ -499,6 +511,7 @@ class _StudentsPageState extends State<StudentsPage> {
                 children: [
                   _getNationalityFlag(nationality),
                   const SizedBox(width: 8),
+                  // 🚀 شلنا الحالة المباشرة من هون ليعطي الاسم المساحة الكاملة للشاشة
                   Expanded(
                     child: Text(
                       studentName, 
@@ -507,8 +520,6 @@ class _StudentsPageState extends State<StudentsPage> {
                       overflow: TextOverflow.ellipsis, 
                     ),
                   ),
-                  if (!widget.isArchivedFromHistory)
-                    _buildPulseDot(livePulse, doc.id, studentName, isDarkMode),
                 ],
               ),
               subtitle: Padding(
@@ -516,8 +527,17 @@ class _StudentsPageState extends State<StudentsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 2),
+                    // 🚀 إضافة الصف الدراسي جنب رقم التسلسل
+                    Row(
+                      children: [
+                        Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Text("الصف: $grade", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                     Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                   ],
                 ),
@@ -527,7 +547,12 @@ class _StudentsPageState extends State<StudentsPage> {
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // 🚀 زر الحالة المباشرة صار هون جنب الأزرار ليحافظ على التنسيق
+                        if (!widget.isArchivedFromHistory)
+                          _buildPulseDot(livePulse, doc.id, studentName, isDarkMode),
+                        
                         IconButton(icon: Icon(Icons.edit_note_rounded, color: isDarkMode ? accentGold : primaryColor, size: 26), tooltip: "تعديل بيانات الطالب", onPressed: () => _nav(EditStudentPage(student: doc))),
+                        
                         if (widget.role == "manager") 
                           IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 24), tooltip: "حذف الطالب", onPressed: () => _showDeleteStudentDialog(context, doc.id, studentName, isDarkMode)),
                       ],
