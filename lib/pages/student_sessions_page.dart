@@ -10,7 +10,7 @@ import '../services/theme_provider.dart';
 import 'edit_session_page.dart';
 import '../services/session_service.dart';
 
-class StudentSessionsPage extends StatelessWidget {
+class StudentSessionsPage extends StatefulWidget {
   final String studentId;
   final String studentName;
   final String role;
@@ -22,8 +22,32 @@ class StudentSessionsPage extends StatelessWidget {
     required this.role,
   });
 
+  @override
+  State<StudentSessionsPage> createState() => _StudentSessionsPageState();
+}
+
+// 🚀 إضافة SingleTickerProviderStateMixin للتحريك (Animation)
+class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTickerProviderStateMixin {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37); 
+
+  // 🚀 متغيرات التحريك
+  late AnimationController _bgController;
+  late Animation<double> _bgAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    // 🚀 تهيئة محرك التحريك
+    _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
+    _bgAnimation = Tween<double>(begin: -10, end: 20).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine));
+  }
+
+  @override
+  void dispose() {
+    _bgController.dispose();
+    super.dispose();
+  }
 
   // 🚀 دالة ذكية لمعرفة اليوم بالعربي من التاريخ
   String _getArabicDayName(String dateString) {
@@ -50,7 +74,7 @@ class StudentSessionsPage extends StatelessWidget {
         const SnackBar(content: Text("جاري تجهيز سجل الجلسات الشامل...", style: TextStyle(fontFamily: 'Cairo'))),
       );
 
-      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
+      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(widget.studentId).get();
       bool isCompleted = false;
       if (studentDoc.exists && studentDoc.data() != null) {
         var sData = studentDoc.data() as Map<String, dynamic>;
@@ -59,7 +83,7 @@ class StudentSessionsPage extends StatelessWidget {
 
       final snapshot = await FirebaseFirestore.instance
           .collection('sessions')
-          .where('studentId', isEqualTo: studentId)
+          .where('studentId', isEqualTo: widget.studentId)
           .get();
 
       final docs = snapshot.docs;
@@ -76,7 +100,7 @@ class StudentSessionsPage extends StatelessWidget {
       // 📜 تحديث رؤوس الأعمدة لتشمل تفصيل الواجبات
       sheetObject.appendRow([
         pkg_excel.TextCellValue('التاريخ'),
-        pkg_excel.TextCellValue('اليوم'), // 🚀 عمود جديد لليوم
+        pkg_excel.TextCellValue('اليوم'), 
         pkg_excel.TextCellValue('نوع الجلسة'),
         pkg_excel.TextCellValue('المشرف / المشرفين'), 
         pkg_excel.TextCellValue(isCompleted ? 'تقييم مراجعة الختمة' : 'تقييم الحفظ الجديد'), 
@@ -100,11 +124,9 @@ class StudentSessionsPage extends StatelessWidget {
 
         String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : 'حلقة عادية');
         
-        // 🚀 معالجة اليوم للإكسل
         String dateStr = data['date']?.toString() ?? '';
         String dayName = _getArabicDayName(dateStr);
 
-        // معالجة تعدد المشرفين في التصدير
         List<dynamic>? supNamesList = data['supervisorNames'];
         String supervisorResult = (supNamesList != null && supNamesList.isNotEmpty) 
             ? supNamesList.join(' ، ') 
@@ -132,7 +154,7 @@ class StudentSessionsPage extends StatelessWidget {
 
         sheetObject.appendRow([
           pkg_excel.TextCellValue(dateStr),
-          pkg_excel.TextCellValue(dayName), // 🚀 إضافة اليوم للإكسل
+          pkg_excel.TextCellValue(dayName), 
           pkg_excel.TextCellValue(sessionType),
           pkg_excel.TextCellValue(supervisorResult), 
           pkg_excel.TextCellValue(isCompleted ? revRatingResult : (memRatingResult.isEmpty ? '---' : memRatingResult)),
@@ -152,11 +174,14 @@ class StudentSessionsPage extends StatelessWidget {
 
       var fileBytes = excel.save();
       final directory = await getTemporaryDirectory();
-      final filePath = '${directory.path}/سجل_$studentName.xlsx';
+      final filePath = '${directory.path}/سجل_${widget.studentName}.xlsx';
       final file = File(filePath);
       await file.writeAsBytes(fileBytes!);
-      await Share.shareXFiles([XFile(filePath)], text: 'سجل الطالب: $studentName');
+      
+      if (!context.mounted) return;
+      await Share.shareXFiles([XFile(filePath)], text: 'سجل الطالب: ${widget.studentName}');
     } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e", style: const TextStyle(fontFamily: 'Cairo'))));
     }
   }
@@ -172,7 +197,7 @@ class StudentSessionsPage extends StatelessWidget {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent, 
-        title: Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+        title: Text(widget.studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
         actions: [
@@ -198,12 +223,31 @@ class StudentSessionsPage extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(top: -20, left: -50, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))),
-          Positioned(bottom: 100, right: -60, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))),
+          
+          // 🚀 الدوائر العائمة المتحركة
+          AnimatedBuilder(
+            animation: _bgAnimation,
+            builder: (context, child) {
+              return Stack(
+                children: [
+                  Positioned(
+                    top: -20 + _bgAnimation.value,
+                    left: -50 - (_bgAnimation.value / 2),
+                    child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12))),
+                  ),
+                  Positioned(
+                    bottom: 100 - _bgAnimation.value,
+                    right: -60 + _bgAnimation.value,
+                    child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                  ),
+                ],
+              );
+            },
+          ),
 
           SafeArea(
             child: FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance.collection('students').doc(studentId).get(),
+              future: FirebaseFirestore.instance.collection('students').doc(widget.studentId).get(),
               builder: (context, studentSnapshot) {
                 bool isCompletedStudent = false;
                 if (studentSnapshot.hasData && studentSnapshot.data!.exists) {
@@ -212,7 +256,7 @@ class StudentSessionsPage extends StatelessWidget {
                 }
 
                 return StreamBuilder<QuerySnapshot>(
-                  stream: sessionService.getStudentSessions(studentId), 
+                  stream: sessionService.getStudentSessions(widget.studentId), 
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                     
@@ -250,7 +294,6 @@ class StudentSessionsPage extends StatelessWidget {
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
 
-    // 🚀 جلب ومعالجة التاريخ واليوم
     String sessionDateRaw = data['date'] ?? '';
     String dayName = _getArabicDayName(sessionDateRaw);
     String displayDate = dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
@@ -318,7 +361,6 @@ class StudentSessionsPage extends StatelessWidget {
                         color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? accentGold : primaryColor))
                       ),
                       const SizedBox(width: 8),
-                      // 🚀 هنا نعرض التاريخ مع اسم اليوم المدمج
                       Text(
                         displayDate, 
                         style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? Colors.white : primaryColor)), fontFamily: 'Cairo', fontSize: 13)
@@ -585,6 +627,11 @@ class StudentSessionsPage extends StatelessWidget {
   }
 
   Widget _buildActionButtons(BuildContext context, String id, Map<String, dynamic> data, bool isDarkMode) {
+    // 🚀 حماية الأرشيف: إخفاء الأزرار إذا كان السجل للعرض فقط
+    if (widget.role == "readonly") {
+      return const SizedBox();
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
@@ -597,7 +644,7 @@ class StudentSessionsPage extends StatelessWidget {
           icon: Icon(Icons.edit_rounded, size: 16, color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800),
           label: Text("تعديل", style: TextStyle(color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
         ),
-        if (role == "manager") ...[
+        if (widget.role == "manager") ...[
           const SizedBox(width: 10),
           TextButton.icon(
             style: TextButton.styleFrom(

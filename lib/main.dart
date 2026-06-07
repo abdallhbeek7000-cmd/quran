@@ -5,7 +5,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // 🚀 استدعاء مكتبة الفايرستور للتحكم بالأوفلاين
 import 'package:provider/provider.dart'; 
 // 🚀 استدعاء مكتبة اللغات لقلب التطبيق من اليمين لليسار
-import 'package:flutter_localizations/flutter_localizations.dart'; 
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:quran_habal/widgets/offline_wrapper.dart'; 
 import 'firebase_options.dart';
 import 'utils/app_colors.dart';
 import 'pages/login_page.dart';
@@ -35,7 +36,7 @@ void main() async {
   // 🚀 السحر الحقيقي: تفعيل وضع الأوفلاين وحفظ البيانات محلياً بذاكرة الجوال
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // مساحة لا محدودة لتخزين التعديلات عند انقطاع النت
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
 
   FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
@@ -161,7 +162,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       home: isLoggedIn
-          ? HomePage(uid: userId, role: userRole) 
+          ? OfflineWrapper(child: HomePage(uid: userId, role: userRole)) 
           : const LoginPage(),
           
       routes: {

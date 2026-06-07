@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as excel_lib; 
-import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart'; 
 import 'package:share_plus/share_plus.dart'; 
 import 'package:cached_network_image/cached_network_image.dart'; 
 import 'package:provider/provider.dart'; 
@@ -449,7 +449,7 @@ class _StudentsPageState extends State<StudentsPage> {
     final String nationality = data['nationality'] ?? 'سوري'; 
     final String livePulse = data['livePulse'] ?? 'none'; 
     
-    // 🚀 سحب بيانات الصف بتغطية كل الاحتمالات لاسم الحقل بقاعدة البيانات
+    // سحب بيانات الصف
     final String grade = data['grade'] ?? data['schoolGrade'] ?? data['classLevel'] ?? data['studyLevel'] ?? 'غير مسجل';
     
     final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
@@ -469,21 +469,13 @@ class _StudentsPageState extends State<StudentsPage> {
                     Navigator.push(context, MaterialPageRoute(
                       builder: (_) => Scaffold(
                         backgroundColor: Colors.black.withOpacity(0.9),
-                        appBar: AppBar(
-                          backgroundColor: Colors.transparent,
-                          elevation: 0,
-                          iconTheme: const IconThemeData(color: Colors.white),
-                        ),
+                        appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, iconTheme: const IconThemeData(color: Colors.white)),
                         body: Center(
                           child: Hero(
                             tag: 'avatar_${doc.id}',
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(15),
-                              child: CachedNetworkImage(
-                                imageUrl: imageUrl,
-                                width: MediaQuery.of(context).size.width,
-                                fit: BoxFit.contain,
-                              ),
+                              child: CachedNetworkImage(imageUrl: imageUrl, width: MediaQuery.of(context).size.width, fit: BoxFit.contain),
                             ),
                           ),
                         ),
@@ -509,7 +501,6 @@ class _StudentsPageState extends State<StudentsPage> {
                 children: [
                   _getNationalityFlag(nationality),
                   const SizedBox(width: 8),
-                  // 🚀 شلنا الحالة المباشرة من هون ليعطي الاسم المساحة الكاملة للشاشة
                   Expanded(
                     child: Text(
                       studentName, 
@@ -520,23 +511,16 @@ class _StudentsPageState extends State<StudentsPage> {
                   ),
                 ],
               ),
+              // 🚀 هنا السحر: استخدام Wrap والشارات الذكية
               subtitle: Padding(
-                padding: const EdgeInsets.only(top: 6.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                padding: const EdgeInsets.only(top: 10.0),
+                child: Wrap(
+                  spacing: 6, // المسافة الأفقية بين الشارات
+                  runSpacing: 6, // المسافة العمودية إذا الشاشة ضيقة ونزلوا لسطر جديد
                   children: [
-                    // 🚀 إضافة الصف الدراسي جنب رقم التسلسل
-                    Row(
-                      children: [
-                        Text("الرقم: ${data['serial'] ?? '---'}", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: Text("الصف: $grade", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                    _buildInfoBadge("رقم: ${data['serial'] ?? '---'}", isDarkMode ? Colors.white70 : Colors.grey.shade700, isDarkMode),
+                    _buildInfoBadge("الصف: $grade", isDarkMode ? Colors.lightBlueAccent : Colors.blue.shade700, isDarkMode),
+                    _buildInfoBadge("المشرف: ${data['supervisorName'] ?? 'غير موزع'}", isDarkMode ? accentGold : primaryColor, isDarkMode, isBold: true),
                   ],
                 ),
               ),
@@ -545,12 +529,9 @@ class _StudentsPageState extends State<StudentsPage> {
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // 🚀 زر الحالة المباشرة صار هون جنب الأزرار ليحافظ على التنسيق
                         if (!widget.isArchivedFromHistory)
                           _buildPulseDot(livePulse, doc.id, studentName, isDarkMode),
-                        
                         IconButton(icon: Icon(Icons.edit_note_rounded, color: isDarkMode ? accentGold : primaryColor, size: 26), tooltip: "تعديل بيانات الطالب", onPressed: () => _nav(EditStudentPage(student: doc))),
-                        
                         if (widget.role == "manager") 
                           IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 24), tooltip: "حذف الطالب", onPressed: () => _showDeleteStudentDialog(context, doc.id, studentName, isDarkMode)),
                       ],
@@ -573,6 +554,27 @@ class _StudentsPageState extends State<StudentsPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // 🚀 دالة الشارات الذكية لترتيب المعلومات بخاصية Wrap
+  Widget _buildInfoBadge(String text, Color color, bool isDarkMode, {bool isBold = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(isDarkMode ? 0.1 : 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3), width: 0.5),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontFamily: 'Cairo',
+          fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
         ),
       ),
     );

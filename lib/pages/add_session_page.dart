@@ -5,7 +5,7 @@ import '../models/session_model.dart';
 import '../services/session_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt; // 🚀 استدعاء مكتبة الصوت
+import 'package:speech_to_text/speech_to_text.dart' as stt; 
 import '../services/theme_provider.dart'; 
 import '../services/notification_service.dart'; 
 
@@ -27,10 +27,14 @@ class AddSessionPage extends StatefulWidget {
   State<AddSessionPage> createState() => _AddSessionPageState();
 }
 
-class _AddSessionPageState extends State<AddSessionPage> {
+// 🚀 إضافة SingleTickerProviderStateMixin من أجل التحريك
+class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProviderStateMixin {
   final sessionService = SessionService();
   
-  // 🚀 متغيرات الذكاء الصوتي
+  // 🚀 متغيرات التحريك (Animation)
+  late AnimationController _bgController;
+  late Animation<double> _bgAnimation;
+
   late stt.SpeechToText _speech;
   bool _isListening = false;
   TextEditingController? _activeController;
@@ -58,6 +62,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
   
   bool hasNewMemorization = true;
   bool hasReview = true;
+  bool hasReading = true; // 🚀 متغير التحكم بقراءة نظراً
 
   String absenceType = "بدون عذر"; 
   
@@ -77,7 +82,12 @@ class _AddSessionPageState extends State<AddSessionPage> {
   @override
   void initState() {
     super.initState();
-    _speech = stt.SpeechToText(); // 🚀 تهيئة محرك الصوت
+    
+    // 🚀 تهيئة محرك التحريك (الدوائر العائمة)
+    _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
+    _bgAnimation = Tween<double>(begin: -10, end: 20).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine));
+
+    _speech = stt.SpeechToText(); 
 
     selectedSupervisors.add({
       'id': widget.supervisorId,
@@ -92,6 +102,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
 
   @override
   void dispose() {
+    _bgController.dispose(); // 🚀 إغلاق المحرك
     newMemorization.removeListener(_extractHighestPageNumber);
     newMemorization.dispose();
     newReview.dispose();
@@ -108,7 +119,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
     super.dispose();
   }
 
-  // 🎙️ الخوارزمية المسؤولة عن الاستماع وكتابة النص
   void _listen(TextEditingController controller) async {
     if (!_isListening) {
       bool available = await _speech.initialize(
@@ -123,20 +133,18 @@ class _AddSessionPageState extends State<AddSessionPage> {
         setState(() {
           _isListening = true;
           _activeController = controller;
-          _initialText = controller.text; // حفظ النص القديم لعدم حذفه
+          _initialText = controller.text; 
         });
         _speech.listen(
           onResult: (val) {
             if (mounted) {
               setState(() {
-                // دمج النص القديم مع الكلام الجديد المسموع
                 _activeController!.text = _initialText + (val.recognizedWords.isNotEmpty ? ' ' + val.recognizedWords : '');
-                // وضع المؤشر في نهاية النص
                 _activeController!.selection = TextSelection.fromPosition(TextPosition(offset: _activeController!.text.length));
               });
             }
           },
-          localeId: 'ar-SA', // 🚀 إجبار المحرك على التعرف على اللغة العربية بلهجة واضحة
+          localeId: 'ar-SA', 
         );
       }
     } else {
@@ -327,10 +335,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
       return;
     }
 
-    if (!absent && !isExam && !hasNewMemorization && !hasReview) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.red, content: Text("يجب تفعيل خيار الحفظ أو المراجعة على الأقل")));
-      return;
-    }
+    // 🚀 إزالة شرط الإجبار لترك الحرية المطلقة بحفظ الجلسة
 
     setState(() => loading = true);
     final now = DateTime.now();
@@ -339,6 +344,9 @@ class _AddSessionPageState extends State<AddSessionPage> {
     String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent) ? '' : newMemorization.text.trim();
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent) ? '' : newReview.text.trim();
     String finalFarReview = (!hasReview || absent || isExam) ? '' : oldReview.text.trim();
+    
+    // 🚀 تفعيل خيار قراءة نظراً فقط إذا كان مضاء
+    String finalReading = (!hasReading || absent || isExam) ? '' : readingBySight.text.trim();
     
     String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent) ? '' : memorizationRating;
     String finalRevRating = (!hasReview || absent || isExam) ? '' : reviewRating;
@@ -403,7 +411,7 @@ class _AddSessionPageState extends State<AddSessionPage> {
       'newHomework': finalNewHW, 
       'newReviewHomework': finalNewRevHW, 
       'oldReviewHomework': finalOldRevHW, 
-      'readingBySight': (absent || isExam) ? '' : readingBySight.text.trim(), 
+      'readingBySight': finalReading, // 🚀 تحديث لتخزينها حسب الزر
       'memorizationRating': finalMemoRating,
       'reviewRating': finalRevRating,
       'rating': session.rating, 
@@ -461,7 +469,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
     Navigator.pop(context);
   }
 
-  // 🚀 زر المايكروفون الذي سيتم زراعته داخل كل حقل إدخال
   Widget _buildMicButton(TextEditingController controller, bool isDarkMode) {
     bool isActive = _isListening && _activeController == controller;
     return IconButton(
@@ -471,9 +478,23 @@ class _AddSessionPageState extends State<AddSessionPage> {
         color: isActive ? Colors.redAccent : (isDarkMode ? Colors.white60 : Colors.black54),
       ),
       onPressed: () {
-        HapticFeedback.lightImpact(); // هزة لطيفة عند التشغيل
+        HapticFeedback.lightImpact(); 
         _listen(controller);
       },
+    );
+  }
+
+  // 🚀 ويدجت جديد لترتيب وتوحيد شكل الأزرار (الحفظ، المراجعة، قراءة نظراً)
+  Widget _buildToggleTile(String title, bool value, Color color, Function(bool) onChanged, bool isDarkMode) {
+    return Container(
+      decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
+      child: CheckboxListTile(
+        activeColor: color,
+        title: Text(title, style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
+        value: value,
+        onChanged: (v) => onChanged(v!),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      ),
     );
   }
 
@@ -499,8 +520,24 @@ class _AddSessionPageState extends State<AddSessionPage> {
                   width: double.infinity, height: double.infinity,
                   decoration: BoxDecoration(gradient: LinearGradient(colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
                 ),
-                Positioned(top: -50, right: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))),
-                Positioned(bottom: 100, left: -80, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))),
+                // 🚀 الدوائر العائمة المربوطة بالـ Animation
+                AnimatedBuilder(
+                  animation: _bgAnimation,
+                  builder: (context, child) {
+                    return Stack(
+                      children: [
+                        Positioned(
+                          top: -50 + _bgAnimation.value, right: -50 - (_bgAnimation.value / 2), 
+                          child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))
+                        ),
+                        Positioned(
+                          bottom: 100 - _bgAnimation.value, left: -80 + _bgAnimation.value, 
+                          child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))
+                        ),
+                      ],
+                    );
+                  },
+                ),
 
                 SafeArea(
                   child: SingleChildScrollView(
@@ -553,41 +590,22 @@ class _AddSessionPageState extends State<AddSessionPage> {
                                 if (!isCompletedStudent) ...[
                                   Row(
                                     children: [
-                                      Expanded(
-                                        child: Container(
-                                          decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
-                                          child: CheckboxListTile(
-                                            activeColor: Colors.blueAccent,
-                                            title: Text("حفظ جديد", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
-                                            value: hasNewMemorization,
-                                            onChanged: (v) => setState(() => hasNewMemorization = v!),
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                                          ),
-                                        ),
-                                      ),
+                                      Expanded(child: _buildToggleTile("حفظ جديد", hasNewMemorization, Colors.blueAccent, (v) => setState(() => hasNewMemorization = v), isDarkMode)),
                                       const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Container(
-                                          decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
-                                          child: CheckboxListTile(
-                                            activeColor: Colors.green,
-                                            title: Text("مراجعة", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
-                                            value: hasReview,
-                                            onChanged: (v) => setState(() => hasReview = v!),
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                                          ),
-                                        ),
-                                      ),
+                                      Expanded(child: _buildToggleTile("مراجعة", hasReview, Colors.green, (v) => setState(() => hasReview = v), isDarkMode)),
                                     ],
                                   ),
-                                  const SizedBox(height: 20),
+                                  const SizedBox(height: 10),
                                 ],
+                                
+                                // 🚀 زر قراءة نظراً صار جاهز ومتاح
+                                _buildToggleTile("قراءة نظراً من المصحف", hasReading, Colors.purpleAccent, (v) => setState(() => hasReading = v), isDarkMode),
+                                const SizedBox(height: 20),
 
                                 if (!isCompletedStudent && hasNewMemorization) ...[
                                   TextField(
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
                                     controller: newMemorization, 
-                                    // 🎙️ تم إضافة زر المايكروفون هنا
                                     decoration: _glassInputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode, suffixIcon: _buildMicButton(newMemorization, isDarkMode))
                                   ),
                                   const SizedBox(height: 15),
@@ -598,7 +616,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                                     TextField(
                                       style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
                                       controller: newReview, 
-                                      // 🎙️ وهنا
                                       decoration: _glassInputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode, suffixIcon: _buildMicButton(newReview, isDarkMode))
                                     ),
                                     const SizedBox(height: 15),
@@ -606,7 +623,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                                   TextField(
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
                                     controller: oldReview, 
-                                    // 🎙️ وهنا
                                     decoration: _glassInputDecoration(
                                       isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
                                       isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
@@ -617,40 +633,38 @@ class _AddSessionPageState extends State<AddSessionPage> {
                                   const SizedBox(height: 15),
                                 ],
 
-                                TextField(
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
-                                  controller: readingBySight, 
-                                  // 🎙️ وهنا
-                                  decoration: _glassInputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode, suffixIcon: _buildMicButton(readingBySight, isDarkMode))
-                                ),
-                                const SizedBox(height: 15),
+                                // 🚀 الحقل يظهر فقط إذا كان الخيار مفعل
+                                if (hasReading) ...[
+                                  TextField(
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                    controller: readingBySight, 
+                                    decoration: _glassInputDecoration("المقدار المقروء نظراً من المصحف", Icons.menu_book_outlined, isDarkMode, suffixIcon: _buildMicButton(readingBySight, isDarkMode))
+                                  ),
+                                  const SizedBox(height: 15),
+                                ],
                                 
                                 if (isCompletedStudent) ...[
                                   TextField(
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
                                     controller: oldReviewHomeworkController, 
-                                    // 🎙️ وهنا
                                     decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
                                   ),
                                 ] else ...[
                                   TextField(
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
                                     controller: newHomeworkController, 
-                                    // 🎙️ وهنا
                                     decoration: _glassInputDecoration("واجب الحفظ الجديد القادم", Icons.edit_document, isDarkMode, suffixIcon: _buildMicButton(newHomeworkController, isDarkMode))
                                   ),
                                   const SizedBox(height: 15),
                                   TextField(
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
                                     controller: newReviewHomeworkController, 
-                                    // 🎙️ وهنا
                                     decoration: _glassInputDecoration("واجب المراجعة الجديد القادم", Icons.menu_book_rounded, isDarkMode, suffixIcon: _buildMicButton(newReviewHomeworkController, isDarkMode))
                                   ),
                                   const SizedBox(height: 15),
                                   TextField(
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
                                     controller: oldReviewHomeworkController, 
-                                    // 🎙️ وهنا
                                     decoration: _glassInputDecoration("واجب المراجعة القديم القادم", Icons.history_edu_rounded, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
                                   ),
                                 ],
@@ -718,7 +732,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                             title: "نشاطات إضافية",
                             icon: Icons.mosque_outlined,
                             isDarkMode: isDarkMode,
-                            // 🎙️ وهنا
                             child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: religiousActivities, decoration: _glassInputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode, suffixIcon: _buildMicButton(religiousActivities, isDarkMode))),
                           ),
                         ],
@@ -812,7 +825,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                                 TextField(
                                   style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
                                   controller: absenceReasonController,
-                                  // 🎙️ وهنا
                                   decoration: _glassInputDecoration("سبب الغياب (اختياري مثل: مرض، سفر...)", Icons.help_outline, isDarkMode, suffixIcon: _buildMicButton(absenceReasonController, isDarkMode)),
                                 ),
                               ],
@@ -825,7 +837,6 @@ class _AddSessionPageState extends State<AddSessionPage> {
                           title: "ملاحظات المشرف",
                           icon: Icons.note_alt_outlined,
                           isDarkMode: isDarkMode,
-                          // 🎙️ وهنا
                           child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: notes, maxLines: 3, decoration: _glassInputDecoration("اكتب ملاحظاتك هنا...", Icons.comment, isDarkMode, suffixIcon: _buildMicButton(notes, isDarkMode))),
                         ),
                         
@@ -905,16 +916,15 @@ class _AddSessionPageState extends State<AddSessionPage> {
     );
   }
 
-  // 🚀 تعديل بسيط لاستقبال أيقونة المايكروفون كـ (suffixIcon)
   InputDecoration _glassInputDecoration(String label, IconData icon, bool isDarkMode, {Widget? suffixIcon}) {
     return InputDecoration(
       labelText: label,
       labelStyle: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.w600),
       prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
-      suffixIcon: suffixIcon, // 👈 هون بينزل المايكروفون
+      suffixIcon: suffixIcon, 
       filled: true,
       fillColor: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), 
-      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15), 
