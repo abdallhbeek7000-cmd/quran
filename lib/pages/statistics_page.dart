@@ -86,21 +86,39 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
     return matches.map((m) => int.parse(m.group(0)!)).reduce((a, b) => a > b ? a : b);
   }
 
+  // 🚀 الخوارزمية الجديدة لحساب الصفحات المفصولة
   int _calculatePagesFromText(String? text) {
     if (text == null || text.trim().isEmpty) return 0;
-    var matches = RegExp(r'\d+').allMatches(text);
-    if (matches.isEmpty) return 0;
+    
+    int totalPages = 0;
+    
+    // 1. تحويل كلمة " و " إلى فاصل | لتسهيل المعالجة
+    String processedText = text.replaceAll(' و ', '|');
+    
+    // 2. تقسيم النص لأجزاء بناءً على الفواصل ( | أو , أو ، أو + )
+    List<String> parts = processedText.split(RegExp(r'[|،,+]'));
+    
+    for (String part in parts) {
+      var matches = RegExp(r'\d+').allMatches(part);
+      if (matches.isEmpty) continue; // إذا الجزء ما فيه أرقام، تجاوزه
 
-    List<int> numbers = matches.map((m) => int.parse(m.group(0)!)).toList();
-    if (numbers.length == 1) return 1; 
+      List<int> numbers = matches.map((m) => int.parse(m.group(0)!)).toList();
+      
+      // إذا كان رقم واحد فقط، نعتبره صفحة واحدة
+      if (numbers.length == 1) {
+        totalPages += 1; 
+      } else {
+        // إذا كان أكثر من رقم (مثلاً 55 - 80)، نحسب الفرق بين أكبر وأصغر رقم في هذا الجزء فقط
+        int minP = numbers.reduce((a, b) => a < b ? a : b);
+        int maxP = numbers.reduce((a, b) => a > b ? a : b);
 
-    int minP = numbers.reduce((a, b) => a < b ? a : b);
-    int maxP = numbers.reduce((a, b) => a > b ? a : b);
-
-    if (maxP >= minP) {
-      return (maxP - minP) + 1; 
+        if (maxP >= minP) {
+          totalPages += (maxP - minP) + 1; 
+        }
+      }
     }
-    return 0;
+    
+    return totalPages;
   }
 
   Future<void> _calculateStats() async {
@@ -527,7 +545,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
   }
 
   // 🚀 تصميم صندوق الإحصائيات الزجاجي مع تدرج خفيف
-// 🚀 تصميم صندوق الإحصائيات الزجاجي مع تدرج خفيف
   Widget _buildGradientStatBox(String title, String value, Color color, IconData icon, bool hasValue, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
@@ -553,7 +570,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
             children: [
               Text(title, style: TextStyle(fontSize: 10, color: isDark ? Colors.white60 : Colors.black54, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
-              // استخدمنا اللون مباشرة بدون مشاكل الـ shade
               Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: hasValue ? color : Colors.blueGrey, fontFamily: 'Cairo')),
             ],
           ),

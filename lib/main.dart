@@ -161,18 +161,27 @@ class _MyAppState extends State<MyApp> {
         ),
       ),
 
+      // 🚀 تغليف الصفحة الرئيسية عند فتح التطبيق
       home: isLoggedIn
           ? OfflineWrapper(child: HomePage(uid: userId, role: userRole)) 
           : const LoginPage(),
           
-      routes: {
-        '/home': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map;
-          return HomePage(
-            uid: args['uid'],
-            role: args['role'],
+      // 🚀 استخدام onGenerateRoute بدلاً من routes لتفادي مشاكل الـ Context والـ Null 
+      onGenerateRoute: (settings) {
+        if (settings.name == '/home') {
+          // فحص أمان لتفادي الكراش إذا تم استدعاء الصفحة بدون Arguments
+          final args = (settings.arguments as Map<String, dynamic>?) ?? {'uid': '', 'role': ''};
+          
+          return MaterialPageRoute(
+            builder: (context) => OfflineWrapper( // 👈 التغليف شغال بكل أمان هنا
+              child: HomePage(
+                uid: args['uid'],
+                role: args['role'],
+              ),
+            ),
           );
-        },
+        }
+        return null;
       },
     );
   }

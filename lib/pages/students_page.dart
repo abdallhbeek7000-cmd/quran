@@ -16,6 +16,7 @@ import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
 import '../widgets/animated_glass_background.dart'; 
 import '../widgets/glass_toast.dart'; 
+import '../widgets/offline_wrapper.dart'; // 🚀 إضافة مكتبة الأوفلاين
 
 class StudentsPage extends StatefulWidget {
   final CycleModel cycle;
@@ -239,101 +240,104 @@ class _StudentsPageState extends State<StudentsPage> {
       query = query.where('supervisorId', isEqualTo: widget.uid);
     }
 
-    return Scaffold(
-      extendBodyBehindAppBar: true, 
-      backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent, 
-        title: Text(
-          widget.isArchivedFromHistory ? "أرشيف: ${widget.cycle.name}" : "قائمة الطلاب", 
-          style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)
+    // 🚀 تغليف الـ Scaffold بـ OfflineWrapper
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true, 
+        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent, 
+          title: Text(
+            widget.isArchivedFromHistory ? "أرشيف: ${widget.cycle.name}" : "قائمة الطلاب", 
+            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)
+          ),
+          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+          actions: [
+            if (widget.role == "manager") 
+              IconButton(icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor), tooltip: "تصدير Excel", onPressed: exportToExcel),
+          ],
         ),
-        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-        centerTitle: true,
-        actions: [
-          if (widget.role == "manager") 
-            IconButton(icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor), tooltip: "تصدير Excel", onPressed: exportToExcel),
-        ],
-      ),
-      floatingActionButton: (widget.role == "manager" && !widget.isArchivedFromHistory)
-          ? FloatingActionButton(
-              backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9),
-              onPressed: () => _nav(AddStudentPage(cycle: widget.cycle)),
-              child: const Icon(Icons.person_add_alt_1, color: Colors.white),
-            )
-          : null,
-          
-      body: AnimatedGlassBackground(
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                child: _buildGlassContainer(
-                  isDarkMode: isDarkMode,
-                  padding: const EdgeInsets.all(15),
-                  child: Column(
-                    children: [
-                      TextField(
-                        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                        decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
-                        onChanged: (v) => setState(() => search = v.trim().toLowerCase()),
-                      ),
-                      if (widget.role == "manager") ...[
-                        const SizedBox(height: 12),
-                        _buildSupervisorFilter(isDarkMode),
+        floatingActionButton: (widget.role == "manager" && !widget.isArchivedFromHistory)
+            ? FloatingActionButton(
+                backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9),
+                onPressed: () => _nav(AddStudentPage(cycle: widget.cycle)),
+                child: const Icon(Icons.person_add_alt_1, color: Colors.white),
+              )
+            : null,
+            
+        body: AnimatedGlassBackground(
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                  child: _buildGlassContainer(
+                    isDarkMode: isDarkMode,
+                    padding: const EdgeInsets.all(15),
+                    child: Column(
+                      children: [
+                        TextField(
+                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                          decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
+                          onChanged: (v) => setState(() => search = v.trim().toLowerCase()),
+                        ),
+                        if (widget.role == "manager") ...[
+                          const SizedBox(height: 12),
+                          _buildSupervisorFilter(isDarkMode),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-
-              if (widget.role == "manager" && !widget.isArchivedFromHistory)
-                _buildAbsentAlertSection(isDarkMode),
-
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: query.snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات"));
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                    
-                    var docs = snapshot.data!.docs.where((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
-                      final nameMatches = studentName.contains(search);
-                      bool supervisorMatches = true;
-                      if (selectedSupervisor.isNotEmpty) {
-                        final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
-                        final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
-                        supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
-                      }
-                      return nameMatches && supervisorMatches;
-                    }).toList();
-
-                    docs.sort((a, b) {
-                      final aData = a.data() as Map<String, dynamic>;
-                      final bData = b.data() as Map<String, dynamic>;
-                      int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
-                      int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
-                      return sA.compareTo(sB);
-                    });
-
-                    if (docs.isEmpty) return _buildEmptyState(isDarkMode);
-
-                    return ListView.builder(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.only(left: 15, right: 15, top: 10, bottom: 80),
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
-                        return _buildStudentCard(docs[index], isDarkMode);
-                      },
-                    );
-                  },
+  
+                if (widget.role == "manager" && !widget.isArchivedFromHistory)
+                  _buildAbsentAlertSection(isDarkMode),
+  
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: query.snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات"));
+                      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                      
+                      var docs = snapshot.data!.docs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
+                        final nameMatches = studentName.contains(search);
+                        bool supervisorMatches = true;
+                        if (selectedSupervisor.isNotEmpty) {
+                          final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
+                          final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
+                          supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
+                        }
+                        return nameMatches && supervisorMatches;
+                      }).toList();
+  
+                      docs.sort((a, b) {
+                        final aData = a.data() as Map<String, dynamic>;
+                        final bData = b.data() as Map<String, dynamic>;
+                        int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
+                        int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
+                        return sA.compareTo(sB);
+                      });
+  
+                      if (docs.isEmpty) return _buildEmptyState(isDarkMode);
+  
+                      return ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.only(left: 15, right: 15, top: 10, bottom: 80),
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) {
+                          return _buildStudentCard(docs[index], isDarkMode);
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

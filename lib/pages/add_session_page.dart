@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt; 
 import '../services/theme_provider.dart'; 
 import '../services/notification_service.dart'; 
+import '../widgets/offline_wrapper.dart'; // 🚀 إضافة مكتبة الأوفلاين
 
 class AddSessionPage extends StatefulWidget {
   final String studentId;
@@ -335,8 +336,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       return;
     }
 
-    // 🚀 إزالة شرط الإجبار لترك الحرية المطلقة بحفظ الجلسة
-
     setState(() => loading = true);
     final now = DateTime.now();
     final date = "${now.year}-${now.month}-${now.day}";
@@ -502,369 +501,372 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
     
-    return Scaffold(
-      extendBodyBehindAppBar: true, 
-      backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent, 
-        title: Text(widget.studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
-        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-        centerTitle: true,
-      ),
-      body: checkingStudentType 
-          ? const Center(child: CircularProgressIndicator()) 
-          : Stack(
-              children: [
-                Container(
-                  width: double.infinity, height: double.infinity,
-                  decoration: BoxDecoration(gradient: LinearGradient(colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
-                ),
-                // 🚀 الدوائر العائمة المربوطة بالـ Animation
-                AnimatedBuilder(
-                  animation: _bgAnimation,
-                  builder: (context, child) {
-                    return Stack(
-                      children: [
-                        Positioned(
-                          top: -50 + _bgAnimation.value, right: -50 - (_bgAnimation.value / 2), 
-                          child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))
-                        ),
-                        Positioned(
-                          bottom: 100 - _bgAnimation.value, left: -80 + _bgAnimation.value, 
-                          child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))
-                        ),
-                      ],
-                    );
-                  },
-                ),
+    // 🚀 تغليف الصفحة الأساسية هنا
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true, 
+        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent, 
+          title: Text(widget.studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
+          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+        ),
+        body: checkingStudentType 
+            ? const Center(child: CircularProgressIndicator()) 
+            : Stack(
+                children: [
+                  Container(
+                    width: double.infinity, height: double.infinity,
+                    decoration: BoxDecoration(gradient: LinearGradient(colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
+                  ),
+                  // 🚀 الدوائر العائمة المربوطة بالـ Animation
+                  AnimatedBuilder(
+                    animation: _bgAnimation,
+                    builder: (context, child) {
+                      return Stack(
+                        children: [
+                          Positioned(
+                            top: -50 + _bgAnimation.value, right: -50 - (_bgAnimation.value / 2), 
+                            child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))
+                          ),
+                          Positioned(
+                            bottom: 100 - _bgAnimation.value, left: -80 + _bgAnimation.value, 
+                            child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))
+                          ),
+                        ],
+                      );
+                    },
+                  ),
 
-                SafeArea(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    child: Column(
-                      children: [
-                        _buildGlassContainer(
-                          isDarkMode: isDarkMode,
-                          padding: const EdgeInsets.all(15),
-                          child: Column(
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
-                                child: SwitchListTile(
-                                  activeColor: Colors.orange,
-                                  value: absent,
-                                  title: Text("تسجيل الطالب غائب؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
-                                  secondary: Icon(absent ? Icons.person_off : Icons.person, color: isDarkMode ? Colors.white70 : primaryColor),
-                                  onChanged: (v) {
-                                    setState(() { absent = v; if (absent) isExam = false; });
-                                  },
-                                ),
-                              ),
-                              if (!absent) ...[
-                                const SizedBox(height: 10),
+                  SafeArea(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      child: Column(
+                        children: [
+                          _buildGlassContainer(
+                            isDarkMode: isDarkMode,
+                            padding: const EdgeInsets.all(15),
+                            child: Column(
+                              children: [
                                 Container(
                                   decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
                                   child: SwitchListTile(
-                                    activeColor: Colors.teal,
-                                    value: isExam,
-                                    title: Text("تسجيل كـ (جلسة اختبار) ؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
-                                    secondary: Icon(Icons.assignment_turned_in, color: isExam ? Colors.teal : (isDarkMode ? Colors.white70 : primaryColor)),
-                                    onChanged: (v) { setState(() { isExam = v; }); },
+                                    activeColor: Colors.orange,
+                                    value: absent,
+                                    title: Text("تسجيل الطالب غائب؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
+                                    secondary: Icon(absent ? Icons.person_off : Icons.person, color: isDarkMode ? Colors.white70 : primaryColor),
+                                    onChanged: (v) {
+                                      setState(() { absent = v; if (absent) isExam = false; });
+                                    },
                                   ),
                                 ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        if (!absent && !isExam) ...[
-                          _buildSectionCard(
-                            title: isCompletedStudent ? "منظومة مراجعة الختمة الشاملة 👑" : "الإنجاز القرآني اليومي",
-                            icon: Icons.menu_book,
-                            isDarkMode: isDarkMode,
-                            child: Column(
-                              children: [
-                                if (!isCompletedStudent) ...[
-                                  Row(
-                                    children: [
-                                      Expanded(child: _buildToggleTile("حفظ جديد", hasNewMemorization, Colors.blueAccent, (v) => setState(() => hasNewMemorization = v), isDarkMode)),
-                                      const SizedBox(width: 10),
-                                      Expanded(child: _buildToggleTile("مراجعة", hasReview, Colors.green, (v) => setState(() => hasReview = v), isDarkMode)),
-                                    ],
-                                  ),
+                                if (!absent) ...[
                                   const SizedBox(height: 10),
-                                ],
-                                
-                                // 🚀 زر قراءة نظراً صار جاهز ومتاح
-                                _buildToggleTile("قراءة نظراً من المصحف", hasReading, Colors.purpleAccent, (v) => setState(() => hasReading = v), isDarkMode),
-                                const SizedBox(height: 20),
-
-                                if (!isCompletedStudent && hasNewMemorization) ...[
-                                  TextField(
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
-                                    controller: newMemorization, 
-                                    decoration: _glassInputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode, suffixIcon: _buildMicButton(newMemorization, isDarkMode))
+                                  Container(
+                                    decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
+                                    child: SwitchListTile(
+                                      activeColor: Colors.teal,
+                                      value: isExam,
+                                      title: Text("تسجيل كـ (جلسة اختبار) ؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
+                                      secondary: Icon(Icons.assignment_turned_in, color: isExam ? Colors.teal : (isDarkMode ? Colors.white70 : primaryColor)),
+                                      onChanged: (v) { setState(() { isExam = v; }); },
+                                    ),
                                   ),
-                                  const SizedBox(height: 15),
                                 ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
 
-                                if (hasReview) ...[
+                          if (!absent && !isExam) ...[
+                            _buildSectionCard(
+                              title: isCompletedStudent ? "منظومة مراجعة الختمة الشاملة 👑" : "الإنجاز القرآني اليومي",
+                              icon: Icons.menu_book,
+                              isDarkMode: isDarkMode,
+                              child: Column(
+                                children: [
                                   if (!isCompletedStudent) ...[
+                                    Row(
+                                      children: [
+                                        Expanded(child: _buildToggleTile("حفظ جديد", hasNewMemorization, Colors.blueAccent, (v) => setState(() => hasNewMemorization = v), isDarkMode)),
+                                        const SizedBox(width: 10),
+                                        Expanded(child: _buildToggleTile("مراجعة", hasReview, Colors.green, (v) => setState(() => hasReview = v), isDarkMode)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                  ],
+                                  
+                                  // 🚀 زر قراءة نظراً صار جاهز ومتاح
+                                  _buildToggleTile("قراءة نظراً من المصحف", hasReading, Colors.purpleAccent, (v) => setState(() => hasReading = v), isDarkMode),
+                                  const SizedBox(height: 20),
+
+                                  if (!isCompletedStudent && hasNewMemorization) ...[
                                     TextField(
                                       style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
-                                      controller: newReview, 
-                                      decoration: _glassInputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode, suffixIcon: _buildMicButton(newReview, isDarkMode))
+                                      controller: newMemorization, 
+                                      decoration: _glassInputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode, suffixIcon: _buildMicButton(newMemorization, isDarkMode))
                                     ),
                                     const SizedBox(height: 15),
                                   ],
-                                  TextField(
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
-                                    controller: oldReview, 
-                                    decoration: _glassInputDecoration(
-                                      isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
-                                      isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
-                                      isDarkMode,
-                                      suffixIcon: _buildMicButton(oldReview, isDarkMode)
-                                    )
-                                  ),
-                                  const SizedBox(height: 15),
-                                ],
 
-                                // 🚀 الحقل يظهر فقط إذا كان الخيار مفعل
-                                if (hasReading) ...[
-                                  TextField(
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
-                                    controller: readingBySight, 
-                                    decoration: _glassInputDecoration("المقدار المقروء نظراً من المصحف", Icons.menu_book_outlined, isDarkMode, suffixIcon: _buildMicButton(readingBySight, isDarkMode))
-                                  ),
-                                  const SizedBox(height: 15),
-                                ],
-                                
-                                if (isCompletedStudent) ...[
-                                  TextField(
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
-                                    controller: oldReviewHomeworkController, 
-                                    decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
-                                  ),
-                                ] else ...[
-                                  TextField(
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
-                                    controller: newHomeworkController, 
-                                    decoration: _glassInputDecoration("واجب الحفظ الجديد القادم", Icons.edit_document, isDarkMode, suffixIcon: _buildMicButton(newHomeworkController, isDarkMode))
-                                  ),
-                                  const SizedBox(height: 15),
-                                  TextField(
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
-                                    controller: newReviewHomeworkController, 
-                                    decoration: _glassInputDecoration("واجب المراجعة الجديد القادم", Icons.menu_book_rounded, isDarkMode, suffixIcon: _buildMicButton(newReviewHomeworkController, isDarkMode))
-                                  ),
-                                  const SizedBox(height: 15),
-                                  TextField(
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
-                                    controller: oldReviewHomeworkController, 
-                                    decoration: _glassInputDecoration("واجب المراجعة القديم القادم", Icons.history_edu_rounded, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
-                                  ),
-                                ],
-                                
-                                if (!isCompletedStudent) ...[
-                                  const SizedBox(height: 20),
-                                  Divider(color: isDarkMode ? Colors.white24 : Colors.black12),
-                                  const SizedBox(height: 10),
-                                  TextField(
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold), 
-                                    controller: totalMemorizedPagesController, 
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
-                                    decoration: _glassInputDecoration("إجمالي عدد الصفحات المحفوظة حتى الآن", Icons.analytics_outlined, isDarkMode)
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          _buildSectionCard(
-                            title: "التقييم والسلوك",
-                            icon: Icons.thumbs_up_down_outlined,
-                            isDarkMode: isDarkMode,
-                            child: Column(
-                              children: [
-                                if (!isCompletedStudent && hasNewMemorization) ...[
-                                  DropdownButtonFormField<String>(
-                                    value: memorizationRating,
-                                    dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                                    decoration: _glassInputDecoration("تقييم الحفظ الجديد", Icons.stars, isDarkMode),
-                                    items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                                    onChanged: (v) => setState(() => memorizationRating = v!),
-                                  ),
-                                  const SizedBox(height: 15),
-                                ],
-
-                                if (hasReview) ...[
-                                  DropdownButtonFormField<String>(
-                                    value: reviewRating,
-                                    dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                                    decoration: _glassInputDecoration(isCompletedStudent ? "تقييم مراجعة الختمة" : "تقييم المراجعة", Icons.rate_review_outlined, isDarkMode),
-                                    items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                                    onChanged: (v) => setState(() => reviewRating = v!),
-                                  ),
-                                  const SizedBox(height: 15),
-                                ],
-
-                                DropdownButtonFormField<String>(
-                                  value: studentStatus,
-                                  dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                                  decoration: _glassInputDecoration("حالة الطالب", Icons.mood, isDarkMode),
-                                  items: ["مهذب", "منضبط", "مشاغب", "كثير الحركة"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                                  onChanged: (v) => setState(() => studentStatus = v!),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          _buildSectionCard(
-                            title: "نشاطات إضافية",
-                            icon: Icons.mosque_outlined,
-                            isDarkMode: isDarkMode,
-                            child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: religiousActivities, decoration: _glassInputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode, suffixIcon: _buildMicButton(religiousActivities, isDarkMode))),
-                          ),
-                        ],
-
-                        const SizedBox(height: 20),
-                        
-                        _buildSectionCard(
-                          title: "المشرفين المشاركين بالتسميع",
-                          icon: Icons.groups_rounded,
-                          isDarkMode: isDarkMode,
-                          child: InkWell(
-                            onTap: () => _showStaffSelectionBottomSheet(context, isDarkMode),
-                            borderRadius: BorderRadius.circular(15),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
-                                borderRadius: BorderRadius.circular(15),
-                                border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: selectedSupervisors.map((s) => Chip(
-                                        label: Text(s['name']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                                        backgroundColor: accentGold,
-                                        elevation: 2,
-                                        padding: const EdgeInsets.all(0),
-                                      )).toList(),
+                                  if (hasReview) ...[
+                                    if (!isCompletedStudent) ...[
+                                      TextField(
+                                        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                        controller: newReview, 
+                                        decoration: _glassInputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode, suffixIcon: _buildMicButton(newReview, isDarkMode))
+                                      ),
+                                      const SizedBox(height: 15),
+                                    ],
+                                    TextField(
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                      controller: oldReview, 
+                                      decoration: _glassInputDecoration(
+                                        isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
+                                        isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
+                                        isDarkMode,
+                                        suffixIcon: _buildMicButton(oldReview, isDarkMode)
+                                      )
                                     ),
-                                  ),
-                                  Icon(Icons.edit_rounded, color: isDarkMode ? accentGold : primaryColor),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                                    const SizedBox(height: 15),
+                                  ],
 
-                        if (isExam && !absent) ...[
-                          const SizedBox(height: 20),
-                          _buildSectionCard(
-                            title: "نتائج اختبار الطالب",
-                            icon: Icons.quiz,
-                            isDarkMode: isDarkMode,
-                            child: TextField(
-                              style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                              controller: examScoreController,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
-                              decoration: _glassInputDecoration("علامة الطالب من 100", Icons.percent, isDarkMode),
-                            ),
-                          ),
-                        ],
-
-                        if (absent) ...[
-                          const SizedBox(height: 20),
-                          _buildSectionCard(
-                            title: "تفاصيل الغياب",
-                            icon: Icons.person_off_outlined,
-                            isDarkMode: isDarkMode,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text("نوع الغياب:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDarkMode ? Colors.white : primaryColor)),
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    ChoiceChip(
-                                      label: const Text("بدون عذر"),
-                                      selected: absenceType == "بدون عذر",
-                                      selectedColor: Colors.red.shade400,
-                                      backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
-                                      labelStyle: TextStyle(color: absenceType == "بدون عذر" ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87)),
-                                      onSelected: (val) => setState(() => absenceType = "بدون عذر"),
+                                  // 🚀 الحقل يظهر فقط إذا كان الخيار مفعل
+                                  if (hasReading) ...[
+                                    TextField(
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                      controller: readingBySight, 
+                                      decoration: _glassInputDecoration("المقدار المقروء نظراً من المصحف", Icons.menu_book_outlined, isDarkMode, suffixIcon: _buildMicButton(readingBySight, isDarkMode))
                                     ),
-                                    const SizedBox(width: 15),
-                                    ChoiceChip(
-                                      label: const Text("بعذر"),
-                                      selected: absenceType == "بعذر",
-                                      selectedColor: Colors.green.shade400,
-                                      backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
-                                      labelStyle: TextStyle(color: absenceType == "بعذر" ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87)),
-                                      onSelected: (val) => setState(() => absenceType = "بعذر"),
+                                    const SizedBox(height: 15),
+                                  ],
+                                  
+                                  if (isCompletedStudent) ...[
+                                    TextField(
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                      controller: oldReviewHomeworkController, 
+                                      decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
+                                    ),
+                                  ] else ...[
+                                    TextField(
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                      controller: newHomeworkController, 
+                                      decoration: _glassInputDecoration("واجب الحفظ الجديد القادم", Icons.edit_document, isDarkMode, suffixIcon: _buildMicButton(newHomeworkController, isDarkMode))
+                                    ),
+                                    const SizedBox(height: 15),
+                                    TextField(
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                      controller: newReviewHomeworkController, 
+                                      decoration: _glassInputDecoration("واجب المراجعة الجديد القادم", Icons.menu_book_rounded, isDarkMode, suffixIcon: _buildMicButton(newReviewHomeworkController, isDarkMode))
+                                    ),
+                                    const SizedBox(height: 15),
+                                    TextField(
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 
+                                      controller: oldReviewHomeworkController, 
+                                      decoration: _glassInputDecoration("واجب المراجعة القديم القادم", Icons.history_edu_rounded, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 15),
-                                TextField(
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                                  controller: absenceReasonController,
-                                  decoration: _glassInputDecoration("سبب الغياب (اختياري مثل: مرض، سفر...)", Icons.help_outline, isDarkMode, suffixIcon: _buildMicButton(absenceReasonController, isDarkMode)),
-                                ),
-                              ],
+                                  
+                                  if (!isCompletedStudent) ...[
+                                    const SizedBox(height: 20),
+                                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12),
+                                    const SizedBox(height: 10),
+                                    TextField(
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold), 
+                                      controller: totalMemorizedPagesController, 
+                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
+                                      decoration: _glassInputDecoration("إجمالي عدد الصفحات المحفوظة حتى الآن", Icons.analytics_outlined, isDarkMode)
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 20),
 
-                        const SizedBox(height: 20),
-                        _buildSectionCard(
-                          title: "ملاحظات المشرف",
-                          icon: Icons.note_alt_outlined,
-                          isDarkMode: isDarkMode,
-                          child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: notes, maxLines: 3, decoration: _glassInputDecoration("اكتب ملاحظاتك هنا...", Icons.comment, isDarkMode, suffixIcon: _buildMicButton(notes, isDarkMode))),
-                        ),
-                        
-                        const SizedBox(height: 35),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 55,
-                          child: ElevatedButton(
-                            onPressed: loading ? null : addSession,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (isExam ? Colors.teal.withOpacity(0.9) : (isDarkMode ? Colors.orange.withOpacity(0.9) : primaryColor.withOpacity(0.9))),
-                              foregroundColor: Colors.white,
-                              elevation: 5,
-                              shadowColor: Colors.black38,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            _buildSectionCard(
+                              title: "التقييم والسلوك",
+                              icon: Icons.thumbs_up_down_outlined,
+                              isDarkMode: isDarkMode,
+                              child: Column(
+                                children: [
+                                  if (!isCompletedStudent && hasNewMemorization) ...[
+                                    DropdownButtonFormField<String>(
+                                      value: memorizationRating,
+                                      dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                                      decoration: _glassInputDecoration("تقييم الحفظ الجديد", Icons.stars, isDarkMode),
+                                      items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                                      onChanged: (v) => setState(() => memorizationRating = v!),
+                                    ),
+                                    const SizedBox(height: 15),
+                                  ],
+
+                                  if (hasReview) ...[
+                                    DropdownButtonFormField<String>(
+                                      value: reviewRating,
+                                      dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                                      decoration: _glassInputDecoration(isCompletedStudent ? "تقييم مراجعة الختمة" : "تقييم المراجعة", Icons.rate_review_outlined, isDarkMode),
+                                      items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                                      onChanged: (v) => setState(() => reviewRating = v!),
+                                    ),
+                                    const SizedBox(height: 15),
+                                  ],
+
+                                  DropdownButtonFormField<String>(
+                                    value: studentStatus,
+                                    dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                                    decoration: _glassInputDecoration("حالة الطالب", Icons.mood, isDarkMode),
+                                    items: ["مهذب", "منضبط", "مشاغب", "كثير الحركة"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                                    onChanged: (v) => setState(() => studentStatus = v!),
+                                  ),
+                                ],
+                              ),
                             ),
-                            child: loading
-                                ? const CircularProgressIndicator(color: Colors.white)
-                                : const Text("حفظ الجلسة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                            const SizedBox(height: 20),
+                            _buildSectionCard(
+                              title: "نشاطات إضافية",
+                              icon: Icons.mosque_outlined,
+                              isDarkMode: isDarkMode,
+                              child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: religiousActivities, decoration: _glassInputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode, suffixIcon: _buildMicButton(religiousActivities, isDarkMode))),
+                            ),
+                          ],
+
+                          const SizedBox(height: 20),
+                          
+                          _buildSectionCard(
+                            title: "المشرفين المشاركين بالتسميع",
+                            icon: Icons.groups_rounded,
+                            isDarkMode: isDarkMode,
+                            child: InkWell(
+                              onTap: () => _showStaffSelectionBottomSheet(context, isDarkMode),
+                              borderRadius: BorderRadius.circular(15),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+                                  borderRadius: BorderRadius.circular(15),
+                                  border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: selectedSupervisors.map((s) => Chip(
+                                          label: Text(s['name']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                          backgroundColor: accentGold,
+                                          elevation: 2,
+                                          padding: const EdgeInsets.all(0),
+                                        )).toList(),
+                                      ),
+                                    ),
+                                    Icon(Icons.edit_rounded, color: isDarkMode ? accentGold : primaryColor),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 40),
-                      ],
+
+                          if (isExam && !absent) ...[
+                            const SizedBox(height: 20),
+                            _buildSectionCard(
+                              title: "نتائج اختبار الطالب",
+                              icon: Icons.quiz,
+                              isDarkMode: isDarkMode,
+                              child: TextField(
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                                controller: examScoreController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
+                                decoration: _glassInputDecoration("علامة الطالب من 100", Icons.percent, isDarkMode),
+                              ),
+                            ),
+                          ],
+
+                          if (absent) ...[
+                            const SizedBox(height: 20),
+                            _buildSectionCard(
+                              title: "تفاصيل الغياب",
+                              icon: Icons.person_off_outlined,
+                              isDarkMode: isDarkMode,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("نوع الغياب:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDarkMode ? Colors.white : primaryColor)),
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      ChoiceChip(
+                                        label: const Text("بدون عذر"),
+                                        selected: absenceType == "بدون عذر",
+                                        selectedColor: Colors.red.shade400,
+                                        backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
+                                        labelStyle: TextStyle(color: absenceType == "بدون عذر" ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87)),
+                                        onSelected: (val) => setState(() => absenceType = "بدون عذر"),
+                                      ),
+                                      const SizedBox(width: 15),
+                                      ChoiceChip(
+                                        label: const Text("بعذر"),
+                                        selected: absenceType == "بعذر",
+                                        selectedColor: Colors.green.shade400,
+                                        backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
+                                        labelStyle: TextStyle(color: absenceType == "بعذر" ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87)),
+                                        onSelected: (val) => setState(() => absenceType = "بعذر"),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 15),
+                                  TextField(
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                                    controller: absenceReasonController,
+                                    decoration: _glassInputDecoration("سبب الغياب (اختياري مثل: مرض، سفر...)", Icons.help_outline, isDarkMode, suffixIcon: _buildMicButton(absenceReasonController, isDarkMode)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          const SizedBox(height: 20),
+                          _buildSectionCard(
+                            title: "ملاحظات المشرف",
+                            icon: Icons.note_alt_outlined,
+                            isDarkMode: isDarkMode,
+                            child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), controller: notes, maxLines: 3, decoration: _glassInputDecoration("اكتب ملاحظاتك هنا...", Icons.comment, isDarkMode, suffixIcon: _buildMicButton(notes, isDarkMode))),
+                          ),
+                          
+                          const SizedBox(height: 35),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 55,
+                            child: ElevatedButton(
+                              onPressed: loading ? null : addSession,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (isExam ? Colors.teal.withOpacity(0.9) : (isDarkMode ? Colors.orange.withOpacity(0.9) : primaryColor.withOpacity(0.9))),
+                                foregroundColor: Colors.white,
+                                elevation: 5,
+                                shadowColor: Colors.black38,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              ),
+                              child: loading
+                                  ? const CircularProgressIndicator(color: Colors.white)
+                                  : const Text("حفظ الجلسة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                            ),
+                          ),
+                          const SizedBox(height: 40),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 
