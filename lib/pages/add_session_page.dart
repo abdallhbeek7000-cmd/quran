@@ -8,7 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt; 
 import '../services/theme_provider.dart'; 
 import '../services/notification_service.dart'; 
-import '../widgets/offline_wrapper.dart'; // 🚀 إضافة مكتبة الأوفلاين
+import '../services/notification_queue_manager.dart'; // 🚀 استيراد مدير طابور الإشعارات
+import '../widgets/offline_wrapper.dart'; 
 
 class AddSessionPage extends StatefulWidget {
   final String studentId;
@@ -28,11 +29,9 @@ class AddSessionPage extends StatefulWidget {
   State<AddSessionPage> createState() => _AddSessionPageState();
 }
 
-// 🚀 إضافة SingleTickerProviderStateMixin من أجل التحريك
 class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProviderStateMixin {
   final sessionService = SessionService();
   
-  // 🚀 متغيرات التحريك (Animation)
   late AnimationController _bgController;
   late Animation<double> _bgAnimation;
 
@@ -63,7 +62,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   
   bool hasNewMemorization = true;
   bool hasReview = true;
-  bool hasReading = true; // 🚀 متغير التحكم بقراءة نظراً
+  bool hasReading = true; 
 
   String absenceType = "بدون عذر"; 
   
@@ -84,7 +83,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   void initState() {
     super.initState();
     
-    // 🚀 تهيئة محرك التحريك (الدوائر العائمة)
     _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
     _bgAnimation = Tween<double>(begin: -10, end: 20).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine));
 
@@ -103,7 +101,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
   @override
   void dispose() {
-    _bgController.dispose(); // 🚀 إغلاق المحرك
+    _bgController.dispose(); 
     newMemorization.removeListener(_extractHighestPageNumber);
     newMemorization.dispose();
     newReview.dispose();
@@ -344,7 +342,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent) ? '' : newReview.text.trim();
     String finalFarReview = (!hasReview || absent || isExam) ? '' : oldReview.text.trim();
     
-    // 🚀 تفعيل خيار قراءة نظراً فقط إذا كان مضاء
     String finalReading = (!hasReading || absent || isExam) ? '' : readingBySight.text.trim();
     
     String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent) ? '' : memorizationRating;
@@ -410,7 +407,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'newHomework': finalNewHW, 
       'newReviewHomework': finalNewRevHW, 
       'oldReviewHomework': finalOldRevHW, 
-      'readingBySight': finalReading, // 🚀 تحديث لتخزينها حسب الزر
+      'readingBySight': finalReading,
       'memorizationRating': finalMemoRating,
       'reviewRating': finalRevRating,
       'rating': session.rating, 
@@ -422,18 +419,18 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       if (!absent && !isExam) 'total_memorized_pages': totalPages,
     };
 
-    await FirebaseFirestore.instance.collection('sessions').add(sessionData);
+    FirebaseFirestore.instance.collection('sessions').add(sessionData);
 
     final studentRef = FirebaseFirestore.instance.collection('students').doc(widget.studentId);
     
     if (absent) {
-      await studentRef.update({'consecutiveAbsences': FieldValue.increment(1)});
+      studentRef.update({'consecutiveAbsences': FieldValue.increment(1)});
     } else {
       final Map<String, dynamic> updateData = {'consecutiveAbsences': 0};
       if (!isExam && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
         updateData['memorizedPages'] = totalPages;
       }
-      await studentRef.update(updateData);
+      studentRef.update(updateData);
     }
 
     String notifyTitle = "";
@@ -457,14 +454,31 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       notifyType = "regular";
     }
 
-    await NotificationService.sendAndSaveNotification(
+    // 🚀 التعديل الأهم: إرسال الإشعار وتخزينه في الطابور إذا فشل
+    NotificationService.sendAndSaveNotification(
       studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType, context: context, 
-    );
+    ).then((_) {
+      print("✅ تم إرسال الإشعار فوراً (أونلاين)");
+    }).catchError((error) async {
+      print("⚠️ فشل الإرسال أو انقطع الاتصال، جاري تحويل الإشعار لطابور الانتظار: $error");
+      
+      // حفظ الإشعار أوفلاين ليتم إرساله لاحقاً
+      await NotificationQueueManager.addToQueue(
+        studentId: widget.studentId,
+        title: notifyTitle,
+        body: notifyBody,
+        type: notifyType,
+      );
+    });
 
     if (!mounted) return;
     setState(() => loading = false);
     
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text("تمت إضافة الجلسة بنجاح")));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      backgroundColor: Colors.blueGrey, 
+      content: Text("تم حفظ الجلسة (ستتم المزامنة عند توفر الإنترنت)")
+    ));
+    
     Navigator.pop(context);
   }
 
@@ -483,7 +497,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
-  // 🚀 ويدجت جديد لترتيب وتوحيد شكل الأزرار (الحفظ، المراجعة، قراءة نظراً)
   Widget _buildToggleTile(String title, bool value, Color color, Function(bool) onChanged, bool isDarkMode) {
     return Container(
       decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
@@ -501,7 +514,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
     
-    // 🚀 تغليف الصفحة الأساسية هنا
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true, 
@@ -521,7 +533,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                     width: double.infinity, height: double.infinity,
                     decoration: BoxDecoration(gradient: LinearGradient(colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
                   ),
-                  // 🚀 الدوائر العائمة المربوطة بالـ Animation
                   AnimatedBuilder(
                     animation: _bgAnimation,
                     builder: (context, child) {
@@ -599,7 +610,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     const SizedBox(height: 10),
                                   ],
                                   
-                                  // 🚀 زر قراءة نظراً صار جاهز ومتاح
                                   _buildToggleTile("قراءة نظراً من المصحف", hasReading, Colors.purpleAccent, (v) => setState(() => hasReading = v), isDarkMode),
                                   const SizedBox(height: 20),
 
@@ -634,7 +644,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     const SizedBox(height: 15),
                                   ],
 
-                                  // 🚀 الحقل يظهر فقط إذا كان الخيار مفعل
                                   if (hasReading) ...[
                                     TextField(
                                       style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), 

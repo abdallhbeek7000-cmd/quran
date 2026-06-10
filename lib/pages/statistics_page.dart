@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/theme_provider.dart';
 import '../services/cycle_service.dart';
+import '../widgets/offline_wrapper.dart'; // 🚀 استيراد غلاف الأوفلاين
 
 class StatisticsPage extends StatefulWidget {
   const StatisticsPage({super.key});
@@ -19,7 +20,11 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
 
   bool isMonthly = false; 
   bool isLoading = true;
-  List<Map<String, dynamic>> studentsStats = [];
+  
+  // 🚀 فصل القوائم الثلاثة
+  List<Map<String, dynamic>> newStudentsStats = [];
+  List<Map<String, dynamic>> oldStudentsStats = [];
+  List<Map<String, dynamic>> completedStudentsStats = [];
   
   int periodsBack = 0; 
   String currentPeriodLabel = "";
@@ -86,29 +91,22 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
     return matches.map((m) => int.parse(m.group(0)!)).reduce((a, b) => a > b ? a : b);
   }
 
-  // 🚀 الخوارزمية الجديدة لحساب الصفحات المفصولة
   int _calculatePagesFromText(String? text) {
     if (text == null || text.trim().isEmpty) return 0;
     
     int totalPages = 0;
-    
-    // 1. تحويل كلمة " و " إلى فاصل | لتسهيل المعالجة
     String processedText = text.replaceAll(' و ', '|');
-    
-    // 2. تقسيم النص لأجزاء بناءً على الفواصل ( | أو , أو ، أو + )
     List<String> parts = processedText.split(RegExp(r'[|،,+]'));
     
     for (String part in parts) {
       var matches = RegExp(r'\d+').allMatches(part);
-      if (matches.isEmpty) continue; // إذا الجزء ما فيه أرقام، تجاوزه
+      if (matches.isEmpty) continue;
 
       List<int> numbers = matches.map((m) => int.parse(m.group(0)!)).toList();
       
-      // إذا كان رقم واحد فقط، نعتبره صفحة واحدة
       if (numbers.length == 1) {
         totalPages += 1; 
       } else {
-        // إذا كان أكثر من رقم (مثلاً 55 - 80)، نحسب الفرق بين أكبر وأصغر رقم في هذا الجزء فقط
         int minP = numbers.reduce((a, b) => a < b ? a : b);
         int maxP = numbers.reduce((a, b) => a > b ? a : b);
 
@@ -126,6 +124,9 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
       isLoading = true;
       cycleTotalPages = 0;
       cycleTotalReview = 0;
+      newStudentsStats.clear();
+      oldStudentsStats.clear();
+      completedStudentsStats.clear();
     });
     
     try {
@@ -154,13 +155,19 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
         currentPeriodLabel = "${targetStart.day}/${targetStart.month}  إلى  ${targetEnd.day}/${targetEnd.month}";
       }
 
-      List<Map<String, dynamic>> tempStats = [];
+      List<Map<String, dynamic>> tempNew = [];
+      List<Map<String, dynamic>> tempOld = [];
+      List<Map<String, dynamic>> tempCompleted = [];
 
       for (var student in studentsSnap.docs) {
+        Map<String, dynamic> sData = student.data();
         String sId = student.id;
-        String sName = student['name'];
-        String imageUrl = student.data().toString().contains('imageUrl') ? student['imageUrl'] ?? '' : '';
-        bool isCompleted = student['studentType'] == 'completed';
+        String sName = sData['name'];
+        String imageUrl = sData.containsKey('imageUrl') ? sData['imageUrl'] ?? '' : '';
+        
+        // 🚀 استخراج نوع الطالب بشكل دقيق
+        String studentType = sData.containsKey('studentType') ? sData['studentType'] : 'new';
+        bool isCompleted = studentType == 'completed';
 
         var sSessions = sessionsSnap.docs.where((doc) {
           var data = doc.data();
@@ -227,11 +234,10 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
           }
         }
 
-        // إضافة للمجموع الكلي
         if (!isCompleted) cycleTotalPages += totalPages;
         cycleTotalReview += reviewPages;
 
-        tempStats.add({
+        var statData = {
           'name': sName,
           'imageUrl': imageUrl,
           'pages': totalPages,
@@ -239,22 +245,27 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
           'isCompleted': isCompleted,
           'sessionsCount': sessionsCount,
           'absentCount': absentCount,
-        });
+        };
+
+        // 🚀 توزيع الطلاب على القوائم المخصصة
+        if (isCompleted) {
+          tempCompleted.add(statData);
+        } else if (studentType == 'old') {
+          tempOld.add(statData);
+        } else {
+          tempNew.add(statData); // الافتراضي للجديد
+        }
       }
 
-      tempStats.sort((a, b) {
-        if (a['isCompleted'] && !b['isCompleted']) return 1;
-        if (!a['isCompleted'] && b['isCompleted']) return -1;
-        
-        if (!a['isCompleted'] && !b['isCompleted']) {
-          return (b['pages'] as int).compareTo(a['pages'] as int);
-        } else {
-          return (b['reviewPages'] as int).compareTo(a['reviewPages'] as int);
-        }
-      });
+      // 🚀 ترتيب كل قائمة على حدة لفرز الأوائل
+      tempNew.sort((a, b) => (b['pages'] as int).compareTo(a['pages'] as int));
+      tempOld.sort((a, b) => (b['pages'] as int).compareTo(a['pages'] as int));
+      tempCompleted.sort((a, b) => (b['reviewPages'] as int).compareTo(a['reviewPages'] as int)); // الخاتم يُرتب حسب المراجعة
 
       setState(() {
-        studentsStats = tempStats;
+        newStudentsStats = tempNew;
+        oldStudentsStats = tempOld;
+        completedStudentsStats = tempCompleted;
         isLoading = false;
       });
 
@@ -275,168 +286,201 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
+    bool hasAnyData = newStudentsStats.isNotEmpty || oldStudentsStats.isNotEmpty || completedStudentsStats.isNotEmpty;
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        centerTitle: true,
-        title: Text("لوحة الإحصائيات الشاملة 📊", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
-        iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
-      ),
-      body: Stack(
-        children: [
-          Container(
-            width: double.infinity, height: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDark 
-                  ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
-                  : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          centerTitle: true,
+          title: Text("لوحة الإحصائيات الشاملة 📊", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
+          iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
+        ),
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity, height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark 
+                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
+                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
               ),
             ),
-          ),
-          
-          AnimatedBuilder(
-            animation: _bgAnimation,
-            builder: (context, child) {
-              return Stack(
+            
+            AnimatedBuilder(
+              animation: _bgAnimation,
+              builder: (context, child) {
+                return Stack(
+                  children: [
+                    Positioned(
+                      top: -50 + _bgAnimation.value, 
+                      right: -50 - (_bgAnimation.value / 2), 
+                      child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))
+                    ),
+                    Positioned(
+                      bottom: 100 - _bgAnimation.value, 
+                      left: -80 + _bgAnimation.value, 
+                      child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))
+                    ),
+                  ],
+                );
+              },
+            ),
+
+            SafeArea(
+              child: Column(
                 children: [
-                  Positioned(
-                    top: -50 + _bgAnimation.value, 
-                    right: -50 - (_bgAnimation.value / 2), 
-                    child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))
-                  ),
-                  Positioned(
-                    bottom: 100 - _bgAnimation.value, 
-                    left: -80 + _bgAnimation.value, 
-                    child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))
-                  ),
-                ],
-              );
-            },
-          ),
-
-          SafeArea(
-            child: Column(
-              children: [
-                // أزرار التبديل (أسبوعي / شهري)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: isDark ? Colors.white12 : Colors.white, width: 1.5),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              if (isMonthly) {
-                                setState(() { isMonthly = false; periodsBack = 0; }); 
-                                _calculateStats();
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(color: !isMonthly ? accentGold : Colors.transparent, borderRadius: BorderRadius.circular(18)),
-                              child: Text("أسبوعي", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: !isMonthly ? Colors.white : (isDark ? Colors.white54 : Colors.black54))),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              if (!isMonthly) {
-                                setState(() { isMonthly = true; periodsBack = 0; }); 
-                                _calculateStats();
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(color: isMonthly ? accentGold : Colors.transparent, borderRadius: BorderRadius.circular(18)),
-                              child: Text("شهري", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isMonthly ? Colors.white : (isDark ? Colors.white54 : Colors.black54))),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // شريط التحكم بالزمن 
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: isDark ? Colors.white12 : Colors.white70),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(icon: Icon(Icons.chevron_right_rounded, color: isDark ? accentGold : primaryColor), onPressed: () => _changePeriod(1), tooltip: "السابق"),
-                        Expanded(child: Text(currentPeriodLabel, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 13))),
-                        IconButton(icon: Icon(Icons.chevron_left_rounded, color: periodsBack > 0 ? (isDark ? accentGold : primaryColor) : Colors.transparent), onPressed: periodsBack > 0 ? () => _changePeriod(-1) : null, tooltip: "التالي"),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // 🚀 بطاقة حصاد الفترة (إجمالي המعهد)
-                if (!isLoading)
+                  // أزرار التبديل (أسبوعي / شهري)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                     child: Container(
-                      padding: const EdgeInsets.all(15),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: isDark ? [const Color(0xff1e293b), const Color(0xff0f172a)] : [Colors.white, const Color(0xffe2e8f0)]),
+                        color: isDark ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: accentGold.withOpacity(0.5), width: 1.5),
-                        boxShadow: [BoxShadow(color: accentGold.withOpacity(0.1), blurRadius: 10, spreadRadius: 2)],
+                        border: Border.all(color: isDark ? Colors.white12 : Colors.white, width: 1.5),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildSummaryItem("إجمالي الحفظ", "$cycleTotalPages", Icons.menu_book_rounded, Colors.green, isDark),
-                          Container(width: 1, height: 40, color: isDark ? Colors.white24 : Colors.black12),
-                          _buildSummaryItem("إجمالي المراجعة", "$cycleTotalReview", Icons.loop_rounded, Colors.blueAccent, isDark),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                if (isMonthly) {
+                                  setState(() { isMonthly = false; periodsBack = 0; }); 
+                                  _calculateStats();
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(color: !isMonthly ? accentGold : Colors.transparent, borderRadius: BorderRadius.circular(18)),
+                                child: Text("أسبوعي", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: !isMonthly ? Colors.white : (isDark ? Colors.white54 : Colors.black54))),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                if (!isMonthly) {
+                                  setState(() { isMonthly = true; periodsBack = 0; }); 
+                                  _calculateStats();
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(color: isMonthly ? accentGold : Colors.transparent, borderRadius: BorderRadius.circular(18)),
+                                child: Text("شهري", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isMonthly ? Colors.white : (isDark ? Colors.white54 : Colors.black54))),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
 
-                Expanded(
-                  child: isLoading 
-                    ? const Center(child: CircularProgressIndicator())
-                    : (studentsStats.isEmpty 
-                        ? Center(child: Text("لا توجد بيانات في هذه الفترة 📭", style: TextStyle(color: isDark ? Colors.white54 : primaryColor, fontFamily: 'Cairo', fontWeight: FontWeight.bold)))
-                        : ListView.builder(
-                            physics: const BouncingScrollPhysics(),
-                            padding: const EdgeInsets.only(left: 20, right: 20, top: 5, bottom: 80),
-                            itemCount: studentsStats.length,
-                            itemBuilder: (context, index) {
-                              return _buildModernStudentCard(studentsStats[index], index, isDark);
-                            },
-                          )
+                  // شريط التحكم بالزمن 
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: isDark ? Colors.white12 : Colors.white70),
                       ),
-                ),
-              ],
-            ),
-          )
-        ],
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(icon: Icon(Icons.chevron_right_rounded, color: isDark ? accentGold : primaryColor), onPressed: () => _changePeriod(1), tooltip: "السابق"),
+                          Expanded(child: Text(currentPeriodLabel, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 13))),
+                          IconButton(icon: Icon(Icons.chevron_left_rounded, color: periodsBack > 0 ? (isDark ? accentGold : primaryColor) : Colors.transparent), onPressed: periodsBack > 0 ? () => _changePeriod(-1) : null, tooltip: "التالي"),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // بطاقة حصاد الفترة (إجمالي المعهد)
+                  if (!isLoading)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+                      child: Container(
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: isDark ? [const Color(0xff1e293b), const Color(0xff0f172a)] : [Colors.white, const Color(0xffe2e8f0)]),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: accentGold.withOpacity(0.5), width: 1.5),
+                          boxShadow: [BoxShadow(color: accentGold.withOpacity(0.1), blurRadius: 10, spreadRadius: 2)],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildSummaryItem("إجمالي الحفظ", "$cycleTotalPages", Icons.menu_book_rounded, Colors.green, isDark),
+                            Container(width: 1, height: 40, color: isDark ? Colors.white24 : Colors.black12),
+                            _buildSummaryItem("إجمالي المراجعة", "$cycleTotalReview", Icons.loop_rounded, Colors.blueAccent, isDark),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  Expanded(
+                    child: isLoading 
+                      ? const Center(child: CircularProgressIndicator())
+                      : (!hasAnyData 
+                          ? Center(child: Text("لا توجد بيانات في هذه الفترة 📭", style: TextStyle(color: isDark ? Colors.white54 : primaryColor, fontFamily: 'Cairo', fontWeight: FontWeight.bold)))
+                          : ListView(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.only(bottom: 80),
+                              children: [
+                                _buildCategorySection("الطلاب الجدد", newStudentsStats, isDark, Icons.fiber_new_rounded, Colors.blueAccent),
+                                _buildCategorySection("الطلاب القدامى", oldStudentsStats, isDark, Icons.history_edu_rounded, Colors.orangeAccent),
+                                _buildCategorySection("الطلاب الخاتمين 👑", completedStudentsStats, isDark, Icons.verified_rounded, accentGold),
+                              ],
+                            )
+                      ),
+                  ),
+                ],
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
 
-  // ويدجت داخلي لبطاقة الحصاد الإجمالي
+  // 🚀 تصميم القسم المنفصل لكل فئة
+  Widget _buildCategorySection(String title, List<Map<String, dynamic>> stats, bool isDark, IconData icon, Color color) {
+    if (stats.isEmpty) return const SizedBox(); 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 10),
+              Text(title, style: TextStyle(color: isDark ? Colors.white : primaryColor, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+            ],
+          ),
+        ),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: stats.length,
+          itemBuilder: (context, index) {
+            return _buildModernStudentCard(stats[index], index, isDark);
+          },
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
   Widget _buildSummaryItem(String title, String value, IconData icon, Color color, bool isDark) {
     return Column(
       children: [
@@ -453,7 +497,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
     );
   }
 
-  // 🚀 تصميم البطاقة العصرية (Premium Style)
   Widget _buildModernStudentCard(Map<String, dynamic> stat, int index, bool isDark) {
     bool isCompleted = stat['isCompleted'];
     int pages = stat['pages'];
@@ -462,13 +505,15 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
     String imageUrl = stat['imageUrl'];
     String firstLetter = stat['name'].isNotEmpty ? stat['name'].trim().substring(0, 1) : "?";
 
-    // 👑 تجهيز ألوان وإضاءة الأوائل
+    // 👑 تجهيز ألوان وإضاءة الأوائل (كل طالب ينافس في فئته)
     Color rankColor = Colors.transparent;
-    bool isTopThree = (!isCompleted && pages > 0 && index < 3);
+    // يعتبر من الأوائل إذا كان ترتيبه أول 3 ولديه إنجاز (حفظ للطلاب، مراجعة للخاتمين)
+    bool isTopThree = ((!isCompleted && pages > 0) || (isCompleted && reviewPages > 0)) && index < 3;
+    
     if (isTopThree) {
-      if (index == 0) rankColor = const Color(0xFFFFD700); // ذهبي
-      if (index == 1) rankColor = const Color(0xFFC0C0C0); // فضي
-      if (index == 2) rankColor = const Color(0xFFCD7F32); // برونزي
+      if (index == 0) rankColor = const Color(0xFFFFD700); 
+      if (index == 1) rankColor = const Color(0xFFC0C0C0); 
+      if (index == 2) rankColor = const Color(0xFFCD7F32); 
     }
 
     return Container(
@@ -483,10 +528,8 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // 👤 قسم المعلومات الشخصية
             Row(
               children: [
-                // صورة الطالب مع إطار مضيء للأوائل
                 Container(
                   width: 50, height: 50,
                   decoration: BoxDecoration(
@@ -515,7 +558,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
                   ),
                 ),
 
-                // الشارة 🥇
                 if (isTopThree)
                   Text(index == 0 ? "🥇" : (index == 1 ? "🥈" : "🥉"), style: const TextStyle(fontSize: 26))
                 else
@@ -525,7 +567,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
             
             const SizedBox(height: 15),
             
-            // 📊 قسم الإحصائيات (Bento Style)
             Row(
               children: [
                 if (!isCompleted)
@@ -544,7 +585,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
     );
   }
 
-  // 🚀 تصميم صندوق الإحصائيات الزجاجي مع تدرج خفيف
   Widget _buildGradientStatBox(String title, String value, Color color, IconData icon, bool hasValue, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
@@ -561,7 +601,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // أيقونة خلفية (Watermark) شفافة جداً
           Positioned(
             right: -10, bottom: -10,
             child: Icon(icon, size: 40, color: hasValue ? color.withOpacity(0.1) : Colors.transparent),

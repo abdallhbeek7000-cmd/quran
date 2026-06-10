@@ -22,7 +22,9 @@ import 'daily_stats_page.dart';
 import 'supervisor_page.dart';
 import 'inspirations_manage_page.dart'; 
 import 'supervisor_inbox_page.dart'; 
-import 'statistics_page.dart'; // 🚀 استدعاء صفحة الإحصائيات الجديدة
+import 'statistics_page.dart'; 
+import '../services/notification_queue_manager.dart'; // 🚀 استيراد مدير طابور الإشعارات
+import '../widgets/offline_wrapper.dart'; // 🚀 استيراد غلاف الأوفلاين
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -56,6 +58,16 @@ class _HomePageState extends State<HomePage> {
     loadCycle(); 
     _setupNotifications(); 
     _checkIfManager(); // التحقق الصامت الذكي
+    _checkPendingNotifications(); // 🚀 فحص الإشعارات المعلقة بمجرد فتح الشاشة
+  }
+
+  // 🚀 دالة فحص وطرد الإشعارات المعلقة
+  void _checkPendingNotifications() async {
+    // ننتظر 3 ثواني لضمان استقرار الاتصال بالإنترنت عند فتح التطبيق
+    await Future.delayed(const Duration(seconds: 3));
+    if (mounted) {
+      await NotificationQueueManager.processPendingNotifications(context);
+    }
   }
 
   // 🚀 الفحص الذكي والقطعي (بدون استعلامات قاعدة بيانات تسبب تداخل)
@@ -269,170 +281,173 @@ class _HomePageState extends State<HomePage> {
     final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
     final bool isDark = themeProvider.isDarkMode;
 
-    return Scaffold(
-      extendBodyBehindAppBar: true, 
-      backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent, 
-        centerTitle: true,
-        title: Text(
-          widget.role == "manager" ? "لوحة المدير" : "لوحة المشرف",
-          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo'),
-        ),
-        actions: [
-          // 🚀 زر الدخول لحسابات المشرفين (يظهر فقط وفقط إذا كان الحساب الأصلي مدير)
-          if (isAlsoManager)
-            IconButton(
-              icon: Icon(Icons.people_alt_rounded, color: isDark ? accentGold : primaryColor),
-              tooltip: "إدارة الحسابات",
-              onPressed: () => _showSupervisorsList(isDark),
-            ),
-          IconButton(
-            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode, color: isDark ? Colors.orangeAccent : primaryColor),
-            tooltip: "تغيير المظهر",
-            onPressed: () => themeProvider.toggleTheme(),
+    // 🚀 تغليف بـ OfflineWrapper 
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true, 
+        backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent, 
+          centerTitle: true,
+          title: Text(
+            widget.role == "manager" ? "لوحة المدير" : "لوحة المشرف",
+            style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo'),
           ),
-          IconButton(
-            onPressed: logout,
-            icon: Icon(Icons.logout, color: isDark ? Colors.redAccent : Colors.red),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          Container(
-            width: double.infinity, height: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDark ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
+          actions: [
+            // 🚀 زر الدخول لحسابات المشرفين (يظهر فقط وفقط إذا كان الحساب الأصلي مدير)
+            if (isAlsoManager)
+              IconButton(
+                icon: Icon(Icons.people_alt_rounded, color: isDark ? accentGold : primaryColor),
+                tooltip: "إدارة الحسابات",
+                onPressed: () => _showSupervisorsList(isDark),
               ),
+            IconButton(
+              icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode, color: isDark ? Colors.orangeAccent : primaryColor),
+              tooltip: "تغيير المظهر",
+              onPressed: () => themeProvider.toggleTheme(),
             ),
-          ),
-          Positioned(top: -50, left: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))),
-          Positioned(top: 200, right: -80, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15)))),
-
-          SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: Column(
-                  children: [
-                    _buildGlassContainer(
-                      isDark: isDark,
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          StreamBuilder<DocumentSnapshot>(
-                            stream: FirebaseFirestore.instance.collection(currentCollection).doc(widget.uid).snapshots(),
-                            builder: (context, snapshot) {
-                              String? imageUrl;
-                              String? currentName;
-                              if (snapshot.hasData && snapshot.data!.exists) {
-                                var userData = snapshot.data!.data() as Map<String, dynamic>?;
-                                imageUrl = userData?['imageUrl'];
-                                currentName = userData?['name'];
-                              }
-
-                              return Column(
-                                children: [
-                                  GestureDetector(
-                                    onTap: !_isUploadingManagerImage ? _updateManagerImage : null,
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 42,
-                                          backgroundColor: isDark ? Colors.white12 : Colors.white54,
-                                          backgroundImage: imageUrl != null && imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
-                                          child: (imageUrl == null || imageUrl.isEmpty) && !_isUploadingManagerImage ? Icon(Icons.person, size: 45, color: isDark ? Colors.white : primaryColor) : null,
-                                        ),
-                                        if (_isUploadingManagerImage) const Positioned.fill(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(color: Colors.white))),
-                                        if (!_isUploadingManagerImage)
-                                          Positioned(bottom: 0, right: 0, child: CircleAvatar(radius: 14, backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white, child: Icon(Icons.camera_alt, size: 16, color: primaryColor))),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    widget.role == "manager" ? "أهلاً مدير المعهد" : (currentName != null ? "المشرف: $currentName" : "أهلاً أيها المشرف"),
-                                    style: TextStyle(color: isDark ? Colors.white : primaryColor, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                          
-                          const SizedBox(height: 15),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(15),
-                              border: Border.all(color: isDark ? Colors.white12 : Colors.white, width: 1),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_month, color: isDark ? accentGold : primaryColor),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text("الدورة الحالية", style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[700], fontFamily: 'Cairo')),
-                                      Text(currentCycle, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 15,
-                      mainAxisSpacing: 15,
-                      childAspectRatio: 1.1,
-                      children: [
-                        if (widget.role == "manager") ...[
-                          _buildGlassMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
-                          _buildGlassMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), isDark),
-                          _buildGlassMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), isDark),
-                          _buildGlassMenuCard(Icons.wb_sunny_rounded, "إدارة الإشراقات", () => _nav(const InspirationsManagePage()), isDark),
-                          
-                          if (currentCycleModel != null)
-                            _buildGlassMenuCard(Icons.person_add_alt_1, "إضافة طالب", () => _nav(AddStudentPage(cycle: currentCycleModel!)), isDark),
-                          _buildGlassMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage()), isDark),
-                          if (currentCycleModel != null)
-                            _buildGlassMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), isDark),
-                        ],
-                        if (currentCycleModel != null)
-                          _buildGlassMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
-                        
-                        _buildGlassMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
-
-                        // 🚀 إضافة زر الإحصائيات الجديد هنا
-                        _buildGlassMenuCard(Icons.pie_chart_rounded, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
-                        
-                        _buildGlassMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
-                        _buildGlassMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+            IconButton(
+              onPressed: logout,
+              icon: Icon(Icons.logout, color: isDark ? Colors.redAccent : Colors.red),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity, height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
               ),
             ),
-          ),
-        ],
+            Positioned(top: -50, left: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))),
+            Positioned(top: 200, right: -80, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15)))),
+
+            SafeArea(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  child: Column(
+                    children: [
+                      _buildGlassContainer(
+                        isDark: isDark,
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            StreamBuilder<DocumentSnapshot>(
+                              stream: FirebaseFirestore.instance.collection(currentCollection).doc(widget.uid).snapshots(),
+                              builder: (context, snapshot) {
+                                String? imageUrl;
+                                String? currentName;
+                                if (snapshot.hasData && snapshot.data!.exists) {
+                                  var userData = snapshot.data!.data() as Map<String, dynamic>?;
+                                  imageUrl = userData?['imageUrl'];
+                                  currentName = userData?['name'];
+                                }
+
+                                return Column(
+                                  children: [
+                                    GestureDetector(
+                                      onTap: !_isUploadingManagerImage ? _updateManagerImage : null,
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 42,
+                                            backgroundColor: isDark ? Colors.white12 : Colors.white54,
+                                            backgroundImage: imageUrl != null && imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+                                            child: (imageUrl == null || imageUrl.isEmpty) && !_isUploadingManagerImage ? Icon(Icons.person, size: 45, color: isDark ? Colors.white : primaryColor) : null,
+                                          ),
+                                          if (_isUploadingManagerImage) const Positioned.fill(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(color: Colors.white))),
+                                          if (!_isUploadingManagerImage)
+                                            Positioned(bottom: 0, right: 0, child: CircleAvatar(radius: 14, backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white, child: Icon(Icons.camera_alt, size: 16, color: primaryColor))),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      widget.role == "manager" ? "أهلاً مدير المعهد" : (currentName != null ? "المشرف: $currentName" : "أهلاً أيها المشرف"),
+                                      style: TextStyle(color: isDark ? Colors.white : primaryColor, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                            
+                            const SizedBox(height: 15),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(color: isDark ? Colors.white12 : Colors.white, width: 1),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.calendar_month, color: isDark ? accentGold : primaryColor),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text("الدورة الحالية", style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[700], fontFamily: 'Cairo')),
+                                        Text(currentCycle, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 15,
+                        mainAxisSpacing: 15,
+                        childAspectRatio: 1.1,
+                        children: [
+                          if (widget.role == "manager") ...[
+                            _buildGlassMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
+                            _buildGlassMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), isDark),
+                            _buildGlassMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), isDark),
+                            _buildGlassMenuCard(Icons.wb_sunny_rounded, "إدارة الإشراقات", () => _nav(const InspirationsManagePage()), isDark),
+                            
+                            if (currentCycleModel != null)
+                              _buildGlassMenuCard(Icons.person_add_alt_1, "إضافة طالب", () => _nav(AddStudentPage(cycle: currentCycleModel!)), isDark),
+                            _buildGlassMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage()), isDark),
+                            if (currentCycleModel != null)
+                              _buildGlassMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), isDark),
+                          ],
+                          if (currentCycleModel != null)
+                            _buildGlassMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
+                          
+                          _buildGlassMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
+
+                          // 🚀 إضافة زر الإحصائيات الجديد هنا
+                          _buildGlassMenuCard(Icons.pie_chart_rounded, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
+                          
+                          _buildGlassMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
+                          _buildGlassMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
