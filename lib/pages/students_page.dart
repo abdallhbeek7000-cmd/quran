@@ -16,7 +16,7 @@ import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
 import '../widgets/animated_glass_background.dart'; 
 import '../widgets/glass_toast.dart'; 
-import '../widgets/offline_wrapper.dart'; // 🚀 إضافة مكتبة الأوفلاين
+import '../widgets/offline_wrapper.dart'; 
 
 class StudentsPage extends StatefulWidget {
   final CycleModel cycle;
@@ -240,7 +240,6 @@ class _StudentsPageState extends State<StudentsPage> {
       query = query.where('supervisorId', isEqualTo: widget.uid);
     }
 
-    // 🚀 تغليف الـ Scaffold بـ OfflineWrapper
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true, 
@@ -377,12 +376,30 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
+  // 🚀 التعديل الجذري والذكي لقسم التنبيهات (تم إلغاء فلترة السيرفر لتجنب خطأ الـ Index)
   Widget _buildAbsentAlertSection(bool isDarkMode) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('students').where('cycleId', isEqualTo: widget.cycle.id).where('archived', isEqualTo: false).where('consecutiveAbsences', isGreaterThanOrEqualTo: 3).snapshots(),
+      // طلبنا البيانات الأساسية بدون شرط الغياب لتجنب خطأ الفهرسة (Index Error)
+      stream: FirebaseFirestore.instance.collection('students')
+          .where('cycleId', isEqualTo: widget.cycle.id)
+          .where('archived', isEqualTo: false)
+          .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          print("🚨 خطأ في جلب بيانات الغياب: ${snapshot.error}");
+          return const SizedBox();
+        }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox();
-        final alertStudents = snapshot.data!.docs;
+        
+        // 🚀 الفلترة المحلية (Local Filtering) سريعة ومضمونة 100% ولا تعتمد على Index
+        final alertStudents = snapshot.data!.docs.where((doc) {
+          final sData = doc.data() as Map<String, dynamic>;
+          final count = sData['consecutiveAbsences'] ?? 0;
+          return count >= 3;
+        }).toList();
+
+        if (alertStudents.isEmpty) return const SizedBox();
+
         return Container(
           margin: const EdgeInsets.fromLTRB(15, 5, 15, 10),
           child: _buildGlassContainer(
@@ -515,12 +532,11 @@ class _StudentsPageState extends State<StudentsPage> {
                   ),
                 ],
               ),
-              // 🚀 هنا السحر: استخدام Wrap والشارات الذكية
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 10.0),
                 child: Wrap(
-                  spacing: 6, // المسافة الأفقية بين الشارات
-                  runSpacing: 6, // المسافة العمودية إذا الشاشة ضيقة ونزلوا لسطر جديد
+                  spacing: 6, 
+                  runSpacing: 6, 
                   children: [
                     _buildInfoBadge("رقم: ${data['serial'] ?? '---'}", isDarkMode ? Colors.white70 : Colors.grey.shade700, isDarkMode),
                     _buildInfoBadge("الصف: $grade", isDarkMode ? Colors.lightBlueAccent : Colors.blue.shade700, isDarkMode),
@@ -563,7 +579,6 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  // 🚀 دالة الشارات الذكية لترتيب المعلومات بخاصية Wrap
   Widget _buildInfoBadge(String text, Color color, bool isDarkMode, {bool isBold = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

@@ -7,8 +7,8 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../services/session_service.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
-import '../services/notification_queue_manager.dart'; // 🚀 استيراد مدير طابور الإشعارات
-import '../widgets/offline_wrapper.dart'; // 🚀 استيراد غلاف الأوفلاين
+import '../services/notification_queue_manager.dart'; 
+import '../widgets/offline_wrapper.dart'; 
 
 class EditSessionPage extends StatefulWidget {
   final String sessionId;
@@ -35,18 +35,30 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   TextEditingController? _activeController;
   String _initialText = '';
 
-  late TextEditingController newMemorization;
-  late TextEditingController newReview; 
-  late TextEditingController oldReview; 
-  
-  late TextEditingController newHomeworkController;
-  late TextEditingController newReviewHomeworkController; 
-  late TextEditingController oldReviewHomeworkController; 
+  // 🚀 تحويل المتحكمات إلى (من - إلى)
+  final newMemoFrom = TextEditingController();
+  final newMemoTo = TextEditingController();
 
-  late TextEditingController readingBySight; 
+  final newRevFrom = TextEditingController();
+  final newRevTo = TextEditingController();
+
+  // 🚀 قائمة ديناميكية للمراجعة القديمة
+  List<Map<String, TextEditingController>> oldReviewRanges = [];
+
+  final readingFrom = TextEditingController();
+  final readingTo = TextEditingController();
+
+  final newHwFrom = TextEditingController();
+  final newHwTo = TextEditingController();
+
+  final newRevHwFrom = TextEditingController();
+  final newRevHwTo = TextEditingController();
+
+  // 🚀 قائمة ديناميكية لواجب المراجعة القديمة
+  List<Map<String, TextEditingController>> oldRevHwRanges = [];
+
   late TextEditingController religiousActivities;
   late TextEditingController notes;
-  
   late TextEditingController totalMemorizedPagesController;
 
   bool absent = false;
@@ -101,45 +113,6 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
     studentStatus = (data['studentStatus'] == null || data['studentStatus'] == '') ? "مهذب" : data['studentStatus'];
 
-    newMemorization = TextEditingController(text: data['newMemorization']);
-    
-    String fullReview = data['review'] ?? '';
-    if (fullReview.contains('|')) {
-      var parts = fullReview.split('|');
-      newReview = TextEditingController(text: parts[0].trim());
-      oldReview = TextEditingController(text: parts.length > 1 ? parts[1].trim() : '');
-    } else {
-      newReview = TextEditingController(text: data['nearReview'] ?? fullReview);
-      oldReview = TextEditingController(text: data['farReview'] ?? '');
-    }
-
-    String oldHw = data['homework'] ?? '';
-    String nHw = data['newHomework'] ?? '';
-    String nRevHw = data['newReviewHomework'] ?? '';
-    String oRevHw = data['oldReviewHomework'] ?? '';
-
-    if (nHw.isEmpty && nRevHw.isEmpty && oRevHw.isEmpty && oldHw.isNotEmpty) {
-      String rHwLegacy = data['reviewHomework'] ?? ''; 
-      if (rHwLegacy.isNotEmpty) {
-        oRevHw = rHwLegacy; 
-      } else {
-        if (oldHw.contains('جديد:') || oldHw.contains('مراجعة:')) {
-          var parts = oldHw.split(RegExp(r'\n|\|'));
-          for (var p in parts) {
-            if (p.contains('حفظ:') || p.contains('جديد:')) nHw = p.replaceAll(RegExp(r'حفظ:|جديد:'), '').trim();
-            if (p.contains('مراجعة:')) oRevHw = p.replaceAll('مراجعة:', '').trim();
-          }
-        } else {
-          oRevHw = oldHw; 
-        }
-      }
-    }
-    
-    newHomeworkController = TextEditingController(text: nHw);
-    newReviewHomeworkController = TextEditingController(text: nRevHw);
-    oldReviewHomeworkController = TextEditingController(text: oRevHw);
-
-    readingBySight = TextEditingController(text: data['readingBySight'] ?? ''); 
     religiousActivities = TextEditingController(text: data['religiousActivities']);
     notes = TextEditingController(text: data['notes']);
     
@@ -163,7 +136,122 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       }
     }
 
+    // 🚀 ربط المستمعين لتحديث إجمالي الحفظ
+    newMemoTo.addListener(_updateTotalPages);
+    newMemoFrom.addListener(_updateTotalPages);
+
+    _parseExistingData(data);
     _checkIfStudentIsCompleted();
+  }
+
+  // 🚀 دالة الذكاء لفك تشفير البيانات القديمة وإدخالها في مربعات (من - إلى)
+  void _parseExistingData(Map<String, dynamic> data) {
+    _parseRangeIntoControllers(data['newMemorization'] ?? '', newMemoFrom, newMemoTo);
+
+    String fullReview = data['review'] ?? '';
+    String nearRev = data['nearReview'] ?? '';
+    String farRev = data['farReview'] ?? '';
+
+    // إذا كانت بيانات قديمة ومدمجة بالـ |
+    if (fullReview.contains('|') && nearRev.isEmpty && farRev.isEmpty) {
+      var parts = fullReview.split('|');
+      nearRev = parts[0].trim();
+      farRev = parts.length > 1 ? parts.sublist(1).join('|').trim() : '';
+    } else if (nearRev.isEmpty && farRev.isEmpty) {
+      nearRev = fullReview;
+    }
+
+    _parseRangeIntoControllers(nearRev, newRevFrom, newRevTo);
+    _parseMultiRangeIntoControllers(farRev, oldReviewRanges);
+
+    _parseRangeIntoControllers(data['readingBySight'] ?? '', readingFrom, readingTo);
+
+    String oldHw = data['homework'] ?? '';
+    String nHw = data['newHomework'] ?? '';
+    String nRevHw = data['newReviewHomework'] ?? '';
+    String oRevHw = data['oldReviewHomework'] ?? '';
+
+    if (nHw.isEmpty && nRevHw.isEmpty && oRevHw.isEmpty && oldHw.isNotEmpty) {
+      String rHwLegacy = data['reviewHomework'] ?? ''; 
+      if (rHwLegacy.isNotEmpty) {
+        oRevHw = rHwLegacy; 
+      } else {
+        if (oldHw.contains('جديد:') || oldHw.contains('مراجعة:')) {
+          var parts = oldHw.split(RegExp(r'\n|\|'));
+          for (var p in parts) {
+            if (p.contains('حفظ:') || p.contains('جديد:')) nHw = p.replaceAll(RegExp(r'حفظ:|جديد:'), '').trim();
+            if (p.contains('مراجعة:')) oRevHw = p.replaceAll('مراجعة:', '').trim();
+          }
+        } else {
+          oRevHw = oldHw; 
+        }
+      }
+    }
+
+    _parseRangeIntoControllers(nHw, newHwFrom, newHwTo);
+    _parseRangeIntoControllers(nRevHw, newRevHwFrom, newRevHwTo);
+    _parseMultiRangeIntoControllers(oRevHw, oldRevHwRanges);
+  }
+
+  void _parseRangeIntoControllers(String text, TextEditingController fromCtrl, TextEditingController toCtrl) {
+    if (text.isEmpty) return;
+    // استخراج الأرقام وتنظيف النصوص الأخرى
+    RegExp exp = RegExp(r'\d+');
+    Iterable<Match> matches = exp.allMatches(text);
+    List<String> numbers = matches.map((m) => m.group(0)!).toList();
+
+    if (numbers.isNotEmpty) {
+      fromCtrl.text = numbers[0];
+      if (numbers.length > 1) {
+        toCtrl.text = numbers[1];
+      }
+    }
+  }
+
+  void _parseMultiRangeIntoControllers(String text, List<Map<String, TextEditingController>> ranges) {
+    ranges.clear();
+    if (text.isEmpty) {
+      ranges.add({'from': TextEditingController(), 'to': TextEditingController()});
+      return;
+    }
+    var parts = text.split('|');
+    for (var part in parts) {
+      var ctrlFrom = TextEditingController();
+      var ctrlTo = TextEditingController();
+      _parseRangeIntoControllers(part, ctrlFrom, ctrlTo);
+      ranges.add({'from': ctrlFrom, 'to': ctrlTo});
+    }
+    if (ranges.isEmpty) {
+      ranges.add({'from': TextEditingController(), 'to': TextEditingController()});
+    }
+  }
+
+  void _updateTotalPages() {
+    if (isCompletedStudent || absent) return;
+    int from = int.tryParse(newMemoFrom.text) ?? 0;
+    int to = int.tryParse(newMemoTo.text) ?? 0;
+    int maxPage = from > to ? from : to;
+    if (maxPage > 0 && maxPage <= 604) {
+      totalMemorizedPagesController.text = maxPage.toString();
+    }
+  }
+
+  String _buildRangeString(TextEditingController fromCtrl, TextEditingController toCtrl) {
+    String from = fromCtrl.text.trim();
+    String to = toCtrl.text.trim();
+    if (from.isEmpty && to.isEmpty) return "";
+    if (from.isNotEmpty && to.isEmpty) return from;
+    if (from.isEmpty && to.isNotEmpty) return to;
+    return "$from - $to";
+  }
+
+  String _buildMultiRangeString(List<Map<String, TextEditingController>> ranges) {
+    List<String> parts = [];
+    for (var range in ranges) {
+      String val = _buildRangeString(range['from']!, range['to']!);
+      if (val.isNotEmpty) parts.add(val);
+    }
+    return parts.join(" | ");
   }
 
   Future<void> _checkIfStudentIsCompleted() async {
@@ -196,13 +284,22 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   @override
   void dispose() {
     _bgController.dispose(); 
-    newMemorization.dispose();
-    newReview.dispose();
-    oldReview.dispose();
-    newHomeworkController.dispose();
-    newReviewHomeworkController.dispose();
-    oldReviewHomeworkController.dispose();
-    readingBySight.dispose();
+    newMemoTo.removeListener(_updateTotalPages);
+    newMemoFrom.removeListener(_updateTotalPages);
+
+    newMemoFrom.dispose(); newMemoTo.dispose();
+    newRevFrom.dispose(); newRevTo.dispose();
+    readingFrom.dispose(); readingTo.dispose();
+    newHwFrom.dispose(); newHwTo.dispose();
+    newRevHwFrom.dispose(); newRevHwTo.dispose();
+    
+    for (var range in oldReviewRanges) {
+      range['from']?.dispose(); range['to']?.dispose();
+    }
+    for (var range in oldRevHwRanges) {
+      range['from']?.dispose(); range['to']?.dispose();
+    }
+
     religiousActivities.dispose();
     notes.dispose();
     totalMemorizedPagesController.dispose(); 
@@ -217,7 +314,6 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
             if (mounted) setState(() => _isListening = false);
           }
         },
-        onError: (val) => print('onError: $val'),
       );
       if (available) {
         setState(() {
@@ -267,6 +363,137 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
         value: value,
         onChanged: (v) => onChanged(v!),
         contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      ),
+    );
+  }
+
+  // 🚀 أداة إدخال الأرقام المصغرة
+  Widget _buildMiniNumberInput(TextEditingController ctrl, bool isDarkMode) {
+    return SizedBox(
+      height: 45,
+      child: TextField(
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
+        textAlign: TextAlign.center,
+        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+        decoration: InputDecoration(
+          hintText: "---",
+          hintStyle: TextStyle(color: isDarkMode ? Colors.white30 : Colors.black26),
+          contentPadding: EdgeInsets.zero,
+          filled: true,
+          fillColor: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.7),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+        ),
+      ),
+    );
+  }
+
+  // 🚀 سطر من وإلى العادي
+  Widget _buildRangeRow(String title, IconData icon, TextEditingController fromCtrl, TextEditingController toCtrl, bool isDarkMode) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 18),
+              const SizedBox(width: 8),
+              Text(title, style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text("من ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildMiniNumberInput(fromCtrl, isDarkMode)),
+              const SizedBox(width: 15),
+              Text("إلى ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildMiniNumberInput(toCtrl, isDarkMode)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🚀 سطر من وإلى المتعدد (مع زر الإضافة)
+  Widget _buildMultiRangeRow(String title, IconData icon, List<Map<String, TextEditingController>> ranges, VoidCallback onAdd, VoidCallback onRemoveLast, bool isDarkMode) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 18),
+                  const SizedBox(width: 8),
+                  Text(title, style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+                ],
+              ),
+              Row(
+                children: [
+                  if (ranges.length > 1)
+                    InkWell(
+                      onTap: onRemoveLast,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.2), shape: BoxShape.circle),
+                        child: const Icon(Icons.remove, size: 18, color: Colors.redAccent),
+                      ),
+                    ),
+                  const SizedBox(width: 10),
+                  InkWell(
+                    onTap: onAdd,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), shape: BoxShape.circle),
+                      child: const Icon(Icons.add, size: 18, color: Colors.green),
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...ranges.asMap().entries.map((entry) {
+            int index = entry.key;
+            var range = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Row(
+                children: [
+                  if (ranges.length > 1) Text("${index + 1}- ", style: TextStyle(color: accentGold, fontWeight: FontWeight.bold, fontSize: 12)),
+                  Text("من ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildMiniNumberInput(range['from']!, isDarkMode)),
+                  const SizedBox(width: 15),
+                  Text("إلى ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildMiniNumberInput(range['to']!, isDarkMode)),
+                ],
+              ),
+            );
+          }).toList(),
+        ],
       ),
     );
   }
@@ -371,18 +598,19 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     double totalPages = isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0);
     String studentId = widget.data['studentId'] ?? '';
 
-    String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent) ? '' : newMemorization.text.trim();
-    String finalNearReview = (!hasReview || absent || isCompletedStudent) ? '' : newReview.text.trim();
-    String finalFarReview = (!hasReview || absent) ? '' : oldReview.text.trim();
+    // 🚀 تحويل المدخلات إلى نصوص للحفظ
+    String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
+    String finalNearReview = (!hasReview || absent || isCompletedStudent) ? '' : _buildRangeString(newRevFrom, newRevTo);
+    String finalFarReview = (!hasReview || absent) ? '' : _buildMultiRangeString(oldReviewRanges);
     
-    String finalReading = (!hasReading || absent) ? '' : readingBySight.text.trim();
+    String finalReading = (!hasReading || absent) ? '' : _buildRangeString(readingFrom, readingTo);
 
     String finalMemoRating = (!hasNewMemorization || absent || isCompletedStudent) ? '' : memorizationRating;
     String finalRevRating = (!hasReview || absent) ? '' : reviewRating;
 
-    String finalNewHW = (absent || isCompletedStudent) ? '' : newHomeworkController.text.trim();
-    String finalNewRevHW = (absent || isCompletedStudent) ? '' : newReviewHomeworkController.text.trim();
-    String finalOldRevHW = absent ? '' : oldReviewHomeworkController.text.trim();
+    String finalNewHW = (absent || isCompletedStudent) ? '' : _buildRangeString(newHwFrom, newHwTo);
+    String finalNewRevHW = (absent || isCompletedStudent) ? '' : _buildRangeString(newRevHwFrom, newRevHwTo);
+    String finalOldRevHW = absent ? '' : _buildMultiRangeString(oldRevHwRanges);
     
     String combinedHW = "";
     
@@ -429,11 +657,14 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     };
 
     // 🚀 1. تعديل الجلسة في فايرستور (Fire-and-Forget بدون await)
-    FirebaseFirestore.instance.collection('sessions').doc(widget.sessionId).update(updateData).catchError((e) {
+    FirebaseFirestore.instance.collection('sessions').doc(widget.sessionId).update(updateData).then((_) {
+      // 🚀 2. تطبيق خوارزمية مسح الغيابات لإعادة ضبط العدادات
+      sessionService.recalculateConsecutiveAbsences(studentId);
+    }).catchError((e) {
       print("خطأ في تحديث الجلسة: $e");
     });
 
-    // 🚀 2. تعديل بيانات الطالب (Fire-and-Forget بدون await)
+    // 🚀 3. تعديل بيانات الطالب 
     if (!absent && studentId.isNotEmpty && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
       FirebaseFirestore.instance.collection('students').doc(studentId).update({
         'memorizedPages': totalPages,
@@ -467,7 +698,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
         notifyType = "regular";
       }
 
-      // 🚀 3. إرسال الإشعار أو إضافته للطابور أوفلاين (بدون await)
+      // 🚀 4. إرسال الإشعار أو إضافته للطابور أوفلاين
       NotificationService.sendAndSaveNotification(
         studentId: studentId,
         title: notifyTitle,
@@ -487,7 +718,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       });
     }
 
-    // 🚀 4. إنهاء العملية وإغلاق الصفحة فوراً للمشرف
+    // 🚀 5. إنهاء العملية وإغلاق الصفحة فوراً للمشرف
     if (!mounted) return;
     setState(() => loading = false);
 
@@ -505,7 +736,6 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
-    // 🚀 تغليف الصفحة الأساسية بـ OfflineWrapper 
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true, 
@@ -604,68 +834,42 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                   const SizedBox(height: 20),
 
                                   if (!isCompletedStudent && hasNewMemorization) ...[
-                                    TextField(
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                      controller: newMemorization, 
-                                      decoration: _glassInputDecoration("الحفظ الجديد", Icons.star_border, isDarkMode, suffixIcon: _buildMicButton(newMemorization, isDarkMode))
-                                    ),
-                                    const SizedBox(height: 15),
+                                    _buildRangeRow("الحفظ الجديد", Icons.star_border, newMemoFrom, newMemoTo, isDarkMode),
                                   ],
                                   
                                   if (hasReview) ...[
                                     if (!isCompletedStudent) ...[
-                                      TextField(
-                                        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                        controller: newReview, 
-                                        decoration: _glassInputDecoration("مراجعة جديد", Icons.auto_stories_outlined, isDarkMode, suffixIcon: _buildMicButton(newReview, isDarkMode))
-                                      ),
-                                      const SizedBox(height: 15),
+                                      _buildRangeRow("مراجعة جديد", Icons.auto_stories_outlined, newRevFrom, newRevTo, isDarkMode),
                                     ],
-                                    TextField(
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                      controller: oldReview, 
-                                      decoration: _glassInputDecoration(
-                                        isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
-                                        isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
-                                        isDarkMode,
-                                        suffixIcon: _buildMicButton(oldReview, isDarkMode)
-                                      )
+                                    _buildMultiRangeRow(
+                                      isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
+                                      isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
+                                      oldReviewRanges, 
+                                      () { setState(() => oldReviewRanges.add({'from': TextEditingController(), 'to': TextEditingController()})); },
+                                      () { if (oldReviewRanges.length > 1) setState(() { var r = oldReviewRanges.removeLast(); r['from']?.dispose(); r['to']?.dispose(); }); },
+                                      isDarkMode
                                     ),
-                                    const SizedBox(height: 15),
                                   ],
 
                                   if (hasReading) ...[
-                                    TextField(
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                      controller: readingBySight, 
-                                      decoration: _glassInputDecoration("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, isDarkMode, suffixIcon: _buildMicButton(readingBySight, isDarkMode))
-                                    ),
-                                    const SizedBox(height: 15),
+                                    _buildRangeRow("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, readingFrom, readingTo, isDarkMode),
                                   ],
                                   
                                   if (isCompletedStudent) ...[
-                                    TextField(
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                      controller: oldReviewHomeworkController, 
-                                      decoration: _glassInputDecoration("المقدار المطلوب للمرة القادمة", Icons.edit_note, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
+                                    _buildMultiRangeRow(
+                                      "المقدار المطلوب للمرة القادمة", Icons.edit_note, oldRevHwRanges, 
+                                      () { setState(() => oldRevHwRanges.add({'from': TextEditingController(), 'to': TextEditingController()})); },
+                                      () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); r['from']?.dispose(); r['to']?.dispose(); }); },
+                                      isDarkMode
                                     ),
                                   ] else ...[
-                                    TextField(
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                      controller: newHomeworkController, 
-                                      decoration: _glassInputDecoration("واجب الحفظ الجديد القادم", Icons.edit_document, isDarkMode, suffixIcon: _buildMicButton(newHomeworkController, isDarkMode))
-                                    ),
-                                    const SizedBox(height: 15),
-                                    TextField(
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                      controller: newReviewHomeworkController, 
-                                      decoration: _glassInputDecoration("واجب المراجعة الجديد القادم", Icons.menu_book_rounded, isDarkMode, suffixIcon: _buildMicButton(newReviewHomeworkController, isDarkMode))
-                                    ),
-                                    const SizedBox(height: 15),
-                                    TextField(
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                      controller: oldReviewHomeworkController, 
-                                      decoration: _glassInputDecoration("واجب المراجعة القديم القادم", Icons.history_edu_rounded, isDarkMode, suffixIcon: _buildMicButton(oldReviewHomeworkController, isDarkMode))
+                                    _buildRangeRow("واجب الحفظ الجديد القادم", Icons.edit_document, newHwFrom, newHwTo, isDarkMode),
+                                    _buildRangeRow("واجب المراجعة الجديد القادم", Icons.menu_book_rounded, newRevHwFrom, newRevHwTo, isDarkMode),
+                                    _buildMultiRangeRow(
+                                      "واجب المراجعة القديم القادم", Icons.history_edu_rounded, oldRevHwRanges, 
+                                      () { setState(() => oldRevHwRanges.add({'from': TextEditingController(), 'to': TextEditingController()})); },
+                                      () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); r['from']?.dispose(); r['to']?.dispose(); }); },
+                                      isDarkMode
                                     ),
                                   ],
                                   
@@ -764,7 +968,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                         spacing: 8,
                                         runSpacing: 8,
                                         children: selectedSupervisors.map((s) => Chip(
-                                          label: Text(s['name']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                          label: Text(s['name']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
                                           backgroundColor: accentGold,
                                           elevation: 2,
                                           padding: const EdgeInsets.all(0),

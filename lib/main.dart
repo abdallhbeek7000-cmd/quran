@@ -3,6 +3,7 @@ import 'package:flutter/services.dart'; // 🎯 استيراد للتحكم بش
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // 🚀 استدعاء مكتبة الفايرستور للتحكم بالأوفلاين
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🚀 استدعاء مكتبة الإشعارات
 import 'package:provider/provider.dart'; 
 // 🚀 استدعاء مكتبة اللغات لقلب التطبيق من اليمين لليسار
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -15,8 +16,15 @@ import 'pages/update_checker.dart';
 import 'services/theme_provider.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 
-// 🎯 المفتاح العالمي السحري للتحكم بالمنبثقات من أي مكان بالتطبيق
+// 🎯 المفتاح العالمي السحري للتحكم بالمنبثقات والتوجيه من أي مكان بالتطبيق
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// 🚀 دالة التقاط الإشعارات عندما يكون التطبيق مغلقاً تماماً أو في الخلفية (يجب أن تكون خارج أي كلاس)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  print("رسالة في الخلفية تم استلامها: ${message.messageId}");
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +48,9 @@ void main() async {
   );
 
   FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
+  
+  // 🚀 تفعيل الاستماع للإشعارات في الخلفية
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   
   runApp(
     ChangeNotifierProvider(
@@ -65,11 +76,35 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     checkLogin();
+    _setupInteractedMessage(); // 🚀 تفعيل مراقب الضغط على الإشعارات
     
     // 🎯 تشغيل الفحص فوراً عند تشغيل التطبيق بأمان كامل وبدون الاعتماد على الـ Build Context
     WidgetsBinding.instance.addPostFrameCallback((_) {
       UpdateChecker.checkForUpdates();
     });
+  }
+
+  // 🚀 الدالة المسؤولة عن فتح التطبيق عند الضغط على الإشعار
+  Future<void> _setupInteractedMessage() async {
+    // 1. التطبيق كان مغلقاً بالكامل (Terminated) وقام المستخدم بالضغط على الإشعار
+    RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      _handleNotificationTap(initialMessage);
+    }
+
+    // 2. التطبيق يعمل في الخلفية (Background) وقام المستخدم بالضغط على الإشعار
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+  }
+
+  // 🚀 ماذا يحدث عند الضغط على الإشعار؟
+  void _handleNotificationTap(RemoteMessage message) {
+    print("🔔 تم الضغط على الإشعار! البيانات: ${message.data}");
+    
+    // يمكنك لاحقاً استخدام navigatorKey لفتح صفحة معينة بناءً على بيانات الإشعار
+    // مثال:
+    // if (message.data['type'] == 'chat') {
+    //   navigatorKey.currentState?.pushNamed('/chat_page');
+    // }
   }
 
   void checkLogin() async {

@@ -66,4 +66,63 @@ class SessionService {
 
     return result.docs.isNotEmpty;
   }
+
+  // 🚀 خوارزمية المسح الزمني لحساب الغياب المتكرر بدقة 100%
+  Future<void> recalculateConsecutiveAbsences(String studentId) async {
+    try {
+      // 1. جلب كل جلسات الطالب
+      final snap = await FirebaseFirestore.instance
+          .collection('sessions')
+          .where('studentId', isEqualTo: studentId)
+          .get();
+
+      // إذا حذفنا كل الجلسات وصار السجل فارغ، نصفر العداد فوراً
+      if (snap.docs.isEmpty) {
+        await FirebaseFirestore.instance.collection('students').doc(studentId).update({
+          'consecutiveAbsences': 0,
+        });
+        return;
+      }
+
+      List<Map<String, dynamic>> sessions = snap.docs.map((e) => e.data()).toList();
+
+      // 2. ترتيب الجلسات من الأحدث إلى الأقدم
+      sessions.sort((a, b) {
+        String dateA = a['date'] ?? '';
+        String dateB = b['date'] ?? '';
+        int dateComparison = dateB.compareTo(dateA);
+
+        if (dateComparison == 0) {
+          Timestamp? tA = a['timestamp'] as Timestamp?;
+          Timestamp? tB = b['timestamp'] as Timestamp?;
+          if (tA != null && tB != null) return tB.compareTo(tA);
+          if (tA == null && tB != null) return -1; 
+          if (tB == null && tA != null) return 1;
+        }
+        return dateComparison;
+      });
+
+      int consecutiveAbsences = 0;
+
+      // 3. المسح: نعد الغيابات من الأحدث، وأول ما نلاقي حضور نكسر العداد
+      for (var session in sessions) {
+        bool isAbsent = session['absent'] ?? false;
+        if (isAbsent) {
+          consecutiveAbsences++;
+        } else {
+          break; // 🛑 ضربنا فرام! لقينا جلسة حضور، انتهت سلسلة الغياب
+        }
+      }
+
+      // 4. تحديث الرقم النهائي والمؤكد في ملف الطالب بالفايربيز
+      await FirebaseFirestore.instance.collection('students').doc(studentId).update({
+        'consecutiveAbsences': consecutiveAbsences,
+      });
+      
+      print("✅ تم إعادة حساب غيابات الطالب بدقة: $consecutiveAbsences");
+
+    } catch (e) {
+      print("❌ خطأ في حساب الغيابات: $e");
+    }
+  }
 }
