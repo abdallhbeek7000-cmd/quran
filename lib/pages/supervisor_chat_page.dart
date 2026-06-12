@@ -4,6 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart'; 
+// 🚀 استدعاء مكتبة الاتصال
+import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart'; 
+import 'package:zego_uikit/zego_uikit.dart';
 
 class SupervisorChatPage extends StatefulWidget {
   final String chatId;
@@ -36,9 +39,9 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
   }
 
   void _clearUnreadBadge() async {
-    await FirebaseFirestore.instance.collection('chats').doc(widget.chatId).update({
+    await FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
       'unreadBySupervisor': 0,
-    });
+    }, SetOptions(merge: true));
   }
 
   String _formatTime(Timestamp? timestamp) {
@@ -57,23 +60,26 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
     _messageController.clear();
     _scrollToBottom();
 
-    // إضافة الرسالة مع حقل التفاعلات الفارغ
     await FirebaseFirestore.instance
         .collection('chats')
         .doc(widget.chatId)
         .collection('messages')
         .add({
-      'senderId': widget.supervisorId,
+      'senderId': widget.supervisorId, 
       'senderType': 'supervisor',
       'text': text,
       'timestamp': FieldValue.serverTimestamp(),
-      'reactions': {}, // 🚀 تجهيز حقل التفاعلات
+      'reactions': {}, 
     });
 
     await FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
       'lastMessage': text,
       'lastMessageTime': FieldValue.serverTimestamp(),
       'lastSenderType': 'supervisor',
+      'lastSenderId': widget.supervisorId,
+      'studentId': widget.studentId,
+      'studentName': widget.studentName,
+      'supervisorId': widget.supervisorId, 
       'unreadByParent': FieldValue.increment(1),
     }, SetOptions(merge: true));
 
@@ -98,7 +104,6 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
     }
   }
 
-  // 🚀 دالة إظهار قائمة التفاعلات (الإيموجي) الزجاجية عند الضغط المطول
   void _showReactionMenu(BuildContext context, String messageId, bool isDark) {
     final List<String> emojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
     
@@ -125,7 +130,6 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
                   children: emojis.map((emoji) {
                     return GestureDetector(
                       onTap: () {
-                        // 🚀 إضافة أو تحديث التفاعل في الداتا بيز
                         FirebaseFirestore.instance
                             .collection('chats')
                             .doc(widget.chatId)
@@ -133,7 +137,7 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
                             .doc(messageId)
                             .set({
                           'reactions': {
-                            widget.supervisorId: emoji // حفظ التفاعل باسم الـ ID تبع المشرف
+                            widget.supervisorId: emoji 
                           }
                         }, SetOptions(merge: true));
                         Navigator.pop(context);
@@ -158,7 +162,6 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
-      // 🚀 شريط علوي زجاجي احترافي
       appBar: AppBar(
         elevation: 0,
         backgroundColor: isDark ? const Color(0xff1e293b).withOpacity(0.7) : Colors.white.withOpacity(0.7),
@@ -182,10 +185,32 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
             ),
           ],
         ),
+        // 🚀 إضافة أزرار الاتصال هنا
+       actions: [
+          ZegoSendCallInvitationButton(
+            isVideoCall: false,
+            invitees: [
+              ZegoUIKitUser(id: widget.studentId, name: widget.studentName), // 🚀 تم التصحيح
+            ],
+            iconSize: const Size(28, 28),
+            buttonSize: const Size(40, 40),
+            icon: ButtonIcon(icon: Icon(Icons.call, color: isDark ? Colors.white : primaryColor)), // 🚀 تم تصحيح الأيقونة
+            margin: const EdgeInsets.only(right: 5),
+          ),
+          ZegoSendCallInvitationButton(
+            isVideoCall: true,
+            invitees: [
+              ZegoUIKitUser(id: widget.studentId, name: widget.studentName), // 🚀 تم التصحيح
+            ],
+            iconSize: const Size(28, 28),
+            buttonSize: const Size(40, 40),
+            icon: ButtonIcon(icon: Icon(Icons.videocam_rounded, color: isDark ? Colors.white : primaryColor)), // 🚀 تم تصحيح الأيقونة
+            margin: const EdgeInsets.only(left: 5, right: 15),
+          ),
+        ],
       ),
       body: Stack(
         children: [
-          // 🚀 خلفية ملونة متدرجة لتعطي جمالية للزجاج
           Container(
             width: double.infinity, height: double.infinity,
             decoration: BoxDecoration(
@@ -204,7 +229,6 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
             children: [
               const SizedBox(height: kToolbarHeight + 40),
               
-              // 📝 منطقة استعراض رسائل المحادثة الحية
               Expanded(
                 child: StreamBuilder<DocumentSnapshot>(
                   stream: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).snapshots(),
@@ -250,14 +274,12 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
                           itemBuilder: (context, index) {
                             final msgDoc = messages[index];
                             final msg = msgDoc.data() as Map<String, dynamic>;
-                            final isMe = msg['senderType'] == 'supervisor';
+                            final isMe = msg['senderId'] == widget.supervisorId; 
                             final String timeString = _formatTime(msg['timestamp'] as Timestamp?);
                             
-                            // 🚀 قراءة التفاعلات إن وجدت
                             final Map<String, dynamic> reactions = msg['reactions'] ?? {};
                             final List<String> displayEmojis = reactions.values.map((e) => e.toString()).toSet().toList();
 
-                            // 🚀 تم إحاطة فقاعة المحادثة بـ _AnimatedMessageBubble
                             return _AnimatedMessageBubble(
                               index: index,
                               isMe: isMe,
@@ -352,7 +374,6 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
                                         ),
                                       ),
                                       
-                                      // 🚀 شارة التفاعل العائمة بشكل راقي
                                       if (displayEmojis.isNotEmpty)
                                         Positioned(
                                           bottom: -14,
@@ -391,13 +412,12 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
                 ),
               ),
 
-              // ⌨️ صندوق إدخال النص الكبسولي (Floating Input)
               Container(
                 margin: EdgeInsets.only(
                   left: 15, 
                   right: 15, 
                   top: 5, 
-                  bottom: isKeyboardOpen ? 15 : 25, // يرتفع مع الكيبورد
+                  bottom: isKeyboardOpen ? 15 : 25, 
                 ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(35),
@@ -427,7 +447,7 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
                               controller: _messageController,
                               style: TextStyle(color: isDark ? Colors.white : Colors.black, fontFamily: 'Cairo', fontSize: 14),
                               decoration: InputDecoration(
-                                hintText: "اكتب رسالتك...",
+                                hintText: "اكتب رسالتك لولي الأمر...",
                                 hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey.shade500, fontFamily: 'Cairo', fontSize: 13),
                                 filled: true,
                                 fillColor: Colors.transparent, 
@@ -462,7 +482,6 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
   }
 }
 
-// 🚀 الكلاس المسؤول عن حركة الرسالة الأنيميشن (السحب والتكبير)
 class _AnimatedMessageBubble extends StatefulWidget {
   final Widget child;
   final bool isMe;
@@ -486,10 +505,8 @@ class _AnimatedMessageBubbleState extends State<_AnimatedMessageBubble> with Sin
   @override
   void initState() {
     super.initState();
-    // ضبط سرعة الأنيميشن لتكون ناعمة جداً
     _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
     
-    // إذا كنت أنا المرسل بتطلع من اليمين، وإذا الطرف التاني بتطلع من اليسار
     double startDx = widget.isMe ? -0.2 : 0.2; 
     
     _slideAnimation = Tween<Offset>(begin: Offset(startDx, 0.5), end: Offset.zero).animate(
@@ -500,7 +517,6 @@ class _AnimatedMessageBubbleState extends State<_AnimatedMessageBubble> with Sin
       CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
     );
 
-    // 🚀 تطبيق الأنيميشن فقط للرسالة الجديدة (اللي الاندكس تبعها 0) لتجنب إرهاق الجهاز
     if (widget.index == 0) {
       _controller.forward();
     } else {
@@ -520,7 +536,6 @@ class _AnimatedMessageBubbleState extends State<_AnimatedMessageBubble> with Sin
       position: _slideAnimation,
       child: ScaleTransition(
         scale: _scaleAnimation,
-        // نقطة بداية الأنيميشن من الأسفل جهة الإرسال
         alignment: widget.isMe ? Alignment.bottomLeft : Alignment.bottomRight, 
         child: widget.child,
       ),

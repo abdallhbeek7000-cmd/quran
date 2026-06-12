@@ -4,6 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
+// 🚀 استدعاء مكتبة الاتصال
+import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart'; 
+import 'package:zego_uikit/zego_uikit.dart';
 
 class StaffChatPage extends StatefulWidget {
   final String chatId;
@@ -67,7 +70,7 @@ class _StaffChatPageState extends State<StaffChatPage> {
       'senderId': widget.currentUserId,
       'text': text,
       'timestamp': FieldValue.serverTimestamp(),
-      'reactions': {}, // 🚀 تجهيز حقل التفاعلات
+      'reactions': {}, 
     });
 
     await FirebaseFirestore.instance.collection('staff_chats').doc(widget.chatId).set({
@@ -99,7 +102,6 @@ class _StaffChatPageState extends State<StaffChatPage> {
     }
   }
 
-  // 🚀 دالة إظهار قائمة التفاعلات (الإيموجي) عند الضغط المطول
   void _showReactionMenu(BuildContext context, String messageId, bool isDark) {
     final List<String> emojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
     
@@ -108,35 +110,42 @@ class _StaffChatPageState extends State<StaffChatPage> {
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
-          margin: const EdgeInsets.all(20),
-          padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xff1e293b).withOpacity(0.95) : Colors.white.withOpacity(0.95),
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          child: ClipRRect(
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300),
-            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2)],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: emojis.map((emoji) {
-              return GestureDetector(
-                onTap: () {
-                  // 🚀 إضافة أو تحديث التفاعل في قاعدة البيانات
-                  FirebaseFirestore.instance
-                      .collection('staff_chats')
-                      .doc(widget.chatId)
-                      .collection('messages')
-                      .doc(messageId)
-                      .set({
-                    'reactions': {
-                      widget.currentUserId: emoji // نحفظ التفاعل باسم المستخدم الحالي
-                    }
-                  }, SetOptions(merge: true));
-                  Navigator.pop(context);
-                },
-                child: Text(emoji, style: const TextStyle(fontSize: 32)),
-              );
-            }).toList(),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xff1e293b).withOpacity(0.8) : Colors.white.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: isDark ? Colors.white24 : Colors.white, width: 1.5),
+                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20, spreadRadius: 5)],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: emojis.map((emoji) {
+                    return GestureDetector(
+                      onTap: () {
+                        FirebaseFirestore.instance
+                            .collection('staff_chats')
+                            .doc(widget.chatId)
+                            .collection('messages')
+                            .doc(messageId)
+                            .set({
+                          'reactions': {
+                            widget.currentUserId: emoji 
+                          }
+                        }, SetOptions(merge: true));
+                        Navigator.pop(context);
+                      },
+                      child: Text(emoji, style: const TextStyle(fontSize: 32)),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
           ),
         );
       }
@@ -146,27 +155,57 @@ class _StaffChatPageState extends State<StaffChatPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent,
+        backgroundColor: isDark ? const Color(0xff1e293b).withOpacity(0.7) : Colors.white.withOpacity(0.7),
+        flexibleSpace: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(color: Colors.transparent),
+          ),
+        ),
         centerTitle: true,
         iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
         title: Column(
           children: [
             Text(
+              widget.peerRole == 'manager' ? 'مدير المعهد' : 'زميل إشراف',
+              style: TextStyle(fontSize: 10, color: isDark ? accentGold : Colors.grey.shade600, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+            ),
+            Text(
               widget.peerName,
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo'),
             ),
-            Text(
-              widget.peerRole == 'manager' ? 'مدير المعهد' : 'زميل إشراف',
-              style: TextStyle(fontSize: 11, color: isDark ? accentGold : Colors.grey.shade600, fontFamily: 'Cairo'),
-            ),
           ],
         ),
+        // 🚀 إضافة أزرار الاتصال بالطاقم
+        actions: [
+          ZegoSendCallInvitationButton(
+            isVideoCall: false,
+            invitees: [
+              ZegoUIKitUser(id: widget.peerId, name: widget.peerName), // 🚀 التعديل الصحيح هنا
+            ],
+            iconSize: const Size(28, 28),
+            buttonSize: const Size(40, 40),
+            icon: ButtonIcon(icon: Icon(Icons.call, color: isDark ? Colors.white : primaryColor)),
+            margin: const EdgeInsets.only(right: 5),
+          ),
+          ZegoSendCallInvitationButton(
+            isVideoCall: true,
+            invitees: [
+              ZegoUIKitUser(id: widget.peerId, name: widget.peerName), // 🚀 التعديل الصحيح هنا
+            ],
+            iconSize: const Size(28, 28),
+            buttonSize: const Size(40, 40),
+            icon: ButtonIcon(icon: Icon(Icons.videocam_rounded, color: isDark ? Colors.white : primaryColor)),
+            margin: const EdgeInsets.only(left: 5, right: 15),
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -181,6 +220,8 @@ class _StaffChatPageState extends State<StaffChatPage> {
               ),
             ),
           ),
+          Positioned(top: 100, left: -50, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.1)))),
+          Positioned(bottom: 200, right: -80, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.15)))),
 
           Column(
             children: [
@@ -226,7 +267,7 @@ class _StaffChatPageState extends State<StaffChatPage> {
                           controller: _scrollController,
                           reverse: true,
                           physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                           itemCount: messages.length,
                           itemBuilder: (context, index) {
                             final msgDoc = messages[index];
@@ -234,107 +275,130 @@ class _StaffChatPageState extends State<StaffChatPage> {
                             final isMe = msg['senderId'] == widget.currentUserId;
                             final String timeString = _formatTime(msg['timestamp'] as Timestamp?);
                             
-                            // 🚀 قراءة التفاعلات إن وجدت
                             final Map<String, dynamic> reactions = msg['reactions'] ?? {};
                             final List<String> displayEmojis = reactions.values.map((e) => e.toString()).toSet().toList();
 
-                            return Align(
-                              alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 20), // مسافة إضافية لتتسع للتفاعل
-                                constraints: BoxConstraints(
-                                  maxWidth: MediaQuery.of(context).size.width * 0.75,
-                                ),
-                                child: Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    // 🚀 فقاعة الرسالة (مع GestureDetector للضغطة المطولة)
-                                    GestureDetector(
-                                      onLongPress: () => _showReactionMenu(context, msgDoc.id, isDark),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.only(
-                                          topLeft: const Radius.circular(20),
-                                          topRight: const Radius.circular(20),
-                                          bottomLeft: Radius.circular(isMe ? 0 : 20),
-                                          bottomRight: Radius.circular(isMe ? 20 : 0),
-                                        ),
-                                        child: BackdropFilter(
-                                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                          child: Container(
-                                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                                            decoration: BoxDecoration(
-                                              color: isMe 
-                                                  ? primaryColor.withOpacity(0.75) 
-                                                  : (isDark ? accentGold.withOpacity(0.15) : Colors.white.withOpacity(0.7)),
-                                              border: Border.all(
-                                                color: isMe 
-                                                    ? Colors.white.withOpacity(0.2) 
-                                                    : (isDark ? accentGold.withOpacity(0.3) : Colors.white.withOpacity(0.8)),
-                                                width: 1.2,
-                                              ),
+                            return _AnimatedMessageBubble(
+                              index: index,
+                              isMe: isMe,
+                              child: Align(
+                                alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 22), 
+                                  constraints: BoxConstraints(
+                                    maxWidth: MediaQuery.of(context).size.width * 0.78,
+                                  ),
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      GestureDetector(
+                                        onLongPress: () => _showReactionMenu(context, msgDoc.id, isDark),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 4),
+                                              )
+                                            ]
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.only(
+                                              topLeft: const Radius.circular(22),
+                                              topRight: const Radius.circular(22),
+                                              bottomLeft: Radius.circular(isMe ? 5 : 22), 
+                                              bottomRight: Radius.circular(isMe ? 22 : 5),
                                             ),
-                                            child: Column(
-                                              crossAxisAlignment: isMe ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-                                              children: [
-                                                Text(
-                                                  msg['text'] ?? '',
-                                                  style: TextStyle(
-                                                    fontFamily: 'Cairo',
-                                                    color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
-                                                    fontSize: 14,
-                                                    height: 1.4,
+                                            child: BackdropFilter(
+                                              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                              child: Container(
+                                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                                                decoration: BoxDecoration(
+                                                  gradient: LinearGradient(
+                                                    colors: isMe 
+                                                        ? [primaryColor.withOpacity(0.85), primaryColor.withOpacity(0.7)] 
+                                                        : (isDark ? [Colors.white.withOpacity(0.15), Colors.white.withOpacity(0.05)] : [Colors.white.withOpacity(0.9), Colors.white.withOpacity(0.7)]),
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment.bottomRight,
+                                                  ),
+                                                  border: Border.all(
+                                                    color: isMe 
+                                                        ? Colors.white.withOpacity(0.25) 
+                                                        : (isDark ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.8)),
+                                                    width: 1.2,
                                                   ),
                                                 ),
-                                                const SizedBox(height: 4),
-                                                Row(
-                                                  mainAxisSize: MainAxisSize.min,
+                                                child: Column(
+                                                  crossAxisAlignment: isMe ? CrossAxisAlignment.start : CrossAxisAlignment.end,
                                                   children: [
                                                     Text(
-                                                      timeString,
+                                                      msg['text'] ?? '',
                                                       style: TextStyle(
                                                         fontFamily: 'Cairo',
-                                                        fontSize: 10,
-                                                        color: isMe ? Colors.white60 : (isDark ? Colors.white54 : Colors.black54),
+                                                        color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
+                                                        fontSize: 14.5,
+                                                        height: 1.4,
                                                       ),
                                                     ),
-                                                    if (isMe) ...[
-                                                      const SizedBox(width: 4),
-                                                      Icon(
-                                                        Icons.done_all_rounded,
-                                                        size: 14,
-                                                        color: isReadByPeer ? (isDark ? accentGold : Colors.lightBlueAccent) : Colors.white38,
-                                                      ),
-                                                    ]
+                                                    const SizedBox(height: 6),
+                                                    Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Text(
+                                                          timeString,
+                                                          style: TextStyle(
+                                                            fontFamily: 'Cairo',
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: isMe ? Colors.white70 : (isDark ? Colors.white54 : Colors.black54),
+                                                          ),
+                                                        ),
+                                                        if (isMe) ...[
+                                                          const SizedBox(width: 5),
+                                                          Icon(
+                                                            Icons.done_all_rounded,
+                                                            size: 15,
+                                                            color: isReadByPeer ? (isDark ? accentGold : Colors.lightBlueAccent) : Colors.white38,
+                                                          ),
+                                                        ]
+                                                      ],
+                                                    ),
                                                   ],
                                                 ),
-                                              ],
+                                              ),
                                             ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    
-                                    // 🚀 شارة التفاعل (تظهر فقط إذا كان هناك تفاعل)
-                                    if (displayEmojis.isNotEmpty)
-                                      Positioned(
-                                        bottom: -12,
-                                        left: isMe ? 15 : null,
-                                        right: isMe ? null : 15,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: isDark ? const Color(0xff1e293b) : Colors.white,
-                                            borderRadius: BorderRadius.circular(15),
-                                            border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300, width: 1),
-                                            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-                                          ),
-                                          child: Text(
-                                            displayEmojis.join(' '), // دمج الإيموجيات وعرضها
-                                            style: const TextStyle(fontSize: 12),
+                                      
+                                      if (displayEmojis.isNotEmpty)
+                                        Positioned(
+                                          bottom: -14,
+                                          left: isMe ? 15 : null,
+                                          right: isMe ? null : 15,
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(20),
+                                            child: BackdropFilter(
+                                              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: isDark ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.9),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                  border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300, width: 1.2),
+                                                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                                                ),
+                                                child: Text(
+                                                  displayEmojis.join(' '), 
+                                                  style: const TextStyle(fontSize: 14),
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
@@ -346,42 +410,65 @@ class _StaffChatPageState extends State<StaffChatPage> {
                 ),
               ),
 
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(20, 15, 20, 30),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xff1e293b).withOpacity(0.6) : Colors.white.withOpacity(0.7),
-                      border: Border(top: BorderSide(color: isDark ? Colors.white12 : Colors.white, width: 1.5)),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _messageController,
-                            style: TextStyle(color: isDark ? Colors.white : Colors.black, fontFamily: 'Cairo'),
-                            decoration: InputDecoration(
-                              hintText: "اكتب رسالتك لزميلك...",
-                              hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey, fontFamily: 'Cairo', fontSize: 13),
-                              filled: true,
-                              fillColor: isDark ? Colors.black26 : Colors.white54,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
+              // ⌨️ صندوق إدخال النص الكبسولي (Floating Input) الموحد
+              Container(
+                margin: EdgeInsets.only(
+                  left: 15, 
+                  right: 15, 
+                  top: 5, 
+                  bottom: isKeyboardOpen ? 15 : 25, 
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(35),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 5),
+                    )
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(35),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xff1e293b).withOpacity(0.8) : Colors.white.withOpacity(0.85),
+                        border: Border.all(color: isDark ? Colors.white24 : Colors.white, width: 1.5),
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _messageController,
+                              style: TextStyle(color: isDark ? Colors.white : Colors.black, fontFamily: 'Cairo', fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: "اكتب رسالتك لزميلك...",
+                                hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey.shade500, fontFamily: 'Cairo', fontSize: 13),
+                                filled: true,
+                                fillColor: Colors.transparent, 
+                                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                                border: InputBorder.none,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        GestureDetector(
-                          onTap: _sendMessage,
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(color: isDark ? accentGold : primaryColor, shape: BoxShape.circle, boxShadow: [BoxShadow(color: (isDark ? accentGold : primaryColor).withOpacity(0.3), blurRadius: 10, spreadRadius: 1)]),
-                            child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-                          ),
-                        )
-                      ],
+                          GestureDetector(
+                            onTap: _sendMessage,
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: accentGold, 
+                                shape: BoxShape.circle, 
+                                boxShadow: [BoxShadow(color: accentGold.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 3))]
+                              ),
+                              child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                            ),
+                          )
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -389,6 +476,68 @@ class _StaffChatPageState extends State<StaffChatPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// 🚀 الكلاس المسؤول عن حركة الرسالة الأنيميشن (السحب والتكبير)
+class _AnimatedMessageBubble extends StatefulWidget {
+  final Widget child;
+  final bool isMe;
+  final int index;
+
+  const _AnimatedMessageBubble({
+    required this.child,
+    required this.isMe,
+    required this.index,
+  });
+
+  @override
+  State<_AnimatedMessageBubble> createState() => _AnimatedMessageBubbleState();
+}
+
+class _AnimatedMessageBubbleState extends State<_AnimatedMessageBubble> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    
+    double startDx = widget.isMe ? -0.2 : 0.2; 
+    
+    _slideAnimation = Tween<Offset>(begin: Offset(startDx, 0.5), end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    );
+        
+    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    );
+
+    if (widget.index == 0) {
+      _controller.forward();
+    } else {
+      _controller.value = 1.0; 
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SlideTransition(
+      position: _slideAnimation,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        alignment: widget.isMe ? Alignment.bottomLeft : Alignment.bottomRight, 
+        child: widget.child,
       ),
     );
   }

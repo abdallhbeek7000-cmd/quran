@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui'; 
+import 'dart:math' as math; // 🚀 أضفنا مكتبة الرياضيات للزوايا
 import 'home_page.dart'; 
+import '../services/zego_service.dart'; // 🚀 استدعاء خدمة الاتصال (تأكد من مسار المجلد عندك)
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,7 +15,8 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+// 🚀 أضفنا SingleTickerProviderStateMixin عشان نشغل الأنيميشن
+class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMixin {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   bool loading = false;
@@ -22,6 +25,26 @@ class _LoginPageState extends State<LoginPage> {
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
+
+  late AnimationController _spinController; // 🚀 متحكم الدوران
+
+  @override
+  void initState() {
+    super.initState();
+    // 🚀 تهيئة الدوران ليأخذ 15 ثانية للفة الواحدة ويستمر للأبد
+    _spinController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 15),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _spinController.dispose(); // تنظيف الذاكرة
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
 
   login() async {
     if (emailController.text.isEmpty || passwordController.text.isEmpty) {
@@ -48,14 +71,19 @@ class _LoginPageState extends State<LoginPage> {
       // 2. الفحص الصارم: نبحث في جدول المشرفين أولاً
       DocumentSnapshot supervisorDoc = await FirebaseFirestore.instance.collection('supervisors').doc(uid).get();
       String role = '';
+      String userName = 'مستخدم'; // متغير لاسم المستخدم لخدمة الاتصال
 
       if (supervisorDoc.exists) {
         role = 'supervisor';
+        var data = supervisorDoc.data() as Map<String, dynamic>?;
+        userName = data != null && data.containsKey('name') ? data['name'] : 'مشرف';
       } else {
         // إذا لم يكن مشرفاً، نبحث في جدول المدراء
         DocumentSnapshot managerDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
         if (managerDoc.exists) {
           role = 'manager';
+          var data = managerDoc.data() as Map<String, dynamic>?;
+          userName = data != null && data.containsKey('name') ? data['name'] : 'مدير';
         } else {
           throw Exception("حساب المستخدم غير موجود في النظام");
         }
@@ -76,7 +104,10 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
       
-      // 5. 🚀 التوجيه الآمن لصفحة الهوم
+      // 🚀 5. تشغيل خدمة الاتصال ZegoCloud فوراً بعد تسجيل الدخول
+      ZegoService.initCall(userId: uid, userName: userName);
+
+      // 6. التوجيه الآمن لصفحة الهوم
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -123,27 +154,49 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
+          
+          // 🚀 الدائرة العلوية (بتدور مع عقارب الساعة ومدموجة بتدرج لتظهر الحركة)
           Positioned(
             top: -50,
             left: -50,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: primaryColor.withOpacity(0.3),
+            child: RotationTransition(
+              turns: _spinController,
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(120), // شكل شبه دائري يعطي حركة لطيفة
+                  gradient: LinearGradient(
+                    colors: [primaryColor.withOpacity(0.4), primaryColor.withOpacity(0.05)],
+                  ),
+                ),
               ),
             ),
           ),
+          
+          // 🚀 الدائرة السفلية (بتدور عكس عقارب الساعة)
           Positioned(
             bottom: -100,
             right: -50,
-            child: Container(
-              width: 350,
-              height: 350,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: accentGold.withOpacity(0.2), 
+            child: AnimatedBuilder(
+              animation: _spinController,
+              builder: (context, child) {
+                return Transform.rotate(
+                  angle: -_spinController.value * 2 * math.pi, // الدوران العكسي
+                  child: child,
+                );
+              },
+              child: Container(
+                width: 350,
+                height: 350,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(140), // شكل شبه دائري
+                  gradient: LinearGradient(
+                    colors: [accentGold.withOpacity(0.3), accentGold.withOpacity(0.05)],
+                    begin: Alignment.bottomRight,
+                    end: Alignment.topLeft,
+                  ),
+                ),
               ),
             ),
           ),

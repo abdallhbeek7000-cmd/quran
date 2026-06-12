@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart'; 
-import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:quran_habal/pages/leave_requests_page.dart'; 
 import 'package:shared_preferences/shared_preferences.dart'; 
 import 'package:quran_habal/services/cloudinary_helper.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
@@ -461,6 +462,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           
                           _buildGlassMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                           _buildGlassMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
+                          _buildGlassMenuCard(
+  Icons.event_busy_rounded, 
+  "طلبات الاستئذان", 
+  () => _nav(LeaveRequestsPage(supervisorId: widget.uid, role: widget.role)), 
+  isDark
+),
                         ],
                       ),
                       const SizedBox(height: 20),
