@@ -12,7 +12,7 @@ import 'login_page.dart';
 import 'create_cycle_page.dart';
 import 'cycles_page.dart';
 import 'add_student_page.dart';
-import 'students_page.dart';
+import 'students_page.dart'; // 🚀 يحوي أيضاً ArchivedStudentsPage
 import 'assign_students_page.dart';
 import '../models/cycle_model.dart';
 import '../services/cycle_service.dart';
@@ -24,7 +24,7 @@ import 'supervisor_page.dart';
 import 'inspirations_manage_page.dart'; 
 import 'supervisor_inbox_page.dart'; 
 import 'statistics_page.dart'; 
-import 'broadcast_page.dart'; // 🚀 استدعاء صفحة الإعلانات العامة
+import 'broadcast_page.dart'; 
 import '../services/notification_queue_manager.dart'; 
 import '../widgets/offline_wrapper.dart'; 
 
@@ -42,7 +42,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin { // 🚀 إضافة Mixin الأنيميشن
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin { 
   final cycleService = CycleService();
   String currentCycle = "لا يوجد دورة";
   CycleModel? currentCycleModel;
@@ -53,7 +53,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   bool isAlsoManager = false;
 
-  // 🚀 محرك الأنيميشن للدوائر
   late AnimationController _bgController;
   late Animation<double> _bgAnimation;
 
@@ -61,7 +60,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   void initState() {
     super.initState();
 
-    // 🚀 تشغيل محرك الأنيميشن 
     _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
     _bgAnimation = Tween<double>(begin: -10, end: 20).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine));
 
@@ -73,7 +71,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
-    _bgController.dispose(); // 🚀 إيقاف المحرك عند إغلاق الشاشة
+    _bgController.dispose(); 
     super.dispose();
   }
 
@@ -329,7 +327,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               ),
             ),
             
-            // 🚀 الدوائر العائمة مربوطة بالأنيميشن
             AnimatedBuilder(
               animation: _bgAnimation,
               builder: (context, child) {
@@ -440,7 +437,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         childAspectRatio: 1.1,
                         children: [
                           if (widget.role == "manager") ...[
-                            // 🚀 زر الإعلانات العامة تمت إضافته هنا للمدير
                             _buildGlassMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
                             _buildGlassMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
                             _buildGlassMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), isDark),
@@ -453,8 +449,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             if (currentCycleModel != null)
                               _buildGlassMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), isDark),
                           ],
-                          if (currentCycleModel != null)
+                          if (currentCycleModel != null) ...[
                             _buildGlassMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
+                            
+                            // 🚀 الزر الجديد تمت إضافته هنا للوصول السريع للأرشيف
+                            _buildGlassMenuCard(
+                              Icons.archive_rounded, 
+                              "الطلاب المتوقفين", 
+                              () => _nav(ArchivedStudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), 
+                              isDark
+                            ),
+                          ],
                           
                           _buildGlassMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
 
@@ -463,11 +468,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           _buildGlassMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                           _buildGlassMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
                           _buildGlassMenuCard(
-  Icons.event_busy_rounded, 
-  "طلبات الاستئذان", 
-  () => _nav(LeaveRequestsPage(supervisorId: widget.uid, role: widget.role)), 
-  isDark
-),
+                            Icons.event_busy_rounded, 
+                            "طلبات الاستئذان", 
+                            () => _nav(LeaveRequestsPage(supervisorId: widget.uid, role: widget.role)), 
+                            isDark
+                          ),
                         ],
                       ),
                       const SizedBox(height: 20),

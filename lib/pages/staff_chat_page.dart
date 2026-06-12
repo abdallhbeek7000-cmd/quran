@@ -4,9 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
-// 🚀 استدعاء مكتبة الاتصال
-import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart'; 
-import 'package:zego_uikit/zego_uikit.dart';
 
 class StaffChatPage extends StatefulWidget {
   final String chatId;
@@ -183,29 +180,7 @@ class _StaffChatPageState extends State<StaffChatPage> {
             ),
           ],
         ),
-        // 🚀 إضافة أزرار الاتصال بالطاقم
-        actions: [
-          ZegoSendCallInvitationButton(
-            isVideoCall: false,
-            invitees: [
-              ZegoUIKitUser(id: widget.peerId, name: widget.peerName), // 🚀 التعديل الصحيح هنا
-            ],
-            iconSize: const Size(28, 28),
-            buttonSize: const Size(40, 40),
-            icon: ButtonIcon(icon: Icon(Icons.call, color: isDark ? Colors.white : primaryColor)),
-            margin: const EdgeInsets.only(right: 5),
-          ),
-          ZegoSendCallInvitationButton(
-            isVideoCall: true,
-            invitees: [
-              ZegoUIKitUser(id: widget.peerId, name: widget.peerName), // 🚀 التعديل الصحيح هنا
-            ],
-            iconSize: const Size(28, 28),
-            buttonSize: const Size(40, 40),
-            icon: ButtonIcon(icon: Icon(Icons.videocam_rounded, color: isDark ? Colors.white : primaryColor)),
-            margin: const EdgeInsets.only(left: 5, right: 15),
-          ),
-        ],
+        actions: [], // 🚀 تم تنظيف الأزرار
       ),
       body: Stack(
         children: [
@@ -410,7 +385,6 @@ class _StaffChatPageState extends State<StaffChatPage> {
                 ),
               ),
 
-              // ⌨️ صندوق إدخال النص الكبسولي (Floating Input) الموحد
               Container(
                 margin: EdgeInsets.only(
                   left: 15, 
@@ -481,7 +455,6 @@ class _StaffChatPageState extends State<StaffChatPage> {
   }
 }
 
-// 🚀 الكلاس المسؤول عن حركة الرسالة الأنيميشن (السحب والتكبير)
 class _AnimatedMessageBubble extends StatefulWidget {
   final Widget child;
   final bool isMe;

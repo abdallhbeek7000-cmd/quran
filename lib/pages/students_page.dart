@@ -80,6 +80,54 @@ class _StudentsPageState extends State<StudentsPage> {
     }
   }
 
+  // 🚀 دالة أرشفة الطالب (توقف مؤقت)
+  void _showArchiveDialog(BuildContext context, String studentId, String studentName, bool isDarkMode) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.pause_circle_filled_rounded, color: Colors.orangeAccent, size: 28),
+              const SizedBox(width: 10),
+              Text("إيقاف الطالب مؤقتاً", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16, color: isDarkMode ? Colors.white : Colors.black87)),
+            ],
+          ),
+          content: Text(
+            "هل تريد نقل الطالب ($studentName) إلى الأرشيف (قائمة الانتظار)؟\n\nلن تظهر بياناته في القائمة الأساسية حتى تقوم باسترجاعه.",
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 13, height: 1.4, color: isDarkMode ? Colors.white70 : Colors.black87),
+          ),
+          actions: [
+            TextButton(
+              child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+              onPressed: () => Navigator.pop(dialogContext),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
+              onPressed: () async {
+                Navigator.pop(dialogContext); 
+                // 🚀 تحويل حالة الطالب إلى مؤرشف
+                await FirebaseFirestore.instance.collection('students').doc(studentId).set({'archived': true}, SetOptions(merge: true));
+                if (context.mounted) {
+                  GlassToast.show(
+                    context, 
+                    title: "تم الأرشفة", 
+                    message: "تم نقل الطالب ($studentName) إلى الأرشيف بنجاح", 
+                    icon: Icons.archive_outlined, 
+                    color: Colors.orangeAccent,
+                  );
+                }
+              },
+              child: const Text("نقل للأرشيف", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showDeleteStudentDialog(BuildContext context, String studentId, String studentName, bool isDarkMode) {
     showDialog(
       context: context,
@@ -232,6 +280,7 @@ class _StudentsPageState extends State<StudentsPage> {
         .collection('students')
         .where('cycleId', isEqualTo: widget.cycle.id);
 
+    // استثناء الطلاب المؤرشفين من العرض الطبيعي
     if (!widget.isArchivedFromHistory) {
       query = query.where('archived', isEqualTo: false);
     }
@@ -254,6 +303,13 @@ class _StudentsPageState extends State<StudentsPage> {
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
           actions: [
+            // 🚀 زر الانتقال للأرشيف
+            if (!widget.isArchivedFromHistory)
+              IconButton(
+                icon: Icon(Icons.archive_outlined, color: isDarkMode ? accentGold : primaryColor), 
+                tooltip: "الطلاب المتوقفين مؤقتاً", 
+                onPressed: () => _nav(ArchivedStudentsPage(cycle: widget.cycle, role: widget.role, uid: widget.uid))
+              ),
             if (widget.role == "manager") 
               IconButton(icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor), tooltip: "تصدير Excel", onPressed: exportToExcel),
           ],
@@ -376,10 +432,8 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  // 🚀 التعديل الجذري والذكي لقسم التنبيهات (تم إلغاء فلترة السيرفر لتجنب خطأ الـ Index)
   Widget _buildAbsentAlertSection(bool isDarkMode) {
     return StreamBuilder<QuerySnapshot>(
-      // طلبنا البيانات الأساسية بدون شرط الغياب لتجنب خطأ الفهرسة (Index Error)
       stream: FirebaseFirestore.instance.collection('students')
           .where('cycleId', isEqualTo: widget.cycle.id)
           .where('archived', isEqualTo: false)
@@ -391,7 +445,6 @@ class _StudentsPageState extends State<StudentsPage> {
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox();
         
-        // 🚀 الفلترة المحلية (Local Filtering) سريعة ومضمونة 100% ولا تعتمد على Index
         final alertStudents = snapshot.data!.docs.where((doc) {
           final sData = doc.data() as Map<String, dynamic>;
           final count = sData['consecutiveAbsences'] ?? 0;
@@ -470,7 +523,6 @@ class _StudentsPageState extends State<StudentsPage> {
     final String nationality = data['nationality'] ?? 'سوري'; 
     final String livePulse = data['livePulse'] ?? 'none'; 
     
-    // سحب بيانات الصف
     final String grade = data['grade'] ?? data['schoolGrade'] ?? data['classLevel'] ?? data['studyLevel'] ?? 'غير مسجل';
     
     final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
@@ -483,6 +535,12 @@ class _StudentsPageState extends State<StudentsPage> {
         child: Column(
           children: [
             ListTile(
+              // 🚀 الضغطة المطولة لنقل الطالب للأرشيف
+              onLongPress: () {
+                if (!widget.isArchivedFromHistory) {
+                  _showArchiveDialog(context, doc.id, studentName, isDarkMode);
+                }
+              },
               contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
               leading: GestureDetector(
                 onTap: () {
@@ -696,5 +754,153 @@ class _StudentsPageState extends State<StudentsPage> {
 
   void _nav(Widget page) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+}
+
+// =========================================================
+// 🚀 صفحة الأرشيف المدمجة الخاصة بالطلاب المتوقفين مؤقتاً
+// =========================================================
+class ArchivedStudentsPage extends StatelessWidget {
+  final CycleModel cycle;
+  final String role;
+  final String uid;
+
+  const ArchivedStudentsPage({
+    super.key, 
+    required this.cycle,
+    required this.role,
+    required this.uid,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+    final Color primaryColor = const Color(0xff425c75);
+    final Color accentGold = const Color(0xffd4af37);
+
+    Query query = FirebaseFirestore.instance
+        .collection('students')
+        .where('cycleId', isEqualTo: cycle.id)
+        .where('archived', isEqualTo: true); // 🚀 جلب الطلاب المؤرشفين فقط!
+
+    if (role == "supervisor") {
+      query = query.where('supervisorId', isEqualTo: uid);
+    }
+
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text(
+            "الطلاب المتوقفين (الأرشيف)",
+            style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo'),
+          ),
+          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+        ),
+        body: AnimatedGlassBackground(
+          child: SafeArea(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: query.snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.archive_outlined, size: 80, color: isDarkMode ? Colors.white24 : primaryColor.withOpacity(0.3)),
+                        const SizedBox(height: 15),
+                        Text("لا يوجد طلاب متوقفين حالياً", style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white54 : Colors.black54)),
+                      ],
+                    ),
+                  );
+                }
+
+                final archivedStudents = snapshot.data!.docs;
+
+                return ListView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                  itemCount: archivedStudents.length,
+                  itemBuilder: (context, index) {
+                    final student = archivedStudents[index];
+                    final data = student.data() as Map<String, dynamic>;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: isDarkMode ? Colors.white10 : Colors.white),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.orangeAccent.withOpacity(0.2),
+                          child: const Icon(Icons.pause_circle_filled_rounded, color: Colors.orangeAccent),
+                        ),
+                        title: Text(data['name'] ?? 'بدون اسم', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : Colors.black87)),
+                        subtitle: Text("المشرف: ${data['supervisorName'] ?? 'غير محدد'}\n(ضغطة مطولة لاسترجاعه)", style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black54)),
+                        trailing: const Icon(Icons.restore_page_rounded, color: Colors.green),
+                        // 🚀 الضغطة المطولة للاسترجاع
+                        onLongPress: () {
+                          showDialog(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              title: Row(
+                                children: [
+                                  const Icon(Icons.restore_rounded, color: Colors.green, size: 28),
+                                  const SizedBox(width: 10),
+                                  Text("استرجاع الطالب", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : Colors.black87)),
+                                ],
+                              ),
+                              content: Text("هل تريد إرجاع الطالب (${data['name']}) إلى القائمة النشطة واستئناف دوامه؟", style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black87)),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogContext),
+                                  child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                  onPressed: () async {
+                                    Navigator.pop(dialogContext);
+                                    // 🚀 استرجاع الطالب للصفحة الرئيسية
+                                    await FirebaseFirestore.instance.collection('students').doc(student.id).set({'archived': false}, SetOptions(merge: true));
+                                    if (context.mounted) {
+                                      GlassToast.show(
+                                        context, 
+                                        title: "تم الاسترجاع", 
+                                        message: "عاد الطالب للقائمة النشطة بنجاح", 
+                                        icon: Icons.check_circle_outline_rounded, 
+                                        color: Colors.greenAccent,
+                                      );
+                                    }
+                                  },
+                                  child: const Text("استرجاع", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

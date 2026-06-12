@@ -4,9 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart'; 
-// 🚀 استدعاء مكتبة الاتصال
-import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart'; 
-import 'package:zego_uikit/zego_uikit.dart';
 
 class SupervisorChatPage extends StatefulWidget {
   final String chatId;
@@ -185,29 +182,7 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
             ),
           ],
         ),
-        // 🚀 إضافة أزرار الاتصال هنا
-       actions: [
-          ZegoSendCallInvitationButton(
-            isVideoCall: false,
-            invitees: [
-              ZegoUIKitUser(id: widget.studentId, name: widget.studentName), // 🚀 تم التصحيح
-            ],
-            iconSize: const Size(28, 28),
-            buttonSize: const Size(40, 40),
-            icon: ButtonIcon(icon: Icon(Icons.call, color: isDark ? Colors.white : primaryColor)), // 🚀 تم تصحيح الأيقونة
-            margin: const EdgeInsets.only(right: 5),
-          ),
-          ZegoSendCallInvitationButton(
-            isVideoCall: true,
-            invitees: [
-              ZegoUIKitUser(id: widget.studentId, name: widget.studentName), // 🚀 تم التصحيح
-            ],
-            iconSize: const Size(28, 28),
-            buttonSize: const Size(40, 40),
-            icon: ButtonIcon(icon: Icon(Icons.videocam_rounded, color: isDark ? Colors.white : primaryColor)), // 🚀 تم تصحيح الأيقونة
-            margin: const EdgeInsets.only(left: 5, right: 15),
-          ),
-        ],
+        actions: [], // 🚀 تم تنظيف الأزرار
       ),
       body: Stack(
         children: [
