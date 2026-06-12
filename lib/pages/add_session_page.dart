@@ -10,6 +10,7 @@ import '../services/theme_provider.dart';
 import '../services/notification_service.dart'; 
 import '../services/notification_queue_manager.dart'; 
 import '../widgets/offline_wrapper.dart'; 
+import '../widgets/glass_toast.dart'; // 🚀 استدعاء الإشعار الزجاجي الفخم
 
 class AddSessionPage extends StatefulWidget {
   final String studentId;
@@ -40,14 +41,12 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   TextEditingController? _activeController;
   String _initialText = '';
 
-  // 🚀 تحويل المتحكمات إلى (من - إلى)
   final newMemoFrom = TextEditingController();
   final newMemoTo = TextEditingController();
 
   final newRevFrom = TextEditingController();
   final newRevTo = TextEditingController();
 
-  // 🚀 قائمة ديناميكية للمراجعة القديمة (لدعم زر +)
   List<Map<String, TextEditingController>> oldReviewRanges = [
     {'from': TextEditingController(), 'to': TextEditingController()}
   ];
@@ -61,7 +60,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   final newRevHwFrom = TextEditingController();
   final newRevHwTo = TextEditingController();
 
-  // 🚀 قائمة ديناميكية لواجب المراجعة القديمة (لدعم زر +)
   List<Map<String, TextEditingController>> oldRevHwRanges = [
     {'from': TextEditingController(), 'to': TextEditingController()}
   ];
@@ -78,12 +76,15 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   
   bool hasNewMemorization = true;
   bool hasReview = true;
-  bool hasReading = true; 
+  bool hasReading = false; 
 
   String absenceType = "بدون عذر"; 
   String memorizationRating = "جيد"; 
-  String reviewRating = "جيد";       
+  String newReviewRating = "جيد"; 
+  String oldReviewRating = "جيد";     
   String studentStatus = "مهذب";
+
+  DateTime _selectedDate = DateTime.now();
 
   bool isCompletedStudent = false;
   bool checkingStudentType = true;
@@ -107,7 +108,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'name': widget.supervisorName
     });
     
-    // ربط الحفظ الجديد لتحديث إجمالي الصفحات تلقائياً
     newMemoTo.addListener(_updateTotalPages);
     newMemoFrom.addListener(_updateTotalPages);
 
@@ -142,7 +142,36 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     super.dispose();
   }
 
-  // 🚀 استخراج أعلى رقم للحفظ الشامل
+  Future<void> _pickDate(BuildContext context, bool isDarkMode) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: accentGold, 
+              onPrimary: Colors.white, 
+              onSurface: isDarkMode ? Colors.white : primaryColor, 
+            ),
+            dialogBackgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: accentGold),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
   void _updateTotalPages() {
     if (isCompletedStudent || absent || isExam) return;
     int from = int.tryParse(newMemoFrom.text) ?? 0;
@@ -153,14 +182,13 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
-  // 🚀 دوال المساعدة لتركيب وتفكيك النصوص
   String _buildRangeString(TextEditingController fromCtrl, TextEditingController toCtrl) {
     String from = fromCtrl.text.trim();
     String to = toCtrl.text.trim();
     if (from.isEmpty && to.isEmpty) return "";
     if (from.isNotEmpty && to.isEmpty) return from;
     if (from.isEmpty && to.isNotEmpty) return to;
-    return "$from - $to"; // سيقبل 20 - 20 بشكل طبيعي
+    return "$from - $to"; 
   }
 
   String _buildMultiRangeString(List<Map<String, TextEditingController>> ranges) {
@@ -198,6 +226,18 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
+  DateTime _parseDate(String dateStr) {
+    try {
+      List<String> parts = dateStr.split('-');
+      if (parts.length == 3) {
+        return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+      }
+    } catch (e) {
+      return DateTime(2000); 
+    }
+    return DateTime(2000);
+  }
+
   Future<void> _loadPreviousSessionData() async {
     try {
       final querySnapshot = await FirebaseFirestore.instance
@@ -207,15 +247,24 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
       if (querySnapshot.docs.isNotEmpty) {
         var docs = querySnapshot.docs.toList();
+        
         docs.sort((a, b) {
           var dataA = a.data();
           var dataB = b.data();
-          Timestamp? tA = dataA['timestamp'] as Timestamp?;
-          Timestamp? tB = dataB['timestamp'] as Timestamp?;
-          if (tA != null && tB != null) return tB.compareTo(tA);
-          String dateA = dataA['date'] ?? '';
-          String dateB = dataB['date'] ?? '';
-          return dateB.compareTo(dateA); 
+
+          DateTime dateAObj = _parseDate(dataA['date'] ?? '');
+          DateTime dateBObj = _parseDate(dataB['date'] ?? '');
+
+          int dateComparison = dateBObj.compareTo(dateAObj);
+
+          if (dateComparison == 0) {
+            Timestamp? tA = dataA['timestamp'] as Timestamp?;
+            Timestamp? tB = dataB['timestamp'] as Timestamp?;
+            if (tA != null && tB != null) return tB.compareTo(tA);
+            if (tA == null && tB != null) return -1;
+            if (tB == null && tA != null) return 1;
+          }
+          return dateComparison;
         });
 
         final lastSession = docs.first.data();
@@ -249,7 +298,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
-  // (دالة المايك بقيت فقط للملاحظات والنشاطات كما طلبت للحفاظ على الإدخال الرقمي الدقيق للحفظ)
   void _listen(TextEditingController controller) async {
     if (!_isListening) {
       bool available = await _speech.initialize(
@@ -378,30 +426,52 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   }
 
   addSession() async {
-    final hasToday = await sessionService.hasSessionToday(widget.studentId);
-    if (hasToday) {
+    setState(() => loading = true);
+    final date = "${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}";
+
+    final result = await FirebaseFirestore.instance
+        .collection('sessions')
+        .where('studentId', isEqualTo: widget.studentId)
+        .where('date', isEqualTo: date)
+        .get();
+
+    if (result.docs.isNotEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.orange, content: Text("تم تسجيل جلسة اليوم مسبقًا", style: TextStyle(fontFamily: 'Cairo'))));
+      setState(() => loading = false);
+      // 🚀 إشعار زجاجي لحالة الخطأ أيضاً
+      GlassToast.show(
+        context,
+        title: "تنبيه",
+        message: "تم تسجيل جلسة في هذا التاريخ مسبقاً ⚠️",
+        icon: Icons.warning_amber_rounded,
+        color: Colors.orangeAccent,
+      );
       return;
     }
 
     if (isExam && !absent && examScoreController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.red, content: Text("يرجى إدخال علامة الاختبار أولاً", style: TextStyle(fontFamily: 'Cairo'))));
+      setState(() => loading = false);
+      GlassToast.show(
+        context,
+        title: "بيانات ناقصة",
+        message: "يرجى إدخال علامة الاختبار أولاً ❌",
+        icon: Icons.error_outline_rounded,
+        color: Colors.redAccent,
+      );
       return;
     }
 
-    setState(() => loading = true);
-    final now = DateTime.now();
-    final date = "${now.year}-${now.month}-${now.day}";
-
-    // 🚀 تحويل المدخلات إلى نصوص
     String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent) ? '' : _buildRangeString(newRevFrom, newRevTo);
     String finalFarReview = (!hasReview || absent || isExam) ? '' : _buildMultiRangeString(oldReviewRanges);
     String finalReading = (!hasReading || absent || isExam) ? '' : _buildRangeString(readingFrom, readingTo);
     
     String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent) ? '' : memorizationRating;
-    String finalRevRating = (!hasReview || absent || isExam) ? '' : reviewRating;
+    
+    String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent) ? '' : newReviewRating;
+    String finalOldRevRating = (!hasReview || absent || isExam || isCompletedStudent) ? '' : oldReviewRating;
+    
+    String finalFallbackRevRating = isCompletedStudent ? newReviewRating : (finalNewRevRating.isNotEmpty ? finalNewRevRating : finalOldRevRating);
 
     String finalNewHW = (absent || isExam || isCompletedStudent) ? '' : _buildRangeString(newHwFrom, newHwTo);
     String finalNewRevHW = (absent || isExam || isCompletedStudent) ? '' : _buildRangeString(newRevHwFrom, newRevHwTo);
@@ -447,8 +517,10 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'oldReviewHomework': finalOldRevHW, 
       'readingBySight': finalReading,
       'memorizationRating': finalMemoRating,
-      'reviewRating': finalRevRating,
-      'rating': (absent || isExam) ? '' : (isCompletedStudent ? finalRevRating : (hasNewMemorization ? finalMemoRating : finalRevRating)), 
+      'newReviewRating': finalNewRevRating, 
+      'oldReviewRating': finalOldRevRating, 
+      'reviewRating': (absent || isExam) ? '' : finalFallbackRevRating, 
+      'rating': (absent || isExam) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)), 
       'studentStatus': (absent || isExam) ? '' : studentStatus,
       'religiousActivities': (absent || isExam) ? '' : religiousActivities.text.trim(),
       'notes': notes.text.trim(),
@@ -457,13 +529,10 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       if (!absent && !isExam) 'total_memorized_pages': totalPages,
     };
 
-    // 🚀 تطبيق التعديل الذكي للغيابات المترتية على عملية الحفظ (أطلق وانسَ)
     FirebaseFirestore.instance.collection('sessions').add(sessionData).then((_) {
-      // إعادة حساب الغياب بدقة 100% فور الحفظ
       sessionService.recalculateConsecutiveAbsences(widget.studentId);
     });
 
-    // تحديث بيانات الصفحات فقط
     if (!absent && !isExam && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
       FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
         'memorizedPages': totalPages,
@@ -473,7 +542,20 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : "📢 تحديث يومي من الحلقة");
     String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
       : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 
-      : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}" + (hasNewMemorization && finalMemoRating.isNotEmpty ? "، الحفظ: ($finalMemoRating)" : "") + (hasReview && finalRevRating.isNotEmpty ? "، المراجعة: ($finalRevRating)" : "")));
+      : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}"));
+    
+    if (!absent && !isExam) {
+       if (hasNewMemorization && finalMemoRating.isNotEmpty) notifyBody += "، الحفظ: ($finalMemoRating)";
+       if (hasReview) {
+         if (isCompletedStudent) {
+           notifyBody += "، المراجعة: ($finalFallbackRevRating)";
+         } else {
+           if (finalNewRevRating.isNotEmpty) notifyBody += "، مراجعة الجديد: ($finalNewRevRating)";
+           if (finalOldRevRating.isNotEmpty) notifyBody += "، مراجعة القديم: ($finalOldRevRating)";
+         }
+       }
+    }
+      
     String notifyType = absent ? "absent" : (isExam ? "exam" : "regular");
 
     NotificationService.sendAndSaveNotification(
@@ -488,10 +570,14 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     if (!mounted) return;
     setState(() => loading = false);
     
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      backgroundColor: Colors.blueGrey, 
-      content: Text("تم حفظ الجلسة بنجاح", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))
-    ));
+    // 🚀 تطبيق الإشعار الزجاجي الأنيق عند نجاح الحفظ
+    GlassToast.show(
+      context,
+      title: "تم الحفظ",
+      message: "تم تسجيل الجلسة للطالب بنجاح ✅",
+      icon: Icons.check_circle_outline_rounded,
+      color: Colors.greenAccent.shade400,
+    );
     
     Navigator.pop(context);
   }
@@ -524,7 +610,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
-  // 🚀 أداة إدخال الأرقام الصغيرة (من - إلى)
   Widget _buildMiniNumberInput(TextEditingController ctrl, bool isDarkMode) {
     return SizedBox(
       height: 45,
@@ -546,7 +631,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
-  // 🚀 سطر من وإلى العادي
   Widget _buildRangeRow(String title, IconData icon, TextEditingController fromCtrl, TextEditingController toCtrl, bool isDarkMode) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
@@ -583,7 +667,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
-  // 🚀 سطر من وإلى المتعدد (مع زر الإضافة)
   Widget _buildMultiRangeRow(String title, IconData icon, List<Map<String, TextEditingController>> ranges, VoidCallback onAdd, VoidCallback onRemoveLast, bool isDarkMode) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
@@ -708,6 +791,27 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                             child: Column(
                               children: [
                                 Container(
+                                  decoration: BoxDecoration(
+                                    color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.6), 
+                                    borderRadius: BorderRadius.circular(15)
+                                  ),
+                                  child: ListTile(
+                                    leading: Icon(Icons.calendar_month_rounded, color: accentGold),
+                                    title: Text("تاريخ الجلسة", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text("${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+                                        const SizedBox(width: 8),
+                                        Icon(Icons.edit_calendar_rounded, color: isDarkMode ? Colors.white54 : primaryColor.withOpacity(0.7), size: 20),
+                                      ],
+                                    ),
+                                    onTap: () => _pickDate(context, isDarkMode),
+                                  ),
+                                ),
+                                const SizedBox(height: 15),
+                                
+                                Container(
                                   decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
                                   child: SwitchListTile(
                                     activeColor: Colors.orange,
@@ -792,6 +896,29 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     _buildRangeRow("المقدار المقروء نظراً من المصحف", Icons.menu_book_outlined, readingFrom, readingTo, isDarkMode),
                                   ],
                                   
+                                  if (!isCompletedStudent) ...[
+                                    const SizedBox(height: 10),
+                                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12),
+                                    const SizedBox(height: 10),
+                                    TextField(
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'), 
+                                      controller: totalMemorizedPagesController, 
+                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
+                                      decoration: _glassInputDecoration("إجمالي عدد الصفحات المحفوظة حتى الآن", Icons.analytics_outlined, isDarkMode)
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            _buildSectionCard(
+                              title: "الواجب المطلوب للمرة القادمة",
+                              icon: Icons.next_plan_outlined,
+                              isDarkMode: isDarkMode,
+                              child: Column(
+                                children: [
                                   if (isCompletedStudent) ...[
                                     _buildMultiRangeRow(
                                       "المقدار المطلوب للمرة القادمة", Icons.edit_note, oldRevHwRanges, 
@@ -807,19 +934,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                       () { setState(() => oldRevHwRanges.add({'from': TextEditingController(), 'to': TextEditingController()})); },
                                       () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); r['from']?.dispose(); r['to']?.dispose(); }); },
                                       isDarkMode
-                                    ),
-                                  ],
-                                  
-                                  if (!isCompletedStudent) ...[
-                                    const SizedBox(height: 10),
-                                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12),
-                                    const SizedBox(height: 10),
-                                    TextField(
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'), 
-                                      controller: totalMemorizedPagesController, 
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
-                                      decoration: _glassInputDecoration("إجمالي عدد الصفحات المحفوظة حتى الآن", Icons.analytics_outlined, isDarkMode)
                                     ),
                                   ],
                                 ],
@@ -846,14 +960,34 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                   ],
 
                                   if (hasReview) ...[
-                                    DropdownButtonFormField<String>(
-                                      value: reviewRating,
-                                      dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                                      decoration: _glassInputDecoration(isCompletedStudent ? "تقييم مراجعة الختمة" : "تقييم المراجعة", Icons.rate_review_outlined, isDarkMode),
-                                      items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                                      onChanged: (v) => setState(() => reviewRating = v!),
-                                    ),
+                                    if (isCompletedStudent) ...[
+                                      DropdownButtonFormField<String>(
+                                        value: newReviewRating, 
+                                        dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                        decoration: _glassInputDecoration("تقييم مراجعة الختمة", Icons.rate_review_outlined, isDarkMode),
+                                        items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                                        onChanged: (v) => setState(() => newReviewRating = v!),
+                                      ),
+                                    ] else ...[
+                                      DropdownButtonFormField<String>(
+                                        value: newReviewRating,
+                                        dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                        decoration: _glassInputDecoration("تقييم مراجعة جديد", Icons.rate_review_outlined, isDarkMode),
+                                        items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                                        onChanged: (v) => setState(() => newReviewRating = v!),
+                                      ),
+                                      const SizedBox(height: 15),
+                                      DropdownButtonFormField<String>(
+                                        value: oldReviewRating,
+                                        dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                        decoration: _glassInputDecoration("تقييم مراجعة قديم", Icons.history_edu, isDarkMode),
+                                        items: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                                        onChanged: (v) => setState(() => oldReviewRating = v!),
+                                      ),
+                                    ],
                                     const SizedBox(height: 15),
                                   ],
 

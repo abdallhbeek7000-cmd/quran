@@ -23,8 +23,9 @@ import 'supervisor_page.dart';
 import 'inspirations_manage_page.dart'; 
 import 'supervisor_inbox_page.dart'; 
 import 'statistics_page.dart'; 
-import '../services/notification_queue_manager.dart'; // 🚀 استيراد مدير طابور الإشعارات
-import '../widgets/offline_wrapper.dart'; // 🚀 استيراد غلاف الأوفلاين
+import 'broadcast_page.dart'; // 🚀 استدعاء صفحة الإعلانات العامة
+import '../services/notification_queue_manager.dart'; 
+import '../widgets/offline_wrapper.dart'; 
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -40,7 +41,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin { // 🚀 إضافة Mixin الأنيميشن
   final cycleService = CycleService();
   String currentCycle = "لا يوجد دورة";
   CycleModel? currentCycleModel;
@@ -49,45 +50,53 @@ class _HomePageState extends State<HomePage> {
   final Color accentGold = const Color(0xffd4af37); 
   bool _isUploadingManagerImage = false; 
 
-  // 🚀 متغير للتحقق إذا كان المستخدم الحالي هو بالأساس مدير (God Mode)
   bool isAlsoManager = false;
+
+  // 🚀 محرك الأنيميشن للدوائر
+  late AnimationController _bgController;
+  late Animation<double> _bgAnimation;
 
   @override
   void initState() {
     super.initState();
+
+    // 🚀 تشغيل محرك الأنيميشن 
+    _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
+    _bgAnimation = Tween<double>(begin: -10, end: 20).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine));
+
     loadCycle(); 
     _setupNotifications(); 
-    _checkIfManager(); // التحقق الصامت الذكي
-    _checkPendingNotifications(); // 🚀 فحص الإشعارات المعلقة بمجرد فتح الشاشة
+    _checkIfManager(); 
+    _checkPendingNotifications(); 
   }
 
-  // 🚀 دالة فحص وطرد الإشعارات المعلقة
+  @override
+  void dispose() {
+    _bgController.dispose(); // 🚀 إيقاف المحرك عند إغلاق الشاشة
+    super.dispose();
+  }
+
   void _checkPendingNotifications() async {
-    // ننتظر 3 ثواني لضمان استقرار الاتصال بالإنترنت عند فتح التطبيق
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) {
       await NotificationQueueManager.processPendingNotifications(context);
     }
   }
 
-  // 🚀 الفحص الذكي والقطعي (بدون استعلامات قاعدة بيانات تسبب تداخل)
   void _checkIfManager() {
     String realUid = FirebaseAuth.instance.currentUser?.uid ?? '';
     
     if (widget.role == "manager") {
       if (mounted) setState(() => isAlsoManager = true);
     } 
-    // إذا كان الحساب الأصلي النشط بالهاتف يختلف عن حساب المشرف المعروض، فهو حتماً مدير متخفي
     else if (realUid.isNotEmpty && realUid != widget.uid) {
       if (mounted) setState(() => isAlsoManager = true);
     } 
-    // غير هيك، فهو مشرف نظامي ١٠٠٪ ونخفي الزر
     else {
       if (mounted) setState(() => isAlsoManager = false);
     }
   }
 
-  // 🚀 نافذة تبديل الحسابات (الخاصة بالمدير فقط)
   void _showSupervisorsList(bool isDark) {
     showModalBottomSheet(
       context: context,
@@ -108,7 +117,6 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 20),
               Text("إدارة الحسابات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
               
-              // 🚀 زر العودة للمدير إذا كان داخل حساب مشرف
               if (isAlsoManager && widget.role == 'supervisor') ...[
                 const SizedBox(height: 15),
                 InkWell(
@@ -157,7 +165,7 @@ class _HomePageState extends State<HomePage> {
                         String supId = docs[index].id;
                         String name = sup['name'] ?? 'مشرف';
                         String phone = sup['phone'] ?? '';
-                        String? imageUrl = sup['imageUrl']; // 🚀 جلب الصورة
+                        String? imageUrl = sup['imageUrl']; 
                         
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
@@ -190,7 +198,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🚀 تنفيذ الدخول لحساب المشرف (وهمي)
   void _impersonateSupervisor(String supId) async {
     Navigator.pop(context); 
     final prefs = await SharedPreferences.getInstance();
@@ -204,7 +211,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🚀 العودة للوحة الإدارة الحقيقية
   void _returnToManager() async {
     String realUid = FirebaseAuth.instance.currentUser?.uid ?? widget.uid;
     final prefs = await SharedPreferences.getInstance();
@@ -250,7 +256,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 🚀 تسجيل الخروج النهائي وتنظيف كامل
   logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear(); 
@@ -281,7 +286,6 @@ class _HomePageState extends State<HomePage> {
     final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
     final bool isDark = themeProvider.isDarkMode;
 
-    // 🚀 تغليف بـ OfflineWrapper 
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true, 
@@ -295,7 +299,6 @@ class _HomePageState extends State<HomePage> {
             style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo'),
           ),
           actions: [
-            // 🚀 زر الدخول لحسابات المشرفين (يظهر فقط وفقط إذا كان الحساب الأصلي مدير)
             if (isAlsoManager)
               IconButton(
                 icon: Icon(Icons.people_alt_rounded, color: isDark ? accentGold : primaryColor),
@@ -324,8 +327,27 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            Positioned(top: -50, left: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))),
-            Positioned(top: 200, right: -80, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15)))),
+            
+            // 🚀 الدوائر العائمة مربوطة بالأنيميشن
+            AnimatedBuilder(
+              animation: _bgAnimation,
+              builder: (context, child) {
+                return Stack(
+                  children: [
+                    Positioned(
+                      top: -50 + _bgAnimation.value,
+                      left: -50 - (_bgAnimation.value / 2),
+                      child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                    ),
+                    Positioned(
+                      top: 200 - _bgAnimation.value,
+                      right: -80 + _bgAnimation.value,
+                      child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
+                    ),
+                  ],
+                );
+              },
+            ),
 
             SafeArea(
               child: SingleChildScrollView(
@@ -417,6 +439,8 @@ class _HomePageState extends State<HomePage> {
                         childAspectRatio: 1.1,
                         children: [
                           if (widget.role == "manager") ...[
+                            // 🚀 زر الإعلانات العامة تمت إضافته هنا للمدير
+                            _buildGlassMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
                             _buildGlassMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
                             _buildGlassMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), isDark),
                             _buildGlassMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), isDark),
@@ -433,7 +457,6 @@ class _HomePageState extends State<HomePage> {
                           
                           _buildGlassMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
 
-                          // 🚀 إضافة زر الإحصائيات الجديد هنا
                           _buildGlassMenuCard(Icons.pie_chart_rounded, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
                           
                           _buildGlassMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),

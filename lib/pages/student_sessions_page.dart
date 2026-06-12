@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 import 'edit_session_page.dart';
 import '../services/session_service.dart';
-import '../widgets/offline_wrapper.dart'; // 🚀 استيراد غلاف الأوفلاين
+import '../widgets/offline_wrapper.dart'; 
 
 class StudentSessionsPage extends StatefulWidget {
   final String studentId;
@@ -47,7 +47,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     super.dispose();
   }
 
-  // 🚀 دالة جديدة لتحويل النص إلى تاريخ حقيقي للترتيب الصحيح
   DateTime _parseDate(String dateStr) {
     try {
       List<String> parts = dateStr.split('-');
@@ -55,12 +54,11 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
       }
     } catch (e) {
-      return DateTime(2000); // تاريخ افتراضي في حال الخطأ
+      return DateTime(2000); 
     }
     return DateTime(2000);
   }
 
-  // 🚀 دالة ذكية لمعرفة اليوم بالعربي من التاريخ
   String _getArabicDayName(String dateString) {
     try {
       List<String> parts = dateString.split('-');
@@ -78,7 +76,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     return "";
   }
 
-  // 📊 دالة التصدير للإكسل 
+  // 📊 دالة التصدير للإكسل (تم تحديثها لدعم التقييمات الثلاثة)
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -99,7 +97,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
 
       final docs = snapshot.docs;
       
-      // 🚀 الترتيب الذكي للإكسل (تجنب مشكلة ترتيب النصوص)
       docs.sort((a, b) {
         var dataA = a.data();
         var dataB = b.data();
@@ -109,12 +106,11 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
 
         int dateComparison = dateBObj.compareTo(dateAObj);
 
-        // إذا كانوا بنفس اليوم، رتب حسب وقت الإضافة
         if (dateComparison == 0) {
           Timestamp? tA = dataA['timestamp'] as Timestamp?;
           Timestamp? tB = dataB['timestamp'] as Timestamp?;
           if (tA != null && tB != null) return tB.compareTo(tA);
-          if (tA == null && tB != null) return -1; // الأوفلاين دائماً في القمة
+          if (tA == null && tB != null) return -1; 
           if (tB == null && tA != null) return 1;
         }
         return dateComparison;
@@ -129,8 +125,9 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         pkg_excel.TextCellValue('اليوم'), 
         pkg_excel.TextCellValue('نوع الجلسة'),
         pkg_excel.TextCellValue('المشرف / المشرفين'), 
-        pkg_excel.TextCellValue(isCompleted ? 'تقييم مراجعة الختمة' : 'تقييم الحفظ الجديد'), 
-        pkg_excel.TextCellValue(isCompleted ? 'الحالة' : 'تقييم المراجعة'),    
+        pkg_excel.TextCellValue('تقييم الحفظ'), 
+        pkg_excel.TextCellValue('تقييم مراجعة جديد'),    
+        pkg_excel.TextCellValue('تقييم مراجعة قديم / الختمة'),    
         pkg_excel.TextCellValue('الحفظ الجديد'),
         pkg_excel.TextCellValue('مراجعة جديد'),
         pkg_excel.TextCellValue(isCompleted ? 'مراجعة الختمة الشاملة' : 'مراجعة قديم'),
@@ -149,25 +146,33 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         bool isExam = data['isExam'] ?? false;
 
         String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : 'حلقة عادية');
-        
         String dateStr = data['date']?.toString() ?? '';
         String dayName = _getArabicDayName(dateStr);
 
         List<dynamic>? supNamesList = data['supervisorNames'];
-        String supervisorResult = (supNamesList != null && supNamesList.isNotEmpty) 
-            ? supNamesList.join(' ، ') 
-            : (data['supervisorName'] ?? 'غير محدد');
+        String supervisorResult = (supNamesList != null && supNamesList.isNotEmpty) ? supNamesList.join(' ، ') : (data['supervisorName'] ?? 'غير محدد');
 
-        String memRatingResult = data['memorizationRating'] ?? data['rating'] ?? '';
-        String revRatingResult = data['reviewRating'] ?? data['rating'] ?? '';
+        String memRatingResult = data['memorizationRating'] ?? data['rating'] ?? '---';
+        String newRevRatingResult = data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? '---';
+        String oldRevRatingResult = data['oldReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? '---';
         
         if (isExam && !isAbsent) {
           memRatingResult = 'علامة: ${data['examScore'] ?? 0} من 100';
-          revRatingResult = 'اختبار';
+          newRevRatingResult = 'اختبار';
+          oldRevRatingResult = 'اختبار';
         } else if (isAbsent) {
           memRatingResult = '---';
-          revRatingResult = '---';
+          newRevRatingResult = '---';
+          oldRevRatingResult = '---';
+        } else if (isCompleted) {
+          memRatingResult = '---';
+          newRevRatingResult = '---';
         }
+
+        String nMemo = data['newMemorization']?.toString().trim() ?? '';
+        String nRev = data['nearReview']?.toString().trim() ?? '';
+        String fRev = data['farReview']?.toString().trim() ?? (isCompleted ? (data['review']?.toString().trim() ?? '') : '');
+        String sight = data['readingBySight']?.toString().trim() ?? '';
 
         String hwNew = data['newHomework'] ?? '';
         String hwNewRev = data['newReviewHomework'] ?? '';
@@ -183,12 +188,13 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           pkg_excel.TextCellValue(dayName), 
           pkg_excel.TextCellValue(sessionType),
           pkg_excel.TextCellValue(supervisorResult), 
-          pkg_excel.TextCellValue(isCompleted ? revRatingResult : (memRatingResult.isEmpty ? '---' : memRatingResult)),
-          pkg_excel.TextCellValue(isCompleted ? (isAbsent ? '---' : 'خاتم 👑') : (revRatingResult.isEmpty ? '---' : revRatingResult)),
-          pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : (data['newMemorization'] ?? '')),
-          pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : (data['nearReview'] ?? '')),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['farReview'] ?? (isCompleted ? (data['review'] ?? '') : ''))),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['readingBySight'] ?? '')),
+          pkg_excel.TextCellValue((memRatingResult.isEmpty || nMemo.isEmpty) ? '---' : memRatingResult),
+          pkg_excel.TextCellValue((newRevRatingResult.isEmpty || nRev.isEmpty) ? '---' : newRevRatingResult),
+          pkg_excel.TextCellValue((oldRevRatingResult.isEmpty || fRev.isEmpty) ? '---' : oldRevRatingResult),
+          pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : nMemo),
+          pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : nRev),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : fRev),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : sight),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwNew),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwNewRev),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwOldRev),
@@ -291,7 +297,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
 
                       List<QueryDocumentSnapshot> sortedSessions = List.from(sessions);
                       
-                      // 🚀 الترتيب الذكي للواجهة (تجنب مشكلة ترتيب النصوص)
                       sortedSessions.sort((a, b) {
                         var dataA = a.data() as Map<String, dynamic>;
                         var dataB = b.data() as Map<String, dynamic>;
@@ -340,22 +345,16 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     String dayName = _getArabicDayName(sessionDateRaw);
     String displayDate = dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
 
-    String memRating = data['memorizationRating'] ?? "";
-    String revRating = data['reviewRating'] ?? "";
-    
-    if (memRating.isEmpty && data['rating'] != null && data['rating'].toString().isNotEmpty && data['newMemorization'] != null && data['newMemorization'].toString().isNotEmpty) {
-      memRating = data['rating'];
-    }
-    if (revRating.isEmpty && data['rating'] != null && data['rating'].toString().isNotEmpty && !isCompletedStudent && memRating.isEmpty) {
-      revRating = data['rating'];
-    } else if (revRating.isEmpty && data['rating'] != null && data['rating'].toString().isNotEmpty && isCompletedStudent) {
-      revRating = data['rating']; 
-    }
-
     String nMemo = data['newMemorization']?.toString().trim() ?? '';
     String nRev = data['nearReview']?.toString().trim() ?? '';
     String fRev = data['farReview']?.toString().trim() ?? (isCompletedStudent ? (data['review']?.toString().trim() ?? '') : '');
     String sight = data['readingBySight']?.toString().trim() ?? '';
+
+    // 🚀 جلب التقييمات الثلاثة (مع دعم الجلسات القديمة)
+    String memRating = data['memorizationRating'] ?? data['rating'] ?? "";
+    String newRevRating = data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
+    String oldRevRating = data['oldReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
+    String revRatingLegacy = data['reviewRating'] ?? data['rating'] ?? "";
     
     String nHw = data['newHomework']?.toString().trim() ?? '';
     String nRevHw = data['newReviewHomework']?.toString().trim() ?? '';
@@ -363,9 +362,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     String oldHw = data['homework']?.toString().trim() ?? '';
 
     List<dynamic>? supNamesList = data['supervisorNames'];
-    String supervisorsDisplay = (supNamesList != null && supNamesList.isNotEmpty) 
-        ? supNamesList.join(' ، ') 
-        : (data['supervisorName'] ?? 'غير محدد');
+    String supervisorsDisplay = (supNamesList != null && supNamesList.isNotEmpty) ? supNamesList.join(' ، ') : (data['supervisorName'] ?? 'غير محدد');
 
     List<Widget> activeBoxes = [];
     if (isCompletedStudent && fRev.isNotEmpty) {
@@ -384,6 +381,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         customBorderColor: isAbsent ? Colors.red.withOpacity(0.4) : (isExam ? Colors.teal.withOpacity(0.4) : null),
         child: Column(
           children: [
+            // 🚀 الـ Header الذكي الذي يتمدد بشكل أنيق ولا ينضغط فيه النص
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
@@ -392,42 +390,53 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                     : (isExam ? Colors.teal.withOpacity(isDarkMode ? 0.2 : 0.15) : (isDarkMode ? Colors.white.withOpacity(0.05) : primaryColor.withOpacity(0.05))),
                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(
-                        isAbsent ? Icons.event_busy : (isExam ? Icons.workspace_premium : Icons.calendar_today), 
-                        size: 16, 
-                        color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? accentGold : primaryColor))
+                      Row(
+                        children: [
+                          Icon(
+                            isAbsent ? Icons.event_busy : (isExam ? Icons.workspace_premium : Icons.calendar_today), 
+                            size: 16, 
+                            color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? accentGold : primaryColor))
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            displayDate, 
+                            style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? Colors.white : primaryColor)), fontFamily: 'Cairo', fontSize: 13)
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        displayDate, 
-                        style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? Colors.white : primaryColor)), fontFamily: 'Cairo', fontSize: 13)
-                      ),
+                      if (isAbsent) 
+                        _buildBadge("غائب ❌", Colors.redAccent) 
+                      else if (isExam)
+                        _buildBadge("جلسة اختبار 📝", Colors.teal) 
                     ],
                   ),
-                  if (isAbsent) 
-                    _buildBadge("غائب ❌", Colors.redAccent) 
-                  else if (isExam)
-                    _buildBadge("جلسة اختبار 📝", Colors.teal) 
-                  else 
-                    Row(
+                  
+                  // 🚀 التقييمات في سطر مستقل مع Wrap لكي تتسع مهما كان عددها
+                  if (!isAbsent && !isExam) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        if (isCompletedStudent && revRating.isNotEmpty)
-                          _buildBadge("مراجعة الختمة: $revRating", _getRatingColor(revRating)),
+                        if (isCompletedStudent && revRatingLegacy.isNotEmpty)
+                          _buildBadge("مراجعة الختمة: $revRatingLegacy", _getRatingColor(revRatingLegacy)),
                         if (!isCompletedStudent) ...[
-                          if (memRating.isNotEmpty) ...[
+                          if (nMemo.isNotEmpty && memRating.isNotEmpty)
                             _buildBadge("حفظ: $memRating", _getRatingColor(memRating)),
-                            const SizedBox(width: 5),
-                          ],
-                          if (revRating.isNotEmpty)
-                            _buildBadge("مراجعة: $revRating", _getRatingColor(revRating)),
+                          if (nRev.isNotEmpty && newRevRating.isNotEmpty)
+                            _buildBadge("م.جديد: $newRevRating", _getRatingColor(newRevRating)),
+                          if (fRev.isNotEmpty && oldRevRating.isNotEmpty)
+                            _buildBadge("م.قديم: $oldRevRating", _getRatingColor(oldRevRating)),
                         ],
                       ],
                     ),
+                  ],
                 ],
               ),
             ),
@@ -568,7 +577,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     );
   }
 
-  // 🚀 السطر اللي تم التعديل عليه ليتمدد الصندوق براحته
   Widget _buildGridInfoBox(IconData icon, String title, String val, Color iconColor, bool isDarkMode) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -693,7 +701,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
             ),
             onPressed: () async {
               await SessionService().deleteSession(id);
-              // 🚀 إعادة الحساب التلقائي بعد الحذف
               SessionService().recalculateConsecutiveAbsences(data['studentId']);
               
               if (!context.mounted) return;
