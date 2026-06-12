@@ -61,9 +61,8 @@ dependencies:
   google_fonts: ^6.2.0
   timeago: ^3.7.1
   firebase_messaging: ^15.1.0
-  zego_uikit_prebuilt_call: 4.17.13
-  zego_uikit_signaling_plugin: ^2.8.21
-  zego_uikit: ^2.28.28
+  zego_uikit_prebuilt_call: 4.15.0
+  zego_uikit_signaling_plugin: 2.8.21
   
 
 
@@ -128,8 +127,4 @@ flutter:
   #         weight: 700
   #
   # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/custom-fonts/#from-packages
-dependency_overrides:
-  zego_uikit: 2.27.0
-  zego_express_engine: 3.22.0
-  zego_plugin_adapter: 2.13.0  
+  # see https://flutter.dev/custom-fonts/#from-packages 
