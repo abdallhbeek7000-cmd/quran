@@ -10,7 +10,7 @@ import '../services/theme_provider.dart';
 import '../services/notification_service.dart'; 
 import '../services/notification_queue_manager.dart'; 
 import '../widgets/offline_wrapper.dart'; 
-import '../widgets/glass_toast.dart'; // 🚀 استدعاء الإشعار الزجاجي الفخم
+import '../widgets/glass_toast.dart'; 
 
 class AddSessionPage extends StatefulWidget {
   final String studentId;
@@ -73,6 +73,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   bool loading = false;
   bool absent = false;
   bool isExam = false; 
+  bool didNotRecite = false; // 🚀 المتغير الجديد لحالة: حضر ولم يقرأ
   
   bool hasNewMemorization = true;
   bool hasReview = true;
@@ -173,7 +174,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   }
 
   void _updateTotalPages() {
-    if (isCompletedStudent || absent || isExam) return;
+    if (isCompletedStudent || absent || isExam || didNotRecite) return;
     int from = int.tryParse(newMemoFrom.text) ?? 0;
     int to = int.tryParse(newMemoTo.text) ?? 0;
     int maxPage = from > to ? from : to;
@@ -438,7 +439,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     if (result.docs.isNotEmpty) {
       if (!mounted) return;
       setState(() => loading = false);
-      // 🚀 إشعار زجاجي لحالة الخطأ أيضاً
       GlassToast.show(
         context,
         title: "تنبيه",
@@ -461,21 +461,22 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       return;
     }
 
-    String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
-    String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent) ? '' : _buildRangeString(newRevFrom, newRevTo);
-    String finalFarReview = (!hasReview || absent || isExam) ? '' : _buildMultiRangeString(oldReviewRanges);
-    String finalReading = (!hasReading || absent || isExam) ? '' : _buildRangeString(readingFrom, readingTo);
+    // 🚀 تطبيق استثناء (حضر ولم يقرأ) على تجهيز البيانات لمنع رفع قيم فارغة
+    String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
+    String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevFrom, newRevTo);
+    String finalFarReview = (!hasReview || absent || isExam || didNotRecite) ? '' : _buildMultiRangeString(oldReviewRanges);
+    String finalReading = (!hasReading || absent || isExam || didNotRecite) ? '' : _buildRangeString(readingFrom, readingTo);
     
-    String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent) ? '' : memorizationRating;
+    String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
     
-    String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent) ? '' : newReviewRating;
-    String finalOldRevRating = (!hasReview || absent || isExam || isCompletedStudent) ? '' : oldReviewRating;
+    String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
+    String finalOldRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : oldReviewRating;
     
     String finalFallbackRevRating = isCompletedStudent ? newReviewRating : (finalNewRevRating.isNotEmpty ? finalNewRevRating : finalOldRevRating);
 
-    String finalNewHW = (absent || isExam || isCompletedStudent) ? '' : _buildRangeString(newHwFrom, newHwTo);
-    String finalNewRevHW = (absent || isExam || isCompletedStudent) ? '' : _buildRangeString(newRevHwFrom, newRevHwTo);
-    String finalOldRevHW = (absent || isExam) ? '' : _buildMultiRangeString(oldRevHwRanges);
+    String finalNewHW = (absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newHwFrom, newHwTo);
+    String finalNewRevHW = (absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevHwFrom, newRevHwTo);
+    String finalOldRevHW = (absent || isExam || didNotRecite) ? '' : _buildMultiRangeString(oldRevHwRanges);
     
     String combinedHW = "";
     if (isCompletedStudent) {
@@ -507,6 +508,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'date': date,
       'absent': absent,
       'isExam': isExam, 
+      'didNotRecite': didNotRecite, // 🚀 إضافة حالة: حضر ولم يقرأ
       'examScore': isExam && !absent ? examScoreController.text.trim() : '', 
       'newMemorization': finalNewMemo,
       'nearReview': finalNearReview, 
@@ -519,32 +521,34 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'memorizationRating': finalMemoRating,
       'newReviewRating': finalNewRevRating, 
       'oldReviewRating': finalOldRevRating, 
-      'reviewRating': (absent || isExam) ? '' : finalFallbackRevRating, 
-      'rating': (absent || isExam) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)), 
-      'studentStatus': (absent || isExam) ? '' : studentStatus,
+      'reviewRating': (absent || isExam || didNotRecite) ? '' : finalFallbackRevRating, 
+      'rating': (absent || isExam || didNotRecite) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)), 
+      'studentStatus': (absent || isExam) ? '' : studentStatus, // 🚀 يتم حفظ حالة السلوك حتى لو لم يقرأ لأنه حضر فعلاً
       'religiousActivities': (absent || isExam) ? '' : religiousActivities.text.trim(),
       'notes': notes.text.trim(),
       'absenceType': absent ? absenceType : '', 
       'absenceReason': absent ? absenceReasonController.text.trim() : '', 
-      if (!absent && !isExam) 'total_memorized_pages': totalPages,
+      if (!absent && !isExam && !didNotRecite) 'total_memorized_pages': totalPages,
     };
 
     FirebaseFirestore.instance.collection('sessions').add(sessionData).then((_) {
       sessionService.recalculateConsecutiveAbsences(widget.studentId);
     });
 
-    if (!absent && !isExam && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
+    if (!absent && !isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
       FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
         'memorizedPages': totalPages,
       });
     }
 
-    String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : "📢 تحديث يومي من الحلقة");
+    // 🚀 تحديث رسائل الإشعارات لتشمل الحالة الجديدة
+    String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : "📢 تحديث يومي من الحلقة"));
     String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
       : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 
-      : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}"));
+      : (didNotRecite ? "حضر الطالب ${widget.studentName} في حلقة اليوم ولكنه لم يسمّع أو يقرأ شيئاً ⚠️" 
+      : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}")));
     
-    if (!absent && !isExam) {
+    if (!absent && !isExam && !didNotRecite) {
        if (hasNewMemorization && finalMemoRating.isNotEmpty) notifyBody += "، الحفظ: ($finalMemoRating)";
        if (hasReview) {
          if (isCompletedStudent) {
@@ -556,7 +560,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
        }
     }
       
-    String notifyType = absent ? "absent" : (isExam ? "exam" : "regular");
+    String notifyType = absent ? "absent" : (isExam ? "exam" : (didNotRecite ? "info" : "regular"));
 
     NotificationService.sendAndSaveNotification(
       studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType, context: context, 
@@ -570,7 +574,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     if (!mounted) return;
     setState(() => loading = false);
     
-    // 🚀 تطبيق الإشعار الزجاجي الأنيق عند نجاح الحفظ
     GlassToast.show(
       context,
       title: "تم الحفظ",
@@ -819,7 +822,13 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     title: Text("تسجيل الطالب غائب؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                                     secondary: Icon(absent ? Icons.person_off : Icons.person, color: isDarkMode ? Colors.white70 : primaryColor),
                                     onChanged: (v) {
-                                      setState(() { absent = v; if (absent) isExam = false; });
+                                      setState(() { 
+                                        absent = v; 
+                                        if (absent) { 
+                                          isExam = false; 
+                                          didNotRecite = false; 
+                                        } 
+                                      });
                                     },
                                   ),
                                 ),
@@ -832,7 +841,29 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                       value: isExam,
                                       title: Text("تسجيل كـ (جلسة اختبار) ؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                                       secondary: Icon(Icons.assignment_turned_in, color: isExam ? Colors.teal : (isDarkMode ? Colors.white70 : primaryColor)),
-                                      onChanged: (v) { setState(() { isExam = v; }); },
+                                      onChanged: (v) { 
+                                        setState(() { 
+                                          isExam = v; 
+                                          if (isExam) didNotRecite = false; 
+                                        }); 
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  // 🚀 الخيار الجديد لعدم التسميع رغم الحضور
+                                  Container(
+                                    decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
+                                    child: SwitchListTile(
+                                      activeColor: Colors.blueGrey,
+                                      value: didNotRecite,
+                                      title: Text("حضر لكن لم يقرأ/يسمّع شيء؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                      secondary: Icon(Icons.speaker_notes_off_outlined, color: didNotRecite ? Colors.blueGrey : (isDarkMode ? Colors.white70 : primaryColor)),
+                                      onChanged: (v) { 
+                                        setState(() { 
+                                          didNotRecite = v; 
+                                          if (didNotRecite) isExam = false; 
+                                        }); 
+                                      },
                                     ),
                                   ),
                                 ],
@@ -841,7 +872,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                           ),
                           const SizedBox(height: 20),
 
-                          if (!absent && !isExam) ...[
+                          if (!absent && !isExam && !didNotRecite) ...[
                             _buildSectionCard(
                               title: isCompletedStudent ? "منظومة مراجعة الختمة الشاملة 👑" : "الإنجاز القرآني اليومي",
                               icon: Icons.menu_book,
@@ -940,14 +971,17 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                               ),
                             ),
                             const SizedBox(height: 20),
+                          ],
 
+                          if (!absent && !isExam) ...[
                             _buildSectionCard(
                               title: "التقييم والسلوك",
                               icon: Icons.thumbs_up_down_outlined,
                               isDarkMode: isDarkMode,
                               child: Column(
                                 children: [
-                                  if (!isCompletedStudent && hasNewMemorization) ...[
+                                  // 🚀 إخفاء التقييمات القرآنية إذا كان الطالب لم يقرأ شيء، لكن نبقي حالة السلوك
+                                  if (!didNotRecite && !isCompletedStudent && hasNewMemorization) ...[
                                     DropdownButtonFormField<String>(
                                       value: memorizationRating,
                                       dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
@@ -959,7 +993,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     const SizedBox(height: 15),
                                   ],
 
-                                  if (hasReview) ...[
+                                  if (!didNotRecite && hasReview) ...[
                                     if (isCompletedStudent) ...[
                                       DropdownButtonFormField<String>(
                                         value: newReviewRating, 
@@ -1122,7 +1156,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                             child: ElevatedButton(
                               onPressed: loading ? null : addSession,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (isExam ? Colors.teal.withOpacity(0.9) : (isDarkMode ? Colors.orange.withOpacity(0.9) : primaryColor.withOpacity(0.9))),
+                                backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (isExam ? Colors.teal.withOpacity(0.9) : (didNotRecite ? Colors.blueGrey.withOpacity(0.9) : (isDarkMode ? Colors.orange.withOpacity(0.9) : primaryColor.withOpacity(0.9)))),
                                 foregroundColor: Colors.white,
                                 elevation: 5,
                                 shadowColor: Colors.black38,

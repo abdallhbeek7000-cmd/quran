@@ -9,7 +9,7 @@ import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
 import '../services/notification_queue_manager.dart'; 
 import '../widgets/offline_wrapper.dart'; 
-import '../widgets/glass_toast.dart'; // 🚀 استدعاء الإشعار الزجاجي
+import '../widgets/glass_toast.dart'; 
 
 class EditSessionPage extends StatefulWidget {
   final String sessionId;
@@ -60,6 +60,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   late TextEditingController totalMemorizedPagesController;
 
   bool absent = false;
+  bool didNotRecite = false; // 🚀 المتغير الجديد
   
   bool hasNewMemorization = true;
   bool hasReview = true;
@@ -93,6 +94,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     _speech = stt.SpeechToText(); 
 
     absent = data['absent'] ?? false;
+    didNotRecite = data['didNotRecite'] ?? false; // 🚀 استرجاع الحالة إذا كانت محفوظة مسبقاً
     
     hasNewMemorization = (data['newMemorization'] ?? '').toString().trim().isNotEmpty;
     hasReview = (data['nearReview'] ?? '').toString().trim().isNotEmpty || 
@@ -101,7 +103,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
     hasReading = (data['readingBySight'] ?? '').toString().trim().isNotEmpty;
 
-    if (!hasNewMemorization && !hasReview && !absent) {
+    if (!hasNewMemorization && !hasReview && !absent && !didNotRecite) {
       hasNewMemorization = true;
       hasReview = true;
     }
@@ -271,7 +273,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   }
 
   void _updateTotalPages() {
-    if (isCompletedStudent || absent) return;
+    if (isCompletedStudent || absent || didNotRecite) return;
     int from = int.tryParse(newMemoFrom.text) ?? 0;
     int to = int.tryParse(newMemoTo.text) ?? 0;
     int maxPage = from > to ? from : to;
@@ -641,21 +643,22 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
     final date = "${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}";
 
-    String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
-    String finalNearReview = (!hasReview || absent || isCompletedStudent) ? '' : _buildRangeString(newRevFrom, newRevTo);
-    String finalFarReview = (!hasReview || absent) ? '' : _buildMultiRangeString(oldReviewRanges);
+    // 🚀 تطبيق استثناء (حضر ولم يقرأ)
+    String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
+    String finalNearReview = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevFrom, newRevTo);
+    String finalFarReview = (!hasReview || absent || didNotRecite) ? '' : _buildMultiRangeString(oldReviewRanges);
     
-    String finalReading = (!hasReading || absent) ? '' : _buildRangeString(readingFrom, readingTo);
+    String finalReading = (!hasReading || absent || didNotRecite) ? '' : _buildRangeString(readingFrom, readingTo);
 
-    String finalMemoRating = (!hasNewMemorization || absent || isCompletedStudent) ? '' : memorizationRating;
+    String finalMemoRating = (!hasNewMemorization || absent || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
     
-    String finalNewRevRating = (!hasReview || absent || isCompletedStudent) ? '' : newReviewRating;
-    String finalOldRevRating = (!hasReview || absent || isCompletedStudent) ? '' : oldReviewRating;
+    String finalNewRevRating = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
+    String finalOldRevRating = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : oldReviewRating;
     String finalFallbackRevRating = isCompletedStudent ? newReviewRating : (finalNewRevRating.isNotEmpty ? finalNewRevRating : finalOldRevRating);
 
-    String finalNewHW = (absent || isCompletedStudent) ? '' : _buildRangeString(newHwFrom, newHwTo);
-    String finalNewRevHW = (absent || isCompletedStudent) ? '' : _buildRangeString(newRevHwFrom, newRevHwTo);
-    String finalOldRevHW = absent ? '' : _buildMultiRangeString(oldRevHwRanges);
+    String finalNewHW = (absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newHwFrom, newHwTo);
+    String finalNewRevHW = (absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevHwFrom, newRevHwTo);
+    String finalOldRevHW = (absent || didNotRecite) ? '' : _buildMultiRangeString(oldRevHwRanges);
     
     String combinedHW = "";
     
@@ -680,12 +683,13 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     final Map<String, dynamic> updateData = {
       'date': date, 
       'absent': absent,
+      'didNotRecite': didNotRecite, // 🚀 تحديث الحالة في قاعدة البيانات
       'supervisorId': supervisorIdsList.isNotEmpty ? supervisorIdsList.first : '', 
       'supervisorName': supervisorNamesList.isNotEmpty ? supervisorNamesList.first : '', 
       'supervisorIds': supervisorIdsList, 
       'supervisorNames': supervisorNamesList, 
       'newMemorization': finalNewMemo,
-      'review': absent || !hasReview ? '' : (isCompletedStudent ? finalFarReview : "$finalNearReview | $finalFarReview"),
+      'review': (absent || didNotRecite || !hasReview) ? '' : (isCompletedStudent ? finalFarReview : "$finalNearReview | $finalFarReview"),
       'nearReview': finalNearReview, 
       'farReview': finalFarReview,   
       'homework': combinedHW,
@@ -696,12 +700,12 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       'memorizationRating': finalMemoRating,
       'newReviewRating': finalNewRevRating, 
       'oldReviewRating': finalOldRevRating, 
-      'reviewRating': absent ? '' : finalFallbackRevRating, 
-      'rating': absent ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)), 
-      'studentStatus': absent ? '' : studentStatus,
-      'religiousActivities': absent ? '' : religiousActivities.text.trim(),
+      'reviewRating': (absent || didNotRecite) ? '' : finalFallbackRevRating, 
+      'rating': (absent || didNotRecite) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)), 
+      'studentStatus': absent ? '' : studentStatus, // يحافظ على السلوك إذا حضر ولم يقرأ
+      'religiousActivities': absent ? '' : religiousActivities.text.trim(), // يحافظ على النشاطات
       'notes': notes.text.trim(),
-      if (!absent) 'total_memorized_pages': totalPages,
+      if (!absent && !didNotRecite) 'total_memorized_pages': totalPages,
     };
 
     FirebaseFirestore.instance.collection('sessions').doc(widget.sessionId).update(updateData).then((_) {
@@ -710,7 +714,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       print("خطأ في تحديث الجلسة: $e");
     });
 
-    if (!absent && studentId.isNotEmpty && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
+    if (!absent && !didNotRecite && studentId.isNotEmpty && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
       FirebaseFirestore.instance.collection('students').doc(studentId).update({
         'memorizedPages': totalPages,
       }).catchError((e) {
@@ -727,6 +731,10 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
         notifyTitle = "🚨 تعديل: تسجيل غياب طالب";
         notifyBody = "تم تعديل الجلسة وتوثيق غياب الطالب اليوم بـ السجل الإداري.";
         notifyType = "absent";
+      } else if (didNotRecite) {
+        notifyTitle = "ℹ️ تعديل: حضور بدون تسميع";
+        notifyBody = "تم تعديل الجلسة وتوثيق أن الطالب حضر ولكنه لم يسمّع أو يقرأ شيئاً.";
+        notifyType = "info";
       } else {
         String bodyText = isCompletedStudent
             ? "تم تحديث وتعديل سجل مراجعة الختمة الشاملة بنجاح"
@@ -770,7 +778,6 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     if (!mounted) return;
     setState(() => loading = false);
 
-    // 🚀 الإشعار الزجاجي بدلاً من السناك بار المزعج
     GlassToast.show(
       context,
       title: "تم التحديث",
@@ -882,15 +889,34 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                     value: absent,
                                     title: Text("تسجيل غياب في هذا اليوم", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 15)),
                                     secondary: Icon(absent ? Icons.person_off : Icons.person, color: isDarkMode ? Colors.white70 : primaryColor),
-                                    onChanged: (v) => setState(() => absent = v),
+                                    onChanged: (v) => setState(() {
+                                      absent = v;
+                                      if (absent) didNotRecite = false; 
+                                    }),
                                   ),
                                 ),
+                                if (!absent) ...[
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
+                                    child: SwitchListTile(
+                                      activeColor: Colors.blueGrey,
+                                      value: didNotRecite,
+                                      title: Text("حضر لكن لم يقرأ/يسمّع شيء؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 15)),
+                                      secondary: Icon(Icons.speaker_notes_off_outlined, color: didNotRecite ? Colors.blueGrey : (isDarkMode ? Colors.white70 : primaryColor)),
+                                      onChanged: (v) => setState(() {
+                                        didNotRecite = v;
+                                        if (didNotRecite) absent = false;
+                                      }),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
                           const SizedBox(height: 20),
 
-                          if (!absent) ...[
+                          if (!absent && !didNotRecite) ...[
                             _buildSectionCard(
                               title: isCompletedStudent ? "تعديل مراجعة الختمة الشاملة 👑" : "تعديل الإنجاز القرآني",
                               icon: Icons.edit_calendar,
@@ -977,14 +1003,16 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                               ),
                             ),
                             const SizedBox(height: 15),
-                            
+                          ],
+
+                          if (!absent) ...[
                             _buildSectionCard(
                               title: "تعديل السلوك والتقييم",
                               icon: Icons.thumbs_up_down_outlined,
                               isDarkMode: isDarkMode,
                               child: Column(
                                 children: [
-                                  if (!isCompletedStudent && hasNewMemorization) ...[
+                                  if (!didNotRecite && !isCompletedStudent && hasNewMemorization) ...[
                                     DropdownButtonFormField<String>(
                                       value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(memorizationRating) ? memorizationRating : "جيد",
                                       dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
@@ -996,7 +1024,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                     const SizedBox(height: 15),
                                   ],
                                   
-                                  if (hasReview) ...[
+                                  if (!didNotRecite && hasReview) ...[
                                     if (isCompletedStudent) ...[
                                       DropdownButtonFormField<String>(
                                         value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(newReviewRating) ? newReviewRating : "جيد",
@@ -1029,7 +1057,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                   ],
 
                                   DropdownButtonFormField<String>(
-                                    value: studentStatus,
+                                    value: ["مهذب", "منضبط", "مشاغب", "كثير الحركة"].contains(studentStatus) ? studentStatus : "مهذب",
                                     dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                                     decoration: _glassInputDecoration("حالة الطالب", Icons.mood, isDarkMode),
@@ -1116,7 +1144,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                             child: ElevatedButton(
                               onPressed: loading ? null : save,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9)),
+                                backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (didNotRecite ? Colors.blueGrey.withOpacity(0.9) : (isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9))),
                                 foregroundColor: Colors.white,
                                 elevation: 5,
                                 shadowColor: Colors.black38,

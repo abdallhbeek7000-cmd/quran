@@ -487,8 +487,30 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
+  // 🚀 دالة الـ _nav المعدلة بدقة للتخلص من الـ Lag
   void _nav(Widget page) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    // 1. إيقاف أنيميشن الخلفية مؤقتاً قبل الانتقال لتخفيف الضغط عن كرت الشاشة المعالج المعماري للـ Blur
+    _bgController.stop();
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          // 2. استخدام انتقال التلاشي (Fade) الناعم لأنه خفيف ومثالي مع الـ BackdropFilter
+          return FadeTransition(
+            opacity: animation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 250), // سرعة مناسبة ومريحة للعين
+      ),
+    ).then((_) {
+      // 3. إعادة تشغيل أنيميشن الخلفية فوراً عند الرجوع للصفحة الأساسية
+      if (mounted) {
+        _bgController.repeat(reverse: true);
+      }
+    });
   }
 
   Widget _buildGlassContainer({required Widget child, required bool isDark, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {

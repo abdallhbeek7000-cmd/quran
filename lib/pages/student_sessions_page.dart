@@ -76,7 +76,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     return "";
   }
 
-  // 📊 دالة التصدير للإكسل (تم تحديثها لدعم التقييمات الثلاثة)
+  // 📊 دالة التصدير للإكسل (تم تحديثها لدعم "حضر ولم يقرأ")
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -121,6 +121,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
       excel.delete('Sheet1');
 
       sheetObject.appendRow([
+        pkg_excel.TextCellValue('رقم الجلسة'), // 🚀 إضافة رقم الجلسة للإكسل
         pkg_excel.TextCellValue('التاريخ'),
         pkg_excel.TextCellValue('اليوم'), 
         pkg_excel.TextCellValue('نوع الجلسة'),
@@ -140,12 +141,19 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         pkg_excel.TextCellValue('ملاحظات'),
       ]);
 
-      for (var doc in docs) {
+      int totalSessions = docs.length;
+
+      for (int i = 0; i < docs.length; i++) {
+        var doc = docs[i];
         var data = doc.data();
+        
+        int sessionNum = totalSessions - i; // 🚀 حساب رقم الجلسة
+        
         bool isAbsent = data['absent'] ?? false;
         bool isExam = data['isExam'] ?? false;
+        bool didNotRecite = data['didNotRecite'] ?? false; // 🚀 الحالة الجديدة
 
-        String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : 'حلقة عادية');
+        String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : (didNotRecite ? 'بدون تسميع' : 'حلقة عادية'));
         String dateStr = data['date']?.toString() ?? '';
         String dayName = _getArabicDayName(dateStr);
 
@@ -160,7 +168,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           memRatingResult = 'علامة: ${data['examScore'] ?? 0} من 100';
           newRevRatingResult = 'اختبار';
           oldRevRatingResult = 'اختبار';
-        } else if (isAbsent) {
+        } else if (isAbsent || didNotRecite) { // 🚀 تصفير التقييمات في الحالتين
           memRatingResult = '---';
           newRevRatingResult = '---';
           oldRevRatingResult = '---';
@@ -184,6 +192,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         }
 
         sheetObject.appendRow([
+          pkg_excel.TextCellValue(sessionNum.toString()), // 🚀 تصدير رقم الجلسة
           pkg_excel.TextCellValue(dateStr),
           pkg_excel.TextCellValue(dayName), 
           pkg_excel.TextCellValue(sessionType),
@@ -191,13 +200,13 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           pkg_excel.TextCellValue((memRatingResult.isEmpty || nMemo.isEmpty) ? '---' : memRatingResult),
           pkg_excel.TextCellValue((newRevRatingResult.isEmpty || nRev.isEmpty) ? '---' : newRevRatingResult),
           pkg_excel.TextCellValue((oldRevRatingResult.isEmpty || fRev.isEmpty) ? '---' : oldRevRatingResult),
-          pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : nMemo),
-          pkg_excel.TextCellValue((isAbsent || isExam || isCompleted) ? '---' : nRev),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : fRev),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : sight),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwNew),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwNewRev),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwOldRev),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isCompleted) ? '---' : nMemo),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isCompleted) ? '---' : nRev),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : fRev),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : sight),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwNew),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwNewRev),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwOldRev),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['religiousActivities'] ?? '')), 
           pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---'))), 
           pkg_excel.TextCellValue(data['notes']?.toString() ?? ''),
@@ -323,7 +332,8 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                         itemBuilder: (context, index) {
                           final session = sortedSessions[index];
                           final data = session.data() as Map<String, dynamic>;
-                          return _buildSessionTimelineItem(context, session.id, data, isDarkMode, isCompletedStudent);
+                          int sessionNum = sortedSessions.length - index; // 🚀 حساب رقم الجلسة
+                          return _buildSessionTimelineItem(context, session.id, data, isDarkMode, isCompletedStudent, sessionNum);
                         },
                       );
                     },
@@ -337,9 +347,11 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     );
   }
 
-  Widget _buildSessionTimelineItem(BuildContext context, String sessionId, Map<String, dynamic> data, bool isDarkMode, bool isCompletedStudent) {
+  // 🚀 تمرير sessionNumber للدالة
+  Widget _buildSessionTimelineItem(BuildContext context, String sessionId, Map<String, dynamic> data, bool isDarkMode, bool isCompletedStudent, int sessionNumber) {
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
+    bool didNotRecite = data['didNotRecite'] ?? false; // 🚀 استقبال الحالة الجديدة
 
     String sessionDateRaw = data['date'] ?? '';
     String dayName = _getArabicDayName(sessionDateRaw);
@@ -350,7 +362,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     String fRev = data['farReview']?.toString().trim() ?? (isCompletedStudent ? (data['review']?.toString().trim() ?? '') : '');
     String sight = data['readingBySight']?.toString().trim() ?? '';
 
-    // 🚀 جلب التقييمات الثلاثة (مع دعم الجلسات القديمة)
     String memRating = data['memorizationRating'] ?? data['rating'] ?? "";
     String newRevRating = data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
     String oldRevRating = data['oldReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
@@ -365,29 +376,35 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     String supervisorsDisplay = (supNamesList != null && supNamesList.isNotEmpty) ? supNamesList.join(' ، ') : (data['supervisorName'] ?? 'غير محدد');
 
     List<Widget> activeBoxes = [];
-    if (isCompletedStudent && fRev.isNotEmpty) {
-      activeBoxes.add(_buildGridInfoBox(Icons.verified_user_rounded, "المقدار المسموع من مراجعة الختمة الشاملة", fRev, isDarkMode ? Colors.tealAccent : Colors.teal, isDarkMode));
-    } else {
-      if (nMemo.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.star_rounded, "الحفظ الجديد", nMemo, Colors.amber, isDarkMode));
-      if (nRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.menu_book_rounded, "مراجعة جديد", nRev, isDarkMode ? Colors.tealAccent : Colors.teal, isDarkMode));
-      if (fRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.history_toggle_off_rounded, "مراجعة قديم", fRev, Colors.blueGrey, isDarkMode));
+    // 🚀 لا يتم إظهار المربعات القرآنية في حال حضر ولم يقرأ
+    if (!didNotRecite && !isAbsent && !isExam) {
+      if (isCompletedStudent && fRev.isNotEmpty) {
+        activeBoxes.add(_buildGridInfoBox(Icons.verified_user_rounded, "المقدار المسموع من مراجعة الختمة الشاملة", fRev, isDarkMode ? Colors.tealAccent : Colors.teal, isDarkMode));
+      } else {
+        if (nMemo.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.star_rounded, "الحفظ الجديد", nMemo, Colors.amber, isDarkMode));
+        if (nRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.menu_book_rounded, "مراجعة جديد", nRev, isDarkMode ? Colors.tealAccent : Colors.teal, isDarkMode));
+        if (fRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.history_toggle_off_rounded, "مراجعة قديم", fRev, Colors.blueGrey, isDarkMode));
+      }
+      if (sight.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.chrome_reader_mode_rounded, "قراءة نظراً", sight, Colors.indigoAccent, isDarkMode));
     }
-    if (sight.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.chrome_reader_mode_rounded, "قراءة نظراً", sight, Colors.indigoAccent, isDarkMode));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       child: _buildGlassContainer(
         isDarkMode: isDarkMode,
-        customBorderColor: isAbsent ? Colors.red.withOpacity(0.4) : (isExam ? Colors.teal.withOpacity(0.4) : null),
+        // 🚀 لون الحدود يتغير حسب الحالة
+        customBorderColor: isAbsent ? Colors.red.withOpacity(0.4) : (isExam ? Colors.teal.withOpacity(0.4) : (didNotRecite ? Colors.blueGrey.withOpacity(0.4) : null)),
         child: Column(
           children: [
-            // 🚀 الـ Header الذكي الذي يتمدد بشكل أنيق ولا ينضغط فيه النص
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
+                // 🚀 لون الخلفية العلوية (الهيدر) يتغير أيضاً
                 color: isAbsent 
                     ? Colors.red.withOpacity(isDarkMode ? 0.2 : 0.15) 
-                    : (isExam ? Colors.teal.withOpacity(isDarkMode ? 0.2 : 0.15) : (isDarkMode ? Colors.white.withOpacity(0.05) : primaryColor.withOpacity(0.05))),
+                    : (isExam ? Colors.teal.withOpacity(isDarkMode ? 0.2 : 0.15) 
+                        : (didNotRecite ? Colors.blueGrey.withOpacity(isDarkMode ? 0.2 : 0.15) 
+                            : (isDarkMode ? Colors.white.withOpacity(0.05) : primaryColor.withOpacity(0.05)))),
                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
               ),
               child: Column(
@@ -399,14 +416,15 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       Row(
                         children: [
                           Icon(
-                            isAbsent ? Icons.event_busy : (isExam ? Icons.workspace_premium : Icons.calendar_today), 
+                            isAbsent ? Icons.event_busy : (isExam ? Icons.workspace_premium : (didNotRecite ? Icons.speaker_notes_off_outlined : Icons.calendar_today)), 
                             size: 16, 
-                            color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? accentGold : primaryColor))
+                            color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (didNotRecite ? Colors.blueGrey : (isDarkMode ? accentGold : primaryColor)))
                           ),
                           const SizedBox(width: 8),
+                          // 🚀 إضافة رقم الجلسة للعنوان
                           Text(
-                            displayDate, 
-                            style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (isDarkMode ? Colors.white : primaryColor)), fontFamily: 'Cairo', fontSize: 13)
+                            "الجلسة #$sessionNumber | $displayDate", 
+                            style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (didNotRecite ? Colors.blueGrey : (isDarkMode ? Colors.white : primaryColor))), fontFamily: 'Cairo', fontSize: 13)
                           ),
                         ],
                       ),
@@ -414,11 +432,12 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                         _buildBadge("غائب ❌", Colors.redAccent) 
                       else if (isExam)
                         _buildBadge("جلسة اختبار 📝", Colors.teal) 
+                      else if (didNotRecite) // 🚀 بادج خاص لعدم التسميع
+                        _buildBadge("بدون تسميع ℹ️", Colors.blueGrey)
                     ],
                   ),
                   
-                  // 🚀 التقييمات في سطر مستقل مع Wrap لكي تتسع مهما كان عددها
-                  if (!isAbsent && !isExam) ...[
+                  if (!isAbsent && !isExam && !didNotRecite) ...[
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 6,
@@ -455,7 +474,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                   ),
                   Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
 
-                  if (!isAbsent && !isExam) ...[
+                  if (!isAbsent && !isExam && !didNotRecite) ...[
                     if (activeBoxes.isNotEmpty) ...[
                       for (int i = 0; i < activeBoxes.length; i += 2)
                         Padding(
@@ -502,12 +521,14 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       ),
                       Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
                     ],
-                    
-                    if (data['religiousActivities'] != null && data['religiousActivities'].toString().isNotEmpty) ...[
-                      _buildMinimalistDetailRow(Icons.mosque_outlined, "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
-                      Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
-                    ],
+                  ],
+                  
+                  if (data['religiousActivities'] != null && data['religiousActivities'].toString().isNotEmpty) ...[
+                    _buildMinimalistDetailRow(Icons.mosque_outlined, "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
+                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                  ],
 
+                  if (!didNotRecite) ...[
                     _buildMinimalistDetailRow(
                       Icons.analytics_outlined, 
                       "إجمالي الحفظ للختمة", 
@@ -515,11 +536,11 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       isDarkMode
                     ),
                     Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
-
-                    if (data['studentStatus'] != null && data['studentStatus'].toString().isNotEmpty)
-                      _buildMinimalistDetailRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
                   ],
 
+                  if (data['studentStatus'] != null && data['studentStatus'].toString().isNotEmpty)
+                    _buildMinimalistDetailRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
+                  
                   if (isExam && !isAbsent) ...[
                     Container(
                       width: double.infinity,
