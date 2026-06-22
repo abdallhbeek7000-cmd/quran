@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/theme_provider.dart';
 import '../services/cycle_service.dart';
-import '../widgets/offline_wrapper.dart'; // 🚀 استيراد غلاف الأوفلاين
+import '../widgets/offline_wrapper.dart'; 
 
 class StatisticsPage extends StatefulWidget {
   const StatisticsPage({super.key});
@@ -14,14 +14,13 @@ class StatisticsPage extends StatefulWidget {
   State<StatisticsPage> createState() => _StatisticsPageState();
 }
 
-class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProviderStateMixin {
+class _StatisticsPageState extends State<StatisticsPage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
   bool isMonthly = false; 
   bool isLoading = true;
   
-  // 🚀 فصل القوائم الثلاثة
   List<Map<String, dynamic>> newStudentsStats = [];
   List<Map<String, dynamic>> oldStudentsStats = [];
   List<Map<String, dynamic>> completedStudentsStats = [];
@@ -29,32 +28,17 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
   int periodsBack = 0; 
   String currentPeriodLabel = "";
 
-  // 🚀 إحصائيات المعهد الإجمالية (حصاد الفترة)
   int cycleTotalPages = 0;
   int cycleTotalReview = 0;
-
-  late AnimationController _bgController;
-  late Animation<double> _bgAnimation;
 
   @override
   void initState() {
     super.initState();
-    
-    _bgController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat(reverse: true);
-    
-    _bgAnimation = Tween<double>(begin: -10, end: 20).animate(
-      CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine)
-    );
-
     _calculateStats();
   }
 
   @override
   void dispose() {
-    _bgController.dispose(); 
     super.dispose();
   }
 
@@ -161,11 +145,15 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
 
       for (var student in studentsSnap.docs) {
         Map<String, dynamic> sData = student.data();
+
+        // 🚀 التعديل هنا: تخطي الطلاب المؤرشفين (المتوقفين حالياً) من الإحصائية
+        bool isArchived = sData['archived'] ?? false;
+        if (isArchived) continue;
+
         String sId = student.id;
         String sName = sData['name'];
         String imageUrl = sData.containsKey('imageUrl') ? sData['imageUrl'] ?? '' : '';
         
-        // 🚀 استخراج نوع الطالب بشكل دقيق
         String studentType = sData.containsKey('studentType') ? sData['studentType'] : 'new';
         bool isCompleted = studentType == 'completed';
 
@@ -247,20 +235,28 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
           'absentCount': absentCount,
         };
 
-        // 🚀 توزيع الطلاب على القوائم المخصصة
         if (isCompleted) {
           tempCompleted.add(statData);
         } else if (studentType == 'old') {
           tempOld.add(statData);
         } else {
-          tempNew.add(statData); // الافتراضي للجديد
+          tempNew.add(statData); 
         }
       }
 
-      // 🚀 ترتيب كل قائمة على حدة لفرز الأوائل
-      tempNew.sort((a, b) => (b['pages'] as int).compareTo(a['pages'] as int));
-      tempOld.sort((a, b) => (b['pages'] as int).compareTo(a['pages'] as int));
-      tempCompleted.sort((a, b) => (b['reviewPages'] as int).compareTo(a['reviewPages'] as int)); // الخاتم يُرتب حسب المراجعة
+      tempNew.sort((a, b) {
+        int totalA = (a['pages'] as int) + (a['reviewPages'] as int);
+        int totalB = (b['pages'] as int) + (b['reviewPages'] as int);
+        return totalB.compareTo(totalA);
+      });
+      
+      tempOld.sort((a, b) {
+        int totalA = (a['pages'] as int) + (a['reviewPages'] as int);
+        int totalB = (b['pages'] as int) + (b['reviewPages'] as int);
+        return totalB.compareTo(totalA);
+      });
+      
+      tempCompleted.sort((a, b) => (b['reviewPages'] as int).compareTo(a['reviewPages'] as int));
 
       setState(() {
         newStudentsStats = tempNew;
@@ -313,30 +309,24 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
               ),
             ),
             
-            AnimatedBuilder(
-              animation: _bgAnimation,
-              builder: (context, child) {
-                return Stack(
-                  children: [
-                    Positioned(
-                      top: -50 + _bgAnimation.value, 
-                      right: -50 - (_bgAnimation.value / 2), 
-                      child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))
-                    ),
-                    Positioned(
-                      bottom: 100 - _bgAnimation.value, 
-                      left: -80 + _bgAnimation.value, 
-                      child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))
-                    ),
-                  ],
-                );
-              },
+            Stack(
+              children: [
+                Positioned(
+                  top: -50, 
+                  right: -50, 
+                  child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))
+                ),
+                Positioned(
+                  bottom: 100, 
+                  left: -80, 
+                  child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))
+                ),
+              ],
             ),
 
             SafeArea(
               child: Column(
                 children: [
-                  // أزرار التبديل (أسبوعي / شهري)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                     child: Container(
@@ -382,7 +372,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
                     ),
                   ),
 
-                  // شريط التحكم بالزمن 
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                     child: Container(
@@ -403,7 +392,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
                     ),
                   ),
 
-                  // بطاقة حصاد الفترة (إجمالي المعهد)
                   if (!isLoading)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
@@ -451,7 +439,6 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
     );
   }
 
-  // 🚀 تصميم القسم المنفصل لكل فئة
   Widget _buildCategorySection(String title, List<Map<String, dynamic>> stats, bool isDark, IconData icon, Color color) {
     if (stats.isEmpty) return const SizedBox(); 
     return Column(
@@ -505,10 +492,9 @@ class _StatisticsPageState extends State<StatisticsPage> with SingleTickerProvid
     String imageUrl = stat['imageUrl'];
     String firstLetter = stat['name'].isNotEmpty ? stat['name'].trim().substring(0, 1) : "?";
 
-    // 👑 تجهيز ألوان وإضاءة الأوائل (كل طالب ينافس في فئته)
     Color rankColor = Colors.transparent;
-    // يعتبر من الأوائل إذا كان ترتيبه أول 3 ولديه إنجاز (حفظ للطلاب، مراجعة للخاتمين)
-    bool isTopThree = ((!isCompleted && pages > 0) || (isCompleted && reviewPages > 0)) && index < 3;
+    
+    bool isTopThree = ((!isCompleted && (pages + reviewPages) > 0) || (isCompleted && reviewPages > 0)) && index < 3;
     
     if (isTopThree) {
       if (index == 0) rankColor = const Color(0xFFFFD700); 

@@ -12,7 +12,7 @@ import 'login_page.dart';
 import 'create_cycle_page.dart';
 import 'cycles_page.dart';
 import 'add_student_page.dart';
-import 'students_page.dart'; // 🚀 يحوي أيضاً ArchivedStudentsPage
+import 'students_page.dart'; 
 import 'assign_students_page.dart';
 import '../models/cycle_model.dart';
 import '../services/cycle_service.dart';
@@ -42,7 +42,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin { 
+class _HomePageState extends State<HomePage> { 
   final cycleService = CycleService();
   String currentCycle = "لا يوجد دورة";
   CycleModel? currentCycleModel;
@@ -53,15 +53,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   bool isAlsoManager = false;
 
-  late AnimationController _bgController;
-  late Animation<double> _bgAnimation;
-
   @override
   void initState() {
     super.initState();
-
-    _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
-    _bgAnimation = Tween<double>(begin: -10, end: 20).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine));
 
     loadCycle(); 
     _setupNotifications(); 
@@ -71,7 +65,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
-    _bgController.dispose(); 
     super.dispose();
   }
 
@@ -327,24 +320,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               ),
             ),
             
-            AnimatedBuilder(
-              animation: _bgAnimation,
-              builder: (context, child) {
-                return Stack(
-                  children: [
-                    Positioned(
-                      top: -50 + _bgAnimation.value,
-                      left: -50 - (_bgAnimation.value / 2),
-                      child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
-                    ),
-                    Positioned(
-                      top: 200 - _bgAnimation.value,
-                      right: -80 + _bgAnimation.value,
-                      child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
-                    ),
-                  ],
-                );
-              },
+            // 🚀 الدوائر صارت ثابتة وخفيفة جداً على المعالج
+            Stack(
+              children: [
+                Positioned(
+                  top: -50,
+                  left: -50,
+                  child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                ),
+                Positioned(
+                  top: 200,
+                  right: -80,
+                  child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
+                ),
+              ],
             ),
 
             SafeArea(
@@ -452,7 +441,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           if (currentCycleModel != null) ...[
                             _buildGlassMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
                             
-                            // 🚀 الزر الجديد تمت إضافته هنا للوصول السريع للأرشيف
                             _buildGlassMenuCard(
                               Icons.archive_rounded, 
                               "الطلاب المتوقفين", 
@@ -487,30 +475,21 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
-  // 🚀 دالة الـ _nav المعدلة بدقة للتخلص من الـ Lag
+  // 🚀 دالة الـ _nav المعدلة - أنيقة وخفيفة بدون أخطاء الأنيميشن
   void _nav(Widget page) {
-    // 1. إيقاف أنيميشن الخلفية مؤقتاً قبل الانتقال لتخفيف الضغط عن كرت الشاشة المعالج المعماري للـ Blur
-    _bgController.stop();
-
     Navigator.push(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => page,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          // 2. استخدام انتقال التلاشي (Fade) الناعم لأنه خفيف ومثالي مع الـ BackdropFilter
           return FadeTransition(
             opacity: animation,
             child: child,
           );
         },
-        transitionDuration: const Duration(milliseconds: 250), // سرعة مناسبة ومريحة للعين
+        transitionDuration: const Duration(milliseconds: 250), 
       ),
-    ).then((_) {
-      // 3. إعادة تشغيل أنيميشن الخلفية فوراً عند الرجوع للصفحة الأساسية
-      if (mounted) {
-        _bgController.repeat(reverse: true);
-      }
-    });
+    );
   }
 
   Widget _buildGlassContainer({required Widget child, required bool isDark, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {

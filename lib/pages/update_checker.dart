@@ -31,7 +31,7 @@ class UpdateChecker {
 
         print("🎯 [UpdateChecker] إصدار السيرفر المقروء: $serverVersion");
         print("🎯 [UpdateChecker] إصدار جهاز المشرف الحالي: $currentVersionCode");
-        print("🎯 [UpdateChecker] الرابط الذي سيفتح قسراً: $updateUrl");
+        print("🎯 [UpdateChecker] الرابط الذي سيفتح: $updateUrl");
 
         // المقارنة الذكية: المنبثق يظهر فقط وفقط إذا كان السيرفر أعلى من إصدار الجهاز
         if (serverVersion > currentVersionCode && updateUrl.isNotEmpty) {
@@ -58,54 +58,64 @@ class UpdateChecker {
 
     showDialog(
       context: currentContext,
-      barrierDismissible: false, // إجبار المستخدم على التحديث
+      barrierDismissible: true, // 🚀 السماح بإغلاق النافذة عند الضغط خارجها (تخطي)
       builder: (BuildContext context) {
         return WillPopScope(
-          onWillPop: () async => false, // منع زر الرجوع بالجوال
+          onWillPop: () async => true, // 🚀 السماح باستخدام زر الرجوع في الجوال للتخطي
           child: AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
             title: const Row(
               children: [
                 Icon(Icons.system_update_rounded, color: Color(0xff425c75), size: 28),
                 SizedBox(width: 10),
-                Text('تحديث جديد متاح 🚀', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Text('تحديث جديد متاح 🚀', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo')),
               ],
             ),
             content: const Text(
-              'يتوفر إصدار جديد وتحديث أمني مهم لتطبيق المشرفين والمدير. يرجى التحديث الآن لضمان استقرار النظام ومتابعة العمليات بنجاح.',
-              style: TextStyle(fontSize: 14, height: 1.5),
+              'يتوفر إصدار جديد وتحديث أمني مهم لتطبيق المشرفين والمدير. يمكنك التحديث الآن أو لاحقاً لضمان استقرار النظام.',
+              style: TextStyle(fontSize: 14, height: 1.5, fontFamily: 'Cairo'),
             ),
             actions: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xff425c75),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xff425c75),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('تحديث الآن 🔄', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo')),
+                      onPressed: () async {
+                        final Uri url = Uri.parse(downloadUrl);
+                        print("🎯 [UpdateChecker] جاري توجيه المشرف للرابط: $url");
+                        
+                        try {
+                          // الفتح المباشر لتخطي قيود حماية الأندرويد وفتح المتصفح الخارجي فوراً
+                          await launchUrl(
+                            url,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        } catch (e) {
+                          print('❌ [UpdateChecker] خطأ، جاري التجربة بالمود الافتراضي: $e');
+                          try {
+                            await launchUrl(url);
+                          } catch (err) {
+                            print('❌ [UpdateChecker] فشل قاطع في فتح الرابط: $err');
+                          }
+                        }
+                      },
+                    ),
                   ),
-                  child: const Text('تحديث الآن 🔄', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                  onPressed: () async {
-                    final Uri url = Uri.parse(downloadUrl);
-                    print("🎯 [UpdateChecker] جاري توجيه المشرف للرابط الصحيح الحين غصب: $url");
-                    
-                    try {
-                      // الفتح المباشر لتخطي قيود حماية الأندرويد وفتح المتصفح الخارجي فوراً
-                      await launchUrl(
-                        url,
-                        mode: LaunchMode.externalApplication,
-                      );
-                    } catch (e) {
-                      print('❌ [UpdateChecker] خطأ، جاري التجربة بالمود الافتراضي: $e');
-                      try {
-                        await launchUrl(url);
-                      } catch (err) {
-                        print('❌ [UpdateChecker] فشل قاطع في فتح الرابط: $err');
-                      }
-                    }
-                  },
-                ),
+                  const SizedBox(height: 8),
+                  // 🚀 زر التخطي الجديد
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('تخطي حالياً', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo')),
+                  ),
+                ],
               ),
             ],
           ),

@@ -14,7 +14,6 @@ import 'add_session_page.dart';
 import 'student_sessions_page.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
-import '../widgets/animated_glass_background.dart'; 
 import '../widgets/glass_toast.dart'; 
 import '../widgets/offline_wrapper.dart'; 
 
@@ -80,7 +79,6 @@ class _StudentsPageState extends State<StudentsPage> {
     }
   }
 
-  // 🚀 دالة أرشفة الطالب (توقف مؤقت)
   void _showArchiveDialog(BuildContext context, String studentId, String studentName, bool isDarkMode) {
     showDialog(
       context: context,
@@ -108,7 +106,6 @@ class _StudentsPageState extends State<StudentsPage> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
               onPressed: () async {
                 Navigator.pop(dialogContext); 
-                // 🚀 تحويل حالة الطالب إلى مؤرشف
                 await FirebaseFirestore.instance.collection('students').doc(studentId).set({'archived': true}, SetOptions(merge: true));
                 if (context.mounted) {
                   GlassToast.show(
@@ -280,7 +277,6 @@ class _StudentsPageState extends State<StudentsPage> {
         .collection('students')
         .where('cycleId', isEqualTo: widget.cycle.id);
 
-    // استثناء الطلاب المؤرشفين من العرض الطبيعي
     if (!widget.isArchivedFromHistory) {
       query = query.where('archived', isEqualTo: false);
     }
@@ -303,7 +299,6 @@ class _StudentsPageState extends State<StudentsPage> {
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
           actions: [
-            // 🚀 زر الانتقال للأرشيف
             if (!widget.isArchivedFromHistory)
               IconButton(
                 icon: Icon(Icons.archive_outlined, color: isDarkMode ? accentGold : primaryColor), 
@@ -322,78 +317,101 @@ class _StudentsPageState extends State<StudentsPage> {
               )
             : null,
             
-        body: AnimatedGlassBackground(
-          child: SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                  child: _buildGlassContainer(
-                    isDarkMode: isDarkMode,
-                    padding: const EdgeInsets.all(15),
-                    child: Column(
-                      children: [
-                        TextField(
-                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                          decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
-                          onChanged: (v) => setState(() => search = v.trim().toLowerCase()),
-                        ),
-                        if (widget.role == "manager") ...[
-                          const SizedBox(height: 12),
-                          _buildSupervisorFilter(isDarkMode),
-                        ],
-                      ],
-                    ),
-                  ),
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity, height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
-  
-                if (widget.role == "manager" && !widget.isArchivedFromHistory)
-                  _buildAbsentAlertSection(isDarkMode),
-  
-                Expanded(
-                  child: StreamBuilder<QuerySnapshot>(
-                    stream: query.snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات"));
-                      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                      
-                      var docs = snapshot.data!.docs.where((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
-                        final nameMatches = studentName.contains(search);
-                        bool supervisorMatches = true;
-                        if (selectedSupervisor.isNotEmpty) {
-                          final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
-                          final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
-                          supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
-                        }
-                        return nameMatches && supervisorMatches;
-                      }).toList();
-  
-                      docs.sort((a, b) {
-                        final aData = a.data() as Map<String, dynamic>;
-                        final bData = b.data() as Map<String, dynamic>;
-                        int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
-                        int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
-                        return sA.compareTo(sB);
-                      });
-  
-                      if (docs.isEmpty) return _buildEmptyState(isDarkMode);
-  
-                      return ListView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.only(left: 15, right: 15, top: 10, bottom: 80),
-                        itemCount: docs.length,
-                        itemBuilder: (context, index) {
-                          return _buildStudentCard(docs[index], isDarkMode);
-                        },
-                      );
-                    },
-                  ),
+              ),
+            ),
+            Stack(
+              children: [
+                Positioned(
+                  top: -50, left: -50,
+                  child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                ),
+                Positioned(
+                  top: 200, right: -80,
+                  child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
                 ),
               ],
             ),
-          ),
+            SafeArea(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                    child: _buildGlassContainer(
+                      isDarkMode: isDarkMode,
+                      padding: const EdgeInsets.all(15),
+                      child: Column(
+                        children: [
+                          TextField(
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                            decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
+                            onChanged: (v) => setState(() => search = v.trim().toLowerCase()),
+                          ),
+                          if (widget.role == "manager") ...[
+                            const SizedBox(height: 12),
+                            _buildSupervisorFilter(isDarkMode),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+      
+                  if (widget.role == "manager" && !widget.isArchivedFromHistory)
+                    _buildAbsentAlertSection(isDarkMode),
+      
+                  Expanded(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: query.snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات"));
+                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                        
+                        var docs = snapshot.data!.docs.where((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
+                          final nameMatches = studentName.contains(search);
+                          bool supervisorMatches = true;
+                          if (selectedSupervisor.isNotEmpty) {
+                            final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
+                            final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
+                            supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
+                          }
+                          return nameMatches && supervisorMatches;
+                        }).toList();
+      
+                        docs.sort((a, b) {
+                          final aData = a.data() as Map<String, dynamic>;
+                          final bData = b.data() as Map<String, dynamic>;
+                          int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
+                          int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
+                          return sA.compareTo(sB);
+                        });
+      
+                        if (docs.isEmpty) return _buildEmptyState(isDarkMode);
+      
+                        return ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.only(left: 15, right: 15, top: 10, bottom: 80),
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            return _buildStudentCard(docs[index], isDarkMode);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -480,7 +498,8 @@ class _StudentsPageState extends State<StudentsPage> {
                     itemBuilder: (context, idx) {
                       final sData = alertStudents[idx].data() as Map<String, dynamic>;
                       final String sName = sData['name'] ?? 'طالب';
-                      final int count = sData['consecutiveAbsences'] ?? 3;
+                      // 🚀 تم إصلاح هذه القيمة لتكون 0 بدلاً من 3 إذا كانت فارغة في قاعدة البيانات
+                      final int count = sData['consecutiveAbsences'] ?? 0;
                       final String pPhone = sData['parentPhone'] ?? ''; 
                       return Container(
                         margin: const EdgeInsets.only(left: 10),
@@ -535,7 +554,6 @@ class _StudentsPageState extends State<StudentsPage> {
         child: Column(
           children: [
             ListTile(
-              // 🚀 الضغطة المطولة لنقل الطالب للأرشيف
               onLongPress: () {
                 if (!widget.isArchivedFromHistory) {
                   _showArchiveDialog(context, doc.id, studentName, isDarkMode);
@@ -781,7 +799,7 @@ class ArchivedStudentsPage extends StatelessWidget {
     Query query = FirebaseFirestore.instance
         .collection('students')
         .where('cycleId', isEqualTo: cycle.id)
-        .where('archived', isEqualTo: true); // 🚀 جلب الطلاب المؤرشفين فقط!
+        .where('archived', isEqualTo: true); 
 
     if (role == "supervisor") {
       query = query.where('supervisorId', isEqualTo: uid);
@@ -801,104 +819,125 @@ class ArchivedStudentsPage extends StatelessWidget {
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
         ),
-        body: AnimatedGlassBackground(
-          child: SafeArea(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: query.snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.archive_outlined, size: 80, color: isDarkMode ? Colors.white24 : primaryColor.withOpacity(0.3)),
-                        const SizedBox(height: 15),
-                        Text("لا يوجد طلاب متوقفين حالياً", style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white54 : Colors.black54)),
-                      ],
-                    ),
-                  );
-                }
-
-                final archivedStudents = snapshot.data!.docs;
-
-                return ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                  itemCount: archivedStudents.length,
-                  itemBuilder: (context, index) {
-                    final student = archivedStudents[index];
-                    final data = student.data() as Map<String, dynamic>;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: isDarkMode ? Colors.white10 : Colors.white),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.orangeAccent.withOpacity(0.2),
-                          child: const Icon(Icons.pause_circle_filled_rounded, color: Colors.orangeAccent),
-                        ),
-                        title: Text(data['name'] ?? 'بدون اسم', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : Colors.black87)),
-                        subtitle: Text("المشرف: ${data['supervisorName'] ?? 'غير محدد'}\n(ضغطة مطولة لاسترجاعه)", style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black54)),
-                        trailing: const Icon(Icons.restore_page_rounded, color: Colors.green),
-                        // 🚀 الضغطة المطولة للاسترجاع
-                        onLongPress: () {
-                          showDialog(
-                            context: context,
-                            builder: (dialogContext) => AlertDialog(
-                              backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                              title: Row(
-                                children: [
-                                  const Icon(Icons.restore_rounded, color: Colors.green, size: 28),
-                                  const SizedBox(width: 10),
-                                  Text("استرجاع الطالب", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : Colors.black87)),
-                                ],
-                              ),
-                              content: Text("هل تريد إرجاع الطالب (${data['name']}) إلى القائمة النشطة واستئناف دوامه؟", style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black87)),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(dialogContext),
-                                  child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                                ),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                  onPressed: () async {
-                                    Navigator.pop(dialogContext);
-                                    // 🚀 استرجاع الطالب للصفحة الرئيسية
-                                    await FirebaseFirestore.instance.collection('students').doc(student.id).set({'archived': false}, SetOptions(merge: true));
-                                    if (context.mounted) {
-                                      GlassToast.show(
-                                        context, 
-                                        title: "تم الاسترجاع", 
-                                        message: "عاد الطالب للقائمة النشطة بنجاح", 
-                                        icon: Icons.check_circle_outline_rounded, 
-                                        color: Colors.greenAccent,
-                                      );
-                                    }
-                                  },
-                                  child: const Text("استرجاع", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity, height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            Stack(
+              children: [
+                Positioned(
+                  top: -50, left: -50,
+                  child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                ),
+                Positioned(
+                  top: 200, right: -80,
+                  child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
+                ),
+              ],
+            ),
+            SafeArea(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: query.snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+        
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.archive_outlined, size: 80, color: isDarkMode ? Colors.white24 : primaryColor.withOpacity(0.3)),
+                          const SizedBox(height: 15),
+                          Text("لا يوجد طلاب متوقفين حالياً", style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white54 : Colors.black54)),
+                        ],
                       ),
                     );
-                  },
-                );
-              },
+                  }
+        
+                  final archivedStudents = snapshot.data!.docs;
+        
+                  return ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                    itemCount: archivedStudents.length,
+                    itemBuilder: (context, index) {
+                      final student = archivedStudents[index];
+                      final data = student.data() as Map<String, dynamic>;
+        
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: isDarkMode ? Colors.white10 : Colors.white),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.orangeAccent.withOpacity(0.2),
+                            child: const Icon(Icons.pause_circle_filled_rounded, color: Colors.orangeAccent),
+                          ),
+                          title: Text(data['name'] ?? 'بدون اسم', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : Colors.black87)),
+                          subtitle: Text("المشرف: ${data['supervisorName'] ?? 'غير محدد'}\n(ضغطة مطولة لاسترجاعه)", style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black54)),
+                          trailing: const Icon(Icons.restore_page_rounded, color: Colors.green),
+                          onLongPress: () {
+                            showDialog(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                title: Row(
+                                  children: [
+                                    const Icon(Icons.restore_rounded, color: Colors.green, size: 28),
+                                    const SizedBox(width: 10),
+                                    Text("استرجاع الطالب", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : Colors.black87)),
+                                  ],
+                                ),
+                                content: Text("هل تريد إرجاع الطالب (${data['name']}) إلى القائمة النشطة واستئناف دوامه؟", style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black87)),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(dialogContext),
+                                    child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                    onPressed: () async {
+                                      Navigator.pop(dialogContext);
+                                      await FirebaseFirestore.instance.collection('students').doc(student.id).set({'archived': false}, SetOptions(merge: true));
+                                      if (context.mounted) {
+                                        GlassToast.show(
+                                          context, 
+                                          title: "تم الاسترجاع", 
+                                          message: "عاد الطالب للقائمة النشطة بنجاح", 
+                                          icon: Icons.check_circle_outline_rounded, 
+                                          color: Colors.greenAccent,
+                                        );
+                                      }
+                                    },
+                                    child: const Text("استرجاع", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

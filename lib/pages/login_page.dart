@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui'; 
-import 'dart:math' as math; 
 import 'home_page.dart'; 
 
 class LoginPage extends StatefulWidget {
@@ -14,7 +13,8 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMixin {
+// 🚀 تم إزالة SingleTickerProviderStateMixin لأننا أوقفنا الأنيميشن لتخفيف الضغط
+class _LoginPageState extends State<LoginPage> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   bool loading = false;
@@ -24,20 +24,8 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
-  late AnimationController _spinController; 
-
-  @override
-  void initState() {
-    super.initState();
-    _spinController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 15),
-    )..repeat();
-  }
-
   @override
   void dispose() {
-    _spinController.dispose(); 
     emailController.dispose();
     passwordController.dispose();
     super.dispose();
@@ -144,45 +132,35 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             ),
           ),
           
+          // 🚀 تم تثبيت الدائرة الأولى 
           Positioned(
             top: -50,
             left: -50,
-            child: RotationTransition(
-              turns: _spinController,
-              child: Container(
-                width: 300,
-                height: 300,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(120), 
-                  gradient: LinearGradient(
-                    colors: [primaryColor.withOpacity(0.4), primaryColor.withOpacity(0.05)],
-                  ),
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(120), 
+                gradient: LinearGradient(
+                  colors: [primaryColor.withOpacity(0.4), primaryColor.withOpacity(0.05)],
                 ),
               ),
             ),
           ),
           
+          // 🚀 تم تثبيت الدائرة الثانية 
           Positioned(
             bottom: -100,
             right: -50,
-            child: AnimatedBuilder(
-              animation: _spinController,
-              builder: (context, child) {
-                return Transform.rotate(
-                  angle: -_spinController.value * 2 * math.pi, 
-                  child: child,
-                );
-              },
-              child: Container(
-                width: 350,
-                height: 350,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(140), 
-                  gradient: LinearGradient(
-                    colors: [accentGold.withOpacity(0.3), accentGold.withOpacity(0.05)],
-                    begin: Alignment.bottomRight,
-                    end: Alignment.topLeft,
-                  ),
+            child: Container(
+              width: 350,
+              height: 350,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(140), 
+                gradient: LinearGradient(
+                  colors: [accentGold.withOpacity(0.3), accentGold.withOpacity(0.05)],
+                  begin: Alignment.bottomRight,
+                  end: Alignment.topLeft,
                 ),
               ),
             ),
