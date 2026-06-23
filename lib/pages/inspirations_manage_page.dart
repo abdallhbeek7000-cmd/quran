@@ -40,12 +40,32 @@ class _InspirationsManagePageState extends State<InspirationsManagePage> {
     if(mounted) Navigator.pop(context);
   }
 
+  // 🚀 تحديث/تعديل إشراقة موجودة سابقاً
+  void _updateInspiration(String docId) async {
+    if (_textController.text.trim().isEmpty) return;
+
+    await FirebaseFirestore.instance.collection('inspirations').doc(docId).update({
+      'text': _textController.text.trim(),
+      'source': _sourceController.text.trim(),
+    });
+
+    _textController.clear();
+    _sourceController.clear();
+    if(mounted) Navigator.pop(context);
+  }
+
   // حذف إشراقة
   void _deleteInspiration(String docId) async {
     await FirebaseFirestore.instance.collection('inspirations').doc(docId).delete();
   }
 
-  void _showAddDialog(bool isDark) {
+  // 🚀 منبثق الإضافة والتعديل الموحد
+  void _showInspirationDialog({required bool isDark, String? docId, String? initialText, String? initialSource}) {
+    // إذا كان هناك بيانات سابقة، نعبئها بضمير لتعديلها
+    _textController.text = initialText ?? '';
+    _sourceController.text = initialSource ?? '';
+    bool isEdit = docId != null;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -53,54 +73,66 @@ class _InspirationsManagePageState extends State<InspirationsManagePage> {
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Container(
-                padding: const EdgeInsets.all(25),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.95),
+          child: Container(
+            padding: const EdgeInsets.all(25),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xff1e293b) : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(10))),
+                const SizedBox(height: 15),
+                Text(
+                  isEdit ? "تعديل الإشراقة الحالية ✏️" : "إضافة إشراقة جديدة ✨", 
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text("إضافة إشراقة جديدة ✨", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: _textController,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: "نص الإشراقة (آية، حديث، أو حكمة)",
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    TextField(
-                      controller: _sourceController,
-                      decoration: InputDecoration(
-                        labelText: "المصدر (مثال: سورة البقرة، رواه مسلم)",
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                      ),
-                    ),
-                    const SizedBox(height: 25),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: goldColor,
-                        minimumSize: const Size(double.infinity, 50),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      ),
-                      onPressed: _addInspiration,
-                      child: const Text("حفظ الإشراقة", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                    )
-                  ],
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _textController,
+                  maxLines: 3,
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: "نص الإشراقة (آية، حديث، أو حكمة)",
+                    labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: _sourceController,
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: "المصدر (مثال: سورة البقرة، رواه مسلم)",
+                    labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                  ),
+                ),
+                const SizedBox(height: 25),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: goldColor,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    elevation: 2,
+                  ),
+                  onPressed: () => isEdit ? _updateInspiration(docId) : _addInspiration(),
+                  child: Text(
+                    isEdit ? "حفظ التعديلات الأنيقة" : "حفظ الإشراقة الجديدة", 
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo')
+                  ),
+                )
+              ],
             ),
           ),
         );
       },
-    );
+    ).then((_) {
+      // تنظيف الحقول بعد إغلاق الديالوج دوماً لمنع التشابك
+      _textController.clear();
+      _sourceController.clear();
+    });
   }
 
   @override
@@ -114,12 +146,13 @@ class _InspirationsManagePageState extends State<InspirationsManagePage> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
-        title: Text("إدارة إشراقة اليوم", style: TextStyle(color: isDark ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
+        title: Text("إدارة إشراقة اليوم", style: TextStyle(color: isDark ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 18)),
+        centerTitle: true,
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: goldColor,
         child: const Icon(Icons.add, color: Colors.white),
-        onPressed: () => _showAddDialog(isDark),
+        onPressed: () => _showInspirationDialog(isDark: isDark),
       ),
       body: Stack(
         children: [
@@ -146,9 +179,12 @@ class _InspirationsManagePageState extends State<InspirationsManagePage> {
                       margin: const EdgeInsets.all(20),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.black26 : Colors.white.withOpacity(0.6),
+                        color: isDark ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.55),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: isActive ? Colors.green.withOpacity(0.5) : Colors.red.withOpacity(0.5)),
+                        border: Border.all(color: isActive ? Colors.green.withOpacity(0.5) : Colors.red.withOpacity(0.5), width: 1.2),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.02), blurRadius: 10)
+                        ],
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -156,8 +192,8 @@ class _InspirationsManagePageState extends State<InspirationsManagePage> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text("حالة ظهور الإشراقة للأهالي", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor)),
-                              Text(isActive ? "مفعلة وتظهر يومياً" : "متوقفة حالياً", style: TextStyle(fontSize: 12, color: isActive ? Colors.green : Colors.redAccent)),
+                              Text("حالة ظهور الإشراقة للأهالي", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 14)),
+                              Text(isActive ? "مفعلة وتظهر يومياً" : "متوقفة حالياً", style: TextStyle(fontSize: 12, color: isActive ? Colors.green : Colors.redAccent, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
                             ],
                           ),
                           Switch(
@@ -171,34 +207,67 @@ class _InspirationsManagePageState extends State<InspirationsManagePage> {
                   },
                 ),
                 
-                // 📜 قائمة الإشراقات المضافة
+                // 📜 قائمة الإشراقات المضافة مع خياري التعديل والحذف
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance.collection('inspirations').orderBy('createdAt', descending: false).snapshots(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                       final docs = snapshot.data!.docs;
-                      if (docs.isEmpty) return const Center(child: Text("لم يتم إضافة أي إشراقات بعد."));
+                      if (docs.isEmpty) return Center(child: Text("لم يتم إضافة أي إشراقات بعد 📭", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white54 : primaryColor)));
 
                       return ListView.builder(
+                        physics: const BouncingScrollPhysics(),
                         padding: const EdgeInsets.only(left: 20, right: 20, bottom: 80),
                         itemCount: docs.length,
                         itemBuilder: (context, index) {
                           var data = docs[index].data() as Map<String, dynamic>;
-                          return Card(
-                            color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          String docId = docs[index].id;
+                          String text = data['text'] ?? '';
+                          String source = data['source'] ?? '';
+
+                          return Container(
                             margin: const EdgeInsets.only(bottom: 15),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.7), width: 1.2),
+                              boxShadow: [
+                                BoxShadow(color: Colors.black.withOpacity(isDark ? 0.25 : 0.02), blurRadius: 10, offset: const Offset(0, 4)),
+                              ],
+                            ),
                             child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               leading: CircleAvatar(
-                                backgroundColor: goldColor.withOpacity(0.2),
-                                child: Text("${index + 1}", style: TextStyle(color: isDark ? Colors.white : primaryColor, fontWeight: FontWeight.bold)),
+                                backgroundColor: goldColor.withOpacity(0.15),
+                                child: Text("${index + 1}", style: TextStyle(color: isDark ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                               ),
-                              title: Text(data['text'] ?? '', style: const TextStyle(fontSize: 13, height: 1.4)),
-                              subtitle: Text(data['source'] ?? '', style: TextStyle(fontSize: 11, color: goldColor)),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                onPressed: () => _deleteInspiration(docs[index].id),
+                              title: Text(text, style: const TextStyle(fontSize: 14, height: 1.4, fontWeight: FontWeight.w600)),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(source, style: TextStyle(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // 🚀 زر التعديل الجديد والمطور
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_note_rounded, color: Colors.blueAccent, size: 24),
+                                    tooltip: "تعديل الإشراقة",
+                                    onPressed: () => _showInspirationDialog(
+                                      isDark: isDark,
+                                      docId: docId,
+                                      initialText: text,
+                                      initialSource: source,
+                                    ),
+                                  ),
+                                  // زر الحذف
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+                                    tooltip: "حذف الإشراقة",
+                                    onPressed: () => _deleteInspiration(docId),
+                                  ),
+                                ],
                               ),
                             ),
                           );

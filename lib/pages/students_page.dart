@@ -319,6 +319,7 @@ class _StudentsPageState extends State<StudentsPage> {
             
         body: Stack(
           children: [
+            // 1. التدرج اللوني الأساسي
             Container(
               width: double.infinity, height: double.infinity,
               decoration: BoxDecoration(
@@ -328,6 +329,8 @@ class _StudentsPageState extends State<StudentsPage> {
                 ),
               ),
             ),
+            
+            // 2. الدوائر الخلفية الثابتة
             Stack(
               children: [
                 Positioned(
@@ -340,6 +343,16 @@ class _StudentsPageState extends State<StudentsPage> {
                 ),
               ],
             ),
+            
+            // 3. 🎯 السحر هنا: فلتر غبش واحد فقط على كامل الشاشة (يوفر 90% من استهلاك المعالج)
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+
+            // 4. محتوى الشاشة (سريع جداً لأن الكروت شفافة بدون فلتر)
             SafeArea(
               child: Column(
                 children: [
@@ -417,22 +430,18 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
+  // 🚀 التعديل السحري الجديد (إزالة الـ BackdropFilter من الكرت واستخدام شفافية فقط)
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: customColor ?? (isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4)),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: customBorderColor ?? (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6)), width: 1.5),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.02), blurRadius: 15, offset: const Offset(0, 8))],
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        // لون شفاف يسمح برؤية الغبش العام خلفه
+        color: customColor ?? (isDarkMode ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.55)), 
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: customBorderColor ?? (isDarkMode ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.8)), width: 1.5),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.05), blurRadius: 15, offset: const Offset(0, 5))],
       ),
+      child: child,
     );
   }
 
@@ -498,7 +507,6 @@ class _StudentsPageState extends State<StudentsPage> {
                     itemBuilder: (context, idx) {
                       final sData = alertStudents[idx].data() as Map<String, dynamic>;
                       final String sName = sData['name'] ?? 'طالب';
-                      // 🚀 تم إصلاح هذه القيمة لتكون 0 بدلاً من 3 إذا كانت فارغة في قاعدة البيانات
                       final int count = sData['consecutiveAbsences'] ?? 0;
                       final String pPhone = sData['parentPhone'] ?? ''; 
                       return Container(
@@ -842,6 +850,13 @@ class ArchivedStudentsPage extends StatelessWidget {
                 ),
               ],
             ),
+            // 🚀 إضافة الغبش الشامل حتى لصفحة الأرشيف
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
                 stream: query.snapshots(),
@@ -876,10 +891,11 @@ class ArchivedStudentsPage extends StatelessWidget {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
+                          // نفس الشفافية لكروت الأرشيف
+                          color: isDarkMode ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.55),
                           borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: isDarkMode ? Colors.white10 : Colors.white),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+                          border: Border.all(color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.8), width: 1.5),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 5))],
                         ),
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),

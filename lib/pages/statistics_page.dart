@@ -18,7 +18,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
-  bool isMonthly = false; 
+  // 🚀 وضع الفلترة: 0 = أسبوعي، 1 = شهري، 2 = كامل الدورة
+  int filterMode = 0; 
   bool isLoading = true;
   
   List<Map<String, dynamic>> newStudentsStats = [];
@@ -124,19 +125,22 @@ class _StatisticsPageState extends State<StatisticsPage> {
       final sessionsSnap = await FirebaseFirestore.instance.collection('sessions').get();
 
       DateTime now = DateTime.now();
-      DateTime targetStart;
-      DateTime targetEnd;
+      DateTime targetStart = DateTime.now();
+      DateTime targetEnd = DateTime.now();
 
-      if (isMonthly) {
-        targetStart = DateTime(now.year, now.month - periodsBack, 1);
-        targetEnd = DateTime(now.year, now.month - periodsBack + 1, 0, 23, 59, 59);
-        currentPeriodLabel = "شهر ${targetStart.month} / ${targetStart.year}";
-      } else {
+      // ضبط نطاق التواريخ بحسب الوضع المختار
+      if (filterMode == 0) { // أسبوعي
         int daysToSubtract = (now.weekday + 1) % 7; 
         DateTime currentWeekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: daysToSubtract));
         targetStart = currentWeekStart.subtract(Duration(days: periodsBack * 7));
         targetEnd = targetStart.add(const Duration(days: 6, hours: 23, minutes: 59));
         currentPeriodLabel = "${targetStart.day}/${targetStart.month}  إلى  ${targetEnd.day}/${targetEnd.month}";
+      } else if (filterMode == 1) { // شهري
+        targetStart = DateTime(now.year, now.month - periodsBack, 1);
+        targetEnd = DateTime(now.year, now.month - periodsBack + 1, 0, 23, 59, 59);
+        currentPeriodLabel = "شهر ${targetStart.month} / ${targetStart.year}";
+      } else { // 🚀 كامل الدورة
+        currentPeriodLabel = "إحصائيات الدورة التراكمية 🎯";
       }
 
       List<Map<String, dynamic>> tempNew = [];
@@ -146,7 +150,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
       for (var student in studentsSnap.docs) {
         Map<String, dynamic> sData = student.data();
 
-        // 🚀 التعديل هنا: تخطي الطلاب المؤرشفين (المتوقفين حالياً) من الإحصائية
         bool isArchived = sData['archived'] ?? false;
         if (isArchived) continue;
 
@@ -157,9 +160,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
         String studentType = sData.containsKey('studentType') ? sData['studentType'] : 'new';
         bool isCompleted = studentType == 'completed';
 
+        // فحص فلترة الجلسات تاريخياً بناءً على النطاق المختار أو جلبها بالكامل للدورة
         var sSessions = sessionsSnap.docs.where((doc) {
           var data = doc.data();
           if (data['studentId'] != sId) return false;
+          if (filterMode == 2) return true; // 🚀 كامل الدورة: لا يوجد قيود على التاريخ
           return _isDateInRange(data['date'] ?? '', targetStart, targetEnd);
         }).map((d) => d.data()).toList();
 
@@ -180,21 +185,29 @@ class _StatisticsPageState extends State<StatisticsPage> {
         
         if (validSessions.isNotEmpty) {
           if (!isCompleted) {
-            int minPage = 999999;
-            int maxPage = -1;
+            // 🚀 إذا كان وضع "كامل الدورة" بنحسب مجموع الصفحات الفعلي التراكمي لكل جلسة تيسيراً وتجنباً لثغرات تقليب الأجزاء
+            if (filterMode == 2) {
+              for (var s in validSessions) {
+                totalPages += _calculatePagesFromText(s['newMemorization']?.toString());
+              }
+            } else {
+              // الوضع الطبيعي للأسبوعي والشهري (أول صفحة وآخر صفحة بالنطاق)
+              int minPage = 999999;
+              int maxPage = -1;
 
-            for (var s in validSessions) {
-              int currentMin = _getMinNumber(s['newMemorization']);
-              if (currentMin != -1) { minPage = currentMin; break; }
-            }
+              for (var s in validSessions) {
+                int currentMin = _getMinNumber(s['newMemorization']);
+                if (currentMin != -1) { minPage = currentMin; break; }
+              }
 
-            for (var s in validSessions.reversed) {
-              int currentMax = _getMaxNumber(s['newMemorization']);
-              if (currentMax != -1) { maxPage = currentMax; break; }
-            }
+              for (var s in validSessions.reversed) {
+                int currentMax = _getMaxNumber(s['newMemorization']);
+                if (currentMax != -1) { maxPage = currentMax; break; }
+              }
 
-            if (minPage != 999999 && maxPage != -1 && maxPage >= minPage) {
-              totalPages = (maxPage - minPage) + 1; 
+              if (minPage != 999999 && maxPage != -1 && maxPage >= minPage) {
+                totalPages = (maxPage - minPage) + 1; 
+              }
             }
 
             for (var s in validSessions) {
@@ -203,21 +216,28 @@ class _StatisticsPageState extends State<StatisticsPage> {
             }
 
           } else {
-            int minR = 999999;
-            int maxR = -1;
+            // للطالب الخاتم
+            if (filterMode == 2) {
+              for (var s in validSessions) {
+                reviewPages += _calculatePagesFromText(s['farReview']?.toString());
+              }
+            } else {
+              int minR = 999999;
+              int maxR = -1;
 
-            for (var s in validSessions) {
-              int currentMin = _getMinNumber(s['farReview']);
-              if (currentMin != -1) { minR = currentMin; break; }
-            }
+              for (var s in validSessions) {
+                int currentMin = _getMinNumber(s['farReview']);
+                if (currentMin != -1) { minR = currentMin; break; }
+              }
 
-            for (var s in validSessions.reversed) {
-              int currentMax = _getMaxNumber(s['farReview']);
-              if (currentMax != -1) { maxR = currentMax; break; }
-            }
+              for (var s in validSessions.reversed) {
+                int currentMax = _getMaxNumber(s['farReview']);
+                if (currentMax != -1) { maxR = currentMax; break; }
+              }
 
-            if (minR != 999999 && maxR != -1 && maxR >= minR) {
-              reviewPages = (maxR - minR) + 1; 
+              if (minR != 999999 && maxR != -1 && maxR >= minR) {
+                reviewPages = (maxR - minR) + 1; 
+              }
             }
           }
         }
@@ -272,6 +292,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
   }
 
   void _changePeriod(int amount) {
+    if (filterMode == 2) return; // تعطيل التنقل في وضع الدورة الكاملة
     setState(() {
       periodsBack += amount;
       if (periodsBack < 0) periodsBack = 0; 
@@ -327,6 +348,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             SafeArea(
               child: Column(
                 children: [
+                  // 🚀 شريط التبديل الجديد المطور ليحوي 3 خيارات (أسبوعي / شهري / كامل الدورة)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                     child: Container(
@@ -337,41 +359,15 @@ class _StatisticsPageState extends State<StatisticsPage> {
                       ),
                       child: Row(
                         children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                if (isMonthly) {
-                                  setState(() { isMonthly = false; periodsBack = 0; }); 
-                                  _calculateStats();
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                decoration: BoxDecoration(color: !isMonthly ? accentGold : Colors.transparent, borderRadius: BorderRadius.circular(18)),
-                                child: Text("أسبوعي", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: !isMonthly ? Colors.white : (isDark ? Colors.white54 : Colors.black54))),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                if (!isMonthly) {
-                                  setState(() { isMonthly = true; periodsBack = 0; }); 
-                                  _calculateStats();
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                decoration: BoxDecoration(color: isMonthly ? accentGold : Colors.transparent, borderRadius: BorderRadius.circular(18)),
-                                child: Text("شهري", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isMonthly ? Colors.white : (isDark ? Colors.white54 : Colors.black54))),
-                              ),
-                            ),
-                          ),
+                          _buildTabButton(0, "أسبوعي", isDark),
+                          _buildTabButton(1, "شهري", isDark),
+                          _buildTabButton(2, "كامل الدورة", isDark), // 🚀 الخيار التراكمي المضاف
                         ],
                       ),
                     ),
                   ),
 
+                  // شريط التحكم بالزمن (يظهر نص توضيحي ثابت في وضع كامل الدورة)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                     child: Container(
@@ -384,14 +380,23 @@ class _StatisticsPageState extends State<StatisticsPage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          IconButton(icon: Icon(Icons.chevron_right_rounded, color: isDark ? accentGold : primaryColor), onPressed: () => _changePeriod(1), tooltip: "السابق"),
+                          IconButton(
+                            icon: Icon(Icons.chevron_right_rounded, color: filterMode == 2 ? Colors.transparent : (isDark ? accentGold : primaryColor)), 
+                            onPressed: filterMode == 2 ? null : () => _changePeriod(1), 
+                            tooltip: "السابق"
+                          ),
                           Expanded(child: Text(currentPeriodLabel, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 13))),
-                          IconButton(icon: Icon(Icons.chevron_left_rounded, color: periodsBack > 0 ? (isDark ? accentGold : primaryColor) : Colors.transparent), onPressed: periodsBack > 0 ? () => _changePeriod(-1) : null, tooltip: "التالي"),
+                          IconButton(
+                            icon: Icon(Icons.chevron_left_rounded, color: (filterMode != 2 && periodsBack > 0) ? (isDark ? accentGold : primaryColor) : Colors.transparent), 
+                            onPressed: (filterMode != 2 && periodsBack > 0) ? () => _changePeriod(-1) : null, 
+                            tooltip: "التالي"
+                          ),
                         ],
                       ),
                     ),
                   ),
 
+                  // بطاقة حصاد الفترة الإجمالية
                   if (!isLoading)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
@@ -434,6 +439,40 @@ class _StatisticsPageState extends State<StatisticsPage> {
               ),
             )
           ],
+        ),
+      ),
+    );
+  }
+
+  // ويدجت بناء أزرار الشريط العلوي لفلترة الوضع
+  Widget _buildTabButton(int mode, String text, bool isDark) {
+    bool isSelected = filterMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          if (filterMode != mode) {
+            setState(() { 
+              filterMode = mode; 
+              periodsBack = 0; 
+            }); 
+            _calculateStats();
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? accentGold : Colors.transparent, 
+            borderRadius: BorderRadius.circular(18)
+          ),
+          child: Text(
+            text, 
+            textAlign: TextAlign.center, 
+            style: TextStyle(
+              fontWeight: FontWeight.bold, 
+              fontFamily: 'Cairo', 
+              color: isSelected ? Colors.white : (isDark ? Colors.white54 : Colors.black54)
+            )
+          ),
         ),
       ),
     );

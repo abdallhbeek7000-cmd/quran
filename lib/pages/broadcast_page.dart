@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
-import '../services/notification_service.dart'; // تأكد من مسار خدمة الإشعارات عندك
+import '../services/notification_service.dart';
 
 class BroadcastPage extends StatefulWidget {
   const BroadcastPage({super.key});
@@ -18,8 +18,12 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
   
   bool _isLoading = false;
   double _progress = 0.0;
-  int _totalStudents = 0;
+  int _totalTarget = 0;
   int _sentCount = 0;
+
+  // 🚀 متغيرات مخصصة لتحديد نوع الإرسال والطلاب المستهدفين
+  bool _sendToAll = true; 
+  List<String> _selectedStudentIds = [];
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
@@ -42,7 +46,7 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
     super.dispose();
   }
 
-  // 🚀 دالة الإرسال للجميع
+  // 🚀 دالة الإرسال الذكية (للجميع أو للمحددين)
   Future<void> _sendBroadcast() async {
     final String title = _titleController.text.trim();
     final String body = _bodyController.text.trim();
@@ -54,6 +58,13 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
       return;
     }
 
+    if (!_sendToAll && _selectedStudentIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: Colors.orange, content: Text("يرجى اختيار طالب واحد على الأقل للإرسال له", style: TextStyle(fontFamily: 'Cairo'))),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _progress = 0.0;
@@ -61,39 +72,50 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
     });
 
     try {
-      // 1. جلب جميع الطلاب من قاعدة البيانات
-      final QuerySnapshot studentsSnapshot = await FirebaseFirestore.instance.collection('students').get();
-      _totalStudents = studentsSnapshot.docs.length;
+      List<String> targets = [];
 
-      if (_totalStudents == 0) {
+      if (_sendToAll) {
+        // 1. جلب جميع الطلاب من قاعدة البيانات
+        final QuerySnapshot studentsSnapshot = await FirebaseFirestore.instance.collection('students').get();
+        targets = studentsSnapshot.docs.map((doc) => doc.id).toList();
+      } else {
+        // الاعتماد على قائمة الطلاب المحددة يدوياً
+        targets = List.from(_selectedStudentIds);
+      }
+
+      _totalTarget = targets.length;
+
+      if (_totalTarget == 0) {
         setState(() => _isLoading = false);
         return;
       }
 
-      // 2. حلقة إرسال الإشعارات لجميع الطلاب
-      for (var doc in studentsSnapshot.docs) {
+      // 2. حلقة إرسال الإشعارات للطلاب المستهدفين
+      for (String studentId in targets) {
         await NotificationService.sendAndSaveNotification(
-          studentId: doc.id,
+          studentId: studentId,
           title: title,
           body: body,
-          type: 'broadcast', // نوع مخصص للإعلانات العامة
-          // لم نمرر الـ context هنا حتى لا تظهر 100 رسالة نجاح في الشاشة
+          type: 'broadcast',
         );
 
-        // تحديث شريط التقدم
         _sentCount++;
         setState(() {
-          _progress = _sentCount / _totalStudents;
+          _progress = _sentCount / _totalTarget;
         });
       }
 
       if (mounted) {
         _titleController.clear();
         _bodyController.clear();
+        setState(() {
+          _selectedStudentIds.clear();
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.green, 
-            content: Text("✅ تم إرسال الإعلان لجميع الطلاب بنجاح!", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))
+            content: Text("✅ تم إرسال الإعلان بنجاح!", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))
           ),
         );
       }
@@ -126,7 +148,7 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
       ),
       body: Stack(
         children: [
-          // الخلفية
+          // الخلفية التراكمية الأصلية
           Container(
             width: double.infinity, height: double.infinity,
             decoration: BoxDecoration(
@@ -137,7 +159,7 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
             ),
           ),
           
-          // الدوائر العائمة
+          // الدوائر العائمة المتحركة كما هي
           AnimatedBuilder(
             animation: _bgAnimation,
             builder: (context, child) {
@@ -161,6 +183,7 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 child: _buildGlassContainer(
                   isDarkMode: isDarkMode,
@@ -170,10 +193,45 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                     children: [
                       Icon(Icons.campaign_rounded, size: 60, color: isDarkMode ? accentGold : primaryColor),
                       const SizedBox(height: 15),
-                      Text("إرسال إعلان للجميع", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                      Text("إرسال إعلان مخصص", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
                       const SizedBox(height: 5),
-                      Text("سيصل هذا الإشعار كرسالة منبثقة ويوثق في سجلات جميع أولياء الأمور.", textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: isDarkMode ? Colors.white60 : Colors.black54, fontFamily: 'Cairo')),
-                      const SizedBox(height: 30),
+                      Text("سيصل كإشعار منبثق ويوثق في سجلات أولياء الأمور المستهدفين.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.black54, fontFamily: 'Cairo')),
+                      const SizedBox(height: 25),
+
+                      // 🚀 الراديو بوتون لاختيار الفئة المستهدفة (الكل أو مخصص)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? Colors.black12 : Colors.white24,
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: isDarkMode ? Colors.white10 : Colors.black12),
+                        ),
+                        child: Column(
+                          children: [
+                            RadioListTile<bool>(
+                              activeColor: isDarkMode ? accentGold : primaryColor,
+                              title: const Text("إرسال للجميع (كل الطلاب) 🌍", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold)),
+                              value: true,
+                              groupValue: _sendToAll,
+                              onChanged: (val) => setState(() => _sendToAll = val!),
+                            ),
+                            RadioListTile<bool>(
+                              activeColor: isDarkMode ? accentGold : primaryColor,
+                              title: const Text("تحديد طلاب معينين 🎯", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold)),
+                              value: false,
+                              groupValue: _sendToAll,
+                              onChanged: (val) => setState(() => _sendToAll = val!),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 🚀 قائمة اختيار الطلاب المنبثقة الذكية عند الرغبة بالإرسال المخصص
+                      if (!_sendToAll) ...[
+                        _buildStudentSelectorSection(isDarkMode),
+                        const SizedBox(height: 20),
+                      ],
 
                       // حقل العنوان
                       TextField(
@@ -190,9 +248,9 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                         style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                         decoration: _glassInputDecoration("تفاصيل الإعلان أو التذكير...", Icons.message_rounded, isDarkMode),
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 25),
 
-                      // شريط التقدم أثناء الإرسال
+                      // شريط التقدم أثناء الإرسال التراكمي
                       if (_isLoading) ...[
                         Column(
                           children: [
@@ -204,13 +262,13 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                               borderRadius: BorderRadius.circular(10),
                             ),
                             const SizedBox(height: 10),
-                            Text("جاري الإرسال: $_sentCount / $_totalStudents", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : Colors.black87)),
+                            Text("جاري الإرسال: $_sentCount / $_totalTarget", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : Colors.black87)),
                             const SizedBox(height: 20),
                           ],
                         ),
                       ],
 
-                      // زر الإرسال
+                      // زر الإرسال النهائي مدمج بالحالة اللحظية
                       SizedBox(
                         width: double.infinity,
                         height: 55,
@@ -224,8 +282,8 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                           ),
                           icon: _isLoading ? const SizedBox() : const Icon(Icons.send_rounded),
                           label: _isLoading 
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : const Text("إرسال الإعلان للجميع", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                              ? const SizedBox(width: 24, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                              : Text(_sendToAll ? "إرسال الإعلان للجميع" : "إرسال للمختارين (${_selectedStudentIds.length})", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                         ),
                       ),
                     ],
@@ -235,6 +293,55 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // 🚀 ويدجت ذكي يعرض الطلاب يتيح لك انتقاء أعداد مخصصة للإرسال الفوري
+  Widget _buildStudentSelectorSection(bool isDarkMode) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 200), // تثبيت الطول لمنع زحف الشاشة
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: isDarkMode ? Colors.white12 : Colors.black12),
+      ),
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('students').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final docs = snapshot.data!.docs;
+          if (docs.isEmpty) return const Padding(padding: EdgeInsets.all(15), child: Text("لا يوجد طلاب مسجلين بالمعهد حالياً", style: TextStyle(fontFamily: 'Cairo', fontSize: 13)));
+
+          return ListView.builder(
+            shrinkWrap: true,
+            physics: const BouncingScrollPhysics(),
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              var sData = docs[index].data() as Map<String, dynamic>;
+              String studentId = docs[index].id;
+              String name = sData['name'] ?? 'طالب';
+              String serial = sData['serial']?.toString() ?? '---';
+              bool isChecked = _selectedStudentIds.contains(studentId);
+
+              return CheckboxListTile(
+                activeColor: isDarkMode ? accentGold : primaryColor,
+                title: Text(name, style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold)),
+                subtitle: Text("الرقم التسلسلي: $serial", style: const TextStyle(fontSize: 11)),
+                value: isChecked,
+                onChanged: (bool? checked) {
+                  setState(() {
+                    if (checked == true) {
+                      _selectedStudentIds.add(studentId);
+                    } else {
+                      _selectedStudentIds.remove(studentId);
+                    }
+                  });
+                },
+              );
+            },
+          );
+        },
       ),
     );
   }
