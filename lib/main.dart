@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
 import 'package:firebase_core/firebase_core.dart';
@@ -7,6 +8,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart'; 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:quran_habal/widgets/offline_wrapper.dart'; 
+// 🚀 استيراد مكتبة حزمة المزامنة بالخلفية المضافة
+import 'package:workmanager/workmanager.dart';
 import 'firebase_options.dart';
 import 'utils/app_colors.dart';
 import 'pages/login_page.dart';
@@ -16,6 +19,27 @@ import 'services/theme_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// 🚀 1. هذه الدالة السحرية المستقلة التي يستدعيها نظام التشغيل بالخلفية فور توفر الإنترنت
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((taskName, inputData) async {
+    print("🎯 [WorkManager] بدأت مهمة المزامنة القسرية بالخلفية: $taskName");
+    try {
+      // تهيئة الفايربيز بالخلفية بشكل معزول
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      
+      // نبضة إجبارية لجعل الفايربيز يستيقظ ويفرغ طابور البيانات المتراكمة بالـ Cache إلى السيرفر
+      await FirebaseFirestore.instance.waitForPendingWrites();
+      
+      print("✅ [WorkManager] تم تفريغ طابور البيانات ومزامنة الجلسات بنجاح والمشرف خارج التطبيق!");
+      return Future.value(true);
+    } catch (e) {
+      print("❌ [WorkManager] فشلت المزامنة التلقائية بالخلفية: $e");
+      return Future.value(false);
+    }
+  });
+}
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -37,9 +61,16 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
+  // الاحتفاظ بإعدادات الحفظ المحلي اللامحدود للـ Offline الطبيعي
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
+  // 🚀 2. تهيئة الـ Workmanager وربطها بالـ callbackDispatcher المستقلة
+  await Workmanager().initialize(
+    callbackDispatcher,
+    isInDebugMode: false, // اجعلها true فقط أثناء التجربة البرمجية بالـ Emulator لو أحببت فحص تفاصيل الكونسول
   );
 
   FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
@@ -137,10 +168,9 @@ class _MyAppState extends State<MyApp> {
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent, 
           foregroundColor: primaryColor,
-          centerTitle: true,
+          centerTitle: centerTitleDefault, // تعويض لثغرة التحديث بالنسخ الجديدة
           elevation: 0,
         ),
-        // تعديل التوافقية هنا لنسخة فلاتر الجديدة 👇
         dialogTheme: DialogThemeData(
           backgroundColor: Colors.white.withValues(alpha: 0.95),
         ),
@@ -161,17 +191,15 @@ class _MyAppState extends State<MyApp> {
           primary: accentGold,
           secondary: primaryColor,
         ),
-        // تم التغيير إلى CardThemeData هنا 👇
         cardTheme: const CardThemeData(
           color: Color(0xff1e293b), 
         ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent, 
           foregroundColor: Colors.white,
-          centerTitle: true,
+          centerTitle: centerTitleDefault,
           elevation: 0,
         ),
-        // تم التغيير إلى DialogThemeData واستخدام withValues هنا 👇
         dialogTheme: DialogThemeData(
           backgroundColor: const Color(0xff1e293b).withValues(alpha: 0.95),
         ),
@@ -205,3 +233,6 @@ class _MyAppState extends State<MyApp> {
     );
   }
 }
+
+// ثابت داخلي لضمان التوافقية البرمجية مع الماتيريال الجديد
+const bool centerTitleDefault = true;

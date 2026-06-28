@@ -1,8 +1,8 @@
-import 'dart:ui'; // 🎯 ضرورية لتأثير الزجاج والـ Blur
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart'; // 🎯 لقراءة المظهر
-import '../services/theme_provider.dart'; // 🎯 استدعاء الـ ThemeProvider
+import 'package:provider/provider.dart'; 
+import '../services/theme_provider.dart'; 
 
 class ManageHonorBoardPage extends StatefulWidget {
   const ManageHonorBoardPage({super.key});
@@ -15,28 +15,35 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
   String selectedCategory = "new_students"; 
   String currentStudentType = "new"; 
   
-  Map<String, dynamic>? firstStudent;
-  Map<String, dynamic>? secondStudent;
-  Map<String, dynamic>? thirdStudent;
+  // 🚀 تحويل البنية إلى قائمة ديناميكية مرنة تتسع لأي عدد من النجوم
+  List<Map<String, dynamic>> knightsList = [];
   
   bool isSaving = false;
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37); // لون الزجاج المكمل
+  final Color accentGold = const Color(0xffd4af37); 
 
   void loadCategoryData(String categoryId) async {
     var doc = await FirebaseFirestore.instance.collection('honor_board').doc(categoryId).get();
-    if (doc.exists) {
+    if (doc.exists && doc.data()!.containsKey('knights')) {
       var data = doc.data()!;
       setState(() {
-        firstStudent = data['first'];
-        secondStudent = data['second'];
-        thirdStudent = data['third'];
+        knightsList = List<Map<String, dynamic>>.from(data['knights']);
+      });
+    } else if (doc.exists && doc.data()!.containsKey('first')) {
+      // 🚀 أمان ودعم رجعي: لو الداتا القديمة (أول، ثاني، ثالث) موجودة يحولها تلقائياً للنظام الجديد
+      var data = doc.data()!;
+      setState(() {
+        knightsList = [
+          if (data['first'] != null) Map<String, dynamic>.from(data['first']),
+          if (data['second'] != null) Map<String, dynamic>.from(data['second']),
+          if (data['third'] != null) Map<String, dynamic>.from(data['third']),
+        ];
       });
     } else {
       setState(() {
-        firstStudent = null;
-        secondStudent = null;
-        thirdStudent = null;
+        knightsList = [
+          {'name': 'لم يحدد', 'serial': '---'} // البداية الافتراضية بنجم واحد
+        ];
       });
     }
   }
@@ -50,21 +57,19 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
   void saveHonorBoard() async {
     setState(() => isSaving = true);
     
+    // 🚀 حفظ القائمة بالكامل دفعة واحدة في الفايربيز
     await FirebaseFirestore.instance.collection('honor_board').doc(selectedCategory).set({
-      'first': firstStudent ?? {'name': 'لم يحدد', 'serial': '---'},
-      'second': secondStudent ?? {'name': 'لم يحدد', 'serial': '---'},
-      'third': thirdStudent ?? {'name': 'لم يحدد', 'serial': '---'},
+      'knights': knightsList.isEmpty ? [{'name': 'لم يحدد', 'serial': '---'}] : knightsList,
     });
 
     setState(() => isSaving = false);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث الفرسان بنجاح! 🏆", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
+      const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث لوحة الشرف بنجاح! 🏆", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
     );
   }
 
-  String? _getMatchedValue(Map<String, dynamic>? currentValue, List<Map<String, dynamic>> students) {
-    if (currentValue == null) return null;
+  String? _getMatchedValue(Map<String, dynamic> currentValue, List<Map<String, dynamic>> students) {
     for (var s in students) {
       if (s['name'] == currentValue['name'] && s['serial'] == currentValue['serial']) {
         return s['name'];
@@ -78,54 +83,39 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية خلف الـ AppBar لجمالية الزجاج
+      extendBodyBehindAppBar: true, 
       backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, // AppBar شفاف
-        title: Text("تعديل فرسان لوحة الشرف", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+        backgroundColor: Colors.transparent, 
+        title: Text("تعديل نجوم لوحة الشرف", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 18)),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
       ),
       body: Stack(
         children: [
-          // 🎨 1. الخلفية المتدرجة الانسيابية مع الدوائر العائمة
           Container(
-            width: double.infinity,
-            height: double.infinity,
+            width: double.infinity, height: double.infinity,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isDarkMode
                     ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
                     : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
               ),
             ),
           ),
           Positioned(
-            top: -20,
-            left: -40,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)),
-            ),
+            top: -20, left: -40,
+            child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12))),
           ),
           Positioned(
-            bottom: 80,
-            right: -60,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
-            ),
+            bottom: 80, right: -60,
+            child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
           ),
 
-          // 🏢 2. المحتوى الأساسي للواجهة
           SafeArea(
             child: StreamBuilder<QuerySnapshot>(
-              // الفلترة الذكية هنا: جلب الطلاب بناءً على الـ currentStudentType المختار فقط!
               stream: FirebaseFirestore.instance
                   .collection('students')
                   .where('archived', isEqualTo: false)
@@ -148,7 +138,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   child: Column(
                     children: [
-                      // 🧊 3. كرت اختيار الفئة الزجاجي
+                      // كرت اختيار الفئة
                       _buildGlassContainer(
                         isDarkMode: isDarkMode,
                         padding: const EdgeInsets.all(22),
@@ -189,30 +179,76 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                         ),
                       ),
                       
-                      const SizedBox(height: 25),
+                      const SizedBox(height: 20),
 
-                      // 🧊 4. كرت اختيار الفرسان الثلاثة الزجاجي
+                      // 🧊 كرت اختيار الفرسان والنجوم الديناميكي المطور
                       _buildGlassContainer(
                         isDarkMode: isDarkMode,
                         padding: const EdgeInsets.all(22),
                         child: Column(
                           children: [
-                            _buildStudentDropdown("المركز الأول", "🥇", firstStudent, allStudents, (val) => setState(() => firstStudent = val), isDarkMode, accentGold),
-                            const SizedBox(height: 20),
-                            Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 1),
-                            const SizedBox(height: 20),
-                            _buildStudentDropdown("المركز الثاني", "🥈", secondStudent, allStudents, (val) => setState(() => secondStudent = val), isDarkMode, const Color(0xffC0C0C0)),
-                            const SizedBox(height: 20),
-                            Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 1),
-                            const SizedBox(height: 20),
-                            _buildStudentDropdown("المركز الثالث", "🥉", thirdStudent, allStudents, (val) => setState(() => thirdStudent = val), isDarkMode, const Color(0xffCD7F32)),
+                            // 🚀 بناء حقول الاختيار ديناميكياً بحسب طول القائمة المحددة
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: knightsList.length,
+                              itemBuilder: (context, idx) {
+                                return Column(
+                                  children: [
+                                    if (idx > 0) const SizedBox(height: 20),
+                                    _buildStudentDropdown(
+                                      "النجم رقم #${idx + 1}", 
+                                      knightsList[idx], 
+                                      allStudents, 
+                                      (val) => setState(() => knightsList[idx] = val), 
+                                      isDarkMode, 
+                                      idx == 0 ? accentGold : (idx == 1 ? const Color(0xffC0C0C0) : (idx == 2 ? const Color(0xffCD7F32) : primaryColor.withOpacity(0.7)))
+                                    ),
+                                    if (idx < knightsList.length - 1) ...[
+                                      const SizedBox(height: 20),
+                                      Divider(color: isDarkMode ? Colors.white10 : Colors.black12, height: 1),
+                                    ]
+                                  ],
+                                );
+                              },
+                            ),
+                            
+                            const SizedBox(height: 25),
+                            
+                            // 🚀 أزرار التحكم بالزيادة والنقصان في ذيل كرت النجوم
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                TextButton.icon(
+                                  style: TextButton.styleFrom(backgroundColor: Colors.green.withOpacity(0.15)),
+                                  onPressed: () {
+                                    setState(() {
+                                      knightsList.add({'name': 'لم يحدد', 'serial': '---'});
+                                    });
+                                  },
+                                  icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.green),
+                                  label: const Text("إضافة نجم ➕", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+                                ),
+                                if (knightsList.length > 1)
+                                  TextButton.icon(
+                                    style: TextButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.15)),
+                                    onPressed: () {
+                                      setState(() {
+                                        knightsList.removeLast();
+                                      });
+                                    },
+                                    icon: const Icon(Icons.remove_circle_outline_rounded, color: Colors.redAccent),
+                                    label: const Text("حذف الأخير ➖", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
                       
                       const SizedBox(height: 35),
                       
-                      // 🚀 زر الحفظ الزجاجي
+                      // زر الحفظ النهائي
                       SizedBox(
                         width: double.infinity,
                         height: 55,
@@ -221,13 +257,12 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                             backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9), 
                             foregroundColor: Colors.white,
                             elevation: 5,
-                            shadowColor: Colors.black38,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           ),
                           onPressed: isSaving ? null : saveHonorBoard,
                           child: isSaving 
-                              ? const CircularProgressIndicator(color: Colors.white) 
-                              : const Text("حفظ الفرسان الآن", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo', letterSpacing: 0.5)),
+                              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)) 
+                              : const Text("حفظ اللوحة بالكامل", style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Cairo', letterSpacing: 0.5)),
                         ),
                       ),
                       const SizedBox(height: 30),
@@ -242,36 +277,21 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
     );
   }
 
-  // 🧊 أداة مساعدة لتغليف العناصر بتأثير الزجاج (Glassmorphism)
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(25),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4),
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.03),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.75), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(isDarkMode ? 0.25 : 0.03), blurRadius: 15, offset: const Offset(0, 5)),
+        ],
       ),
+      child: child,
     );
   }
 
-  // 🧊 تنسيق حقول اختيار الفئات الزجاجية
   InputDecoration _glassInputDecoration(bool isDarkMode) {
     return InputDecoration(
       filled: true,
@@ -289,8 +309,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
     );
   }
 
-  // 🧊 واجهة اختيار الفرسان الأنيقة 
-  Widget _buildStudentDropdown(String label, String emoji, Map<String, dynamic>? currentValue, List<Map<String, dynamic>> students, Function(Map<String, dynamic>) onSelected, bool isDarkMode, Color medalColor) {
+  Widget _buildStudentDropdown(String label, Map<String, dynamic> currentValue, List<Map<String, dynamic>> students, Function(Map<String, dynamic>) onSelected, bool isDarkMode, Color medalColor) {
     String? matchedValue = _getMatchedValue(currentValue, students);
 
     return Column(
@@ -298,9 +317,9 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
       children: [
         Row(
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 22)),
+            Icon(Icons.workspace_premium_rounded, color: medalColor, size: 22),
             const SizedBox(width: 8),
-            Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: medalColor, fontFamily: 'Cairo')),
+            Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDarkMode ? Colors.white.withOpacity(0.9) : primaryColor, fontFamily: 'Cairo')),
           ],
         ),
         const SizedBox(height: 12),
@@ -313,7 +332,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
             prefixIcon: Icon(Icons.person_outline, color: medalColor),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(15), 
-              borderSide: BorderSide(color: medalColor, width: 1.5), // تغيير لون التحديد حسب الميدالية
+              borderSide: BorderSide(color: medalColor, width: 1.5), 
             ),
           ),
           items: students.map((s) {

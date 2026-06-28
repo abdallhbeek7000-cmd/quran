@@ -1,11 +1,14 @@
+import 'dart:io'; 
+import 'dart:ui'; 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:ui'; 
-import '../models/session_model.dart';
-import '../services/session_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt; 
+// 🚀 استيراد حزمة الجدولة بالخلفية المضافة
+import 'package:workmanager/workmanager.dart';
+import '../models/session_model.dart';
+import '../services/session_service.dart';
 import '../services/theme_provider.dart'; 
 import '../services/notification_service.dart'; 
 import '../services/notification_queue_manager.dart'; 
@@ -73,7 +76,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   bool loading = false;
   bool absent = false;
   bool isExam = false; 
-  bool didNotRecite = false; // 🚀 المتغير الجديد لحالة: حضر ولم يقرأ
+  bool didNotRecite = false; 
   
   bool hasNewMemorization = true;
   bool hasReview = true;
@@ -199,6 +202,100 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       if (val.isNotEmpty) parts.add(val);
     }
     return parts.join(" | ");
+  }
+
+  void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  height: MediaQuery.of(context).size.height * 0.7,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.95),
+                    border: Border(top: BorderSide(color: isDarkMode ? Colors.white24 : Colors.white, width: 1.5)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
+                      const SizedBox(height: 20),
+                      Text("حدد المشرفين المشاركين", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                      const SizedBox(height: 15),
+                      Expanded(
+                        child: FutureBuilder<List<QuerySnapshot>>(
+                          future: Future.wait([
+                            FirebaseFirestore.instance.collection('users').get(),
+                            FirebaseFirestore.instance.collection('supervisors').get()
+                          ]),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                            
+                            List<Map<String, String>> allStaff = [];
+                            if (snapshot.hasData) {
+                              for (var doc in snapshot.data![0].docs) {
+                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
+                              }
+                              for (var doc in snapshot.data![1].docs) {
+                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
+                              }
+                            }
+
+                            return ListView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: allStaff.length,
+                              itemBuilder: (context, index) {
+                                final staff = allStaff[index];
+                                final isSelected = selectedSupervisors.any((s) => s['id'] == staff['id']);
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                                    borderRadius: BorderRadius.circular(15),
+                                    border: Border.all(color: isSelected ? accentGold : Colors.transparent),
+                                  ),
+                                  child: CheckboxListTile(
+                                    activeColor: accentGold,
+                                    title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
+                                    value: isSelected,
+                                    onChanged: (val) {
+                                      setModalState(() {
+                                        if (val == true) {
+                                          selectedSupervisors.add(staff);
+                                        } else {
+                                          if (selectedSupervisors.length > 1) {
+                                            selectedSupervisors.removeWhere((s) => s['id'] == staff['id']);
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب اختيار مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
+                                          }
+                                        }
+                                      });
+                                      setState(() {}); 
+                                    },
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+        );
+      }
+    );
   }
 
   void _parseRangeIntoControllers(String text, TextEditingController fromCtrl, TextEditingController toCtrl) {
@@ -332,100 +429,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
-  void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(
-                  height: MediaQuery.of(context).size.height * 0.7,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.95),
-                    border: Border(top: BorderSide(color: isDarkMode ? Colors.white24 : Colors.white, width: 1.5)),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
-                      const SizedBox(height: 20),
-                      Text("حدد المشرفين المشاركين", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
-                      const SizedBox(height: 15),
-                      Expanded(
-                        child: FutureBuilder<List<QuerySnapshot>>(
-                          future: Future.wait([
-                            FirebaseFirestore.instance.collection('users').get(),
-                            FirebaseFirestore.instance.collection('supervisors').get()
-                          ]),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                            
-                            List<Map<String, String>> allStaff = [];
-                            if (snapshot.hasData) {
-                              for (var doc in snapshot.data![0].docs) {
-                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
-                              }
-                              for (var doc in snapshot.data![1].docs) {
-                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
-                              }
-                            }
-
-                            return ListView.builder(
-                              physics: const BouncingScrollPhysics(),
-                              itemCount: allStaff.length,
-                              itemBuilder: (context, index) {
-                                final staff = allStaff[index];
-                                final isSelected = selectedSupervisors.any((s) => s['id'] == staff['id']);
-
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
-                                    borderRadius: BorderRadius.circular(15),
-                                    border: Border.all(color: isSelected ? accentGold : Colors.transparent),
-                                  ),
-                                  child: CheckboxListTile(
-                                    activeColor: accentGold,
-                                    title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
-                                    value: isSelected,
-                                    onChanged: (val) {
-                                      setModalState(() {
-                                        if (val == true) {
-                                          selectedSupervisors.add(staff);
-                                        } else {
-                                          if (selectedSupervisors.length > 1) {
-                                            selectedSupervisors.removeWhere((s) => s['id'] == staff['id']);
-                                          } else {
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب اختيار مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
-                                          }
-                                        }
-                                      });
-                                      setState(() {}); 
-                                    },
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }
-        );
-      }
-    );
-  }
-
   addSession() async {
     setState(() => loading = true);
     final date = "${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}";
@@ -461,7 +464,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       return;
     }
 
-    // 🚀 تطبيق استثناء (حضر ولم يقرأ) على تجهيز البيانات لمنع رفع قيم فارغة
     String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevFrom, newRevTo);
     String finalFarReview = (!hasReview || absent || isExam || didNotRecite) ? '' : _buildMultiRangeString(oldReviewRanges);
@@ -508,7 +510,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'date': date,
       'absent': absent,
       'isExam': isExam, 
-      'didNotRecite': didNotRecite, // 🚀 إضافة حالة: حضر ولم يقرأ
+      'didNotRecite': didNotRecite, 
       'examScore': isExam && !absent ? examScoreController.text.trim() : '', 
       'newMemorization': finalNewMemo,
       'nearReview': finalNearReview, 
@@ -523,13 +525,22 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'oldReviewRating': finalOldRevRating, 
       'reviewRating': (absent || isExam || didNotRecite) ? '' : finalFallbackRevRating, 
       'rating': (absent || isExam || didNotRecite) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)), 
-      'studentStatus': (absent || isExam) ? '' : studentStatus, // 🚀 يتم حفظ حالة السلوك حتى لو لم يقرأ لأنه حضر فعلاً
+      'studentStatus': (absent || isExam) ? '' : studentStatus, 
       'religiousActivities': (absent || isExam) ? '' : religiousActivities.text.trim(),
       'notes': notes.text.trim(),
       'absenceType': absent ? absenceType : '', 
       'absenceReason': absent ? absenceReasonController.text.trim() : '', 
       if (!absent && !isExam && !didNotRecite) 'total_memorized_pages': totalPages,
     };
+
+    // 🚀 جدولة مهمة مزامنة فورية بالخلفية قسراً بمجرد قيام المشرف بالضغط على حفظ الجلسة
+    Workmanager().registerOneOffTask(
+      "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
+      "sync_sessions_data",
+      constraints: Constraints(
+        networkType: NetworkType.connected, // لا تعمل إلا عند شبك الهاتف بالإنترنت
+      ),
+    );
 
     FirebaseFirestore.instance.collection('sessions').add(sessionData).then((_) {
       sessionService.recalculateConsecutiveAbsences(widget.studentId);
@@ -541,7 +552,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       });
     }
 
-    // 🚀 تحديث رسائل الإشعارات لتشمل الحالة الجديدة
     String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : "📢 تحديث يومي من الحلقة"));
     String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
       : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 
@@ -699,8 +709,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                       onTap: onRemoveLast,
                       child: Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.2), shape: BoxShape.circle),
-                        child: const Icon(Icons.remove, size: 18, color: Colors.redAccent),
+                        decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                        child: const Icon(Icons.remove, size: 18, color: Colors.white),
                       ),
                     ),
                   const SizedBox(width: 10),
@@ -708,8 +718,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                     onTap: onAdd,
                     child: Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), shape: BoxShape.circle),
-                      child: const Icon(Icons.add, size: 18, color: Colors.green),
+                      decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                      child: const Icon(Icons.add, size: 18, color: Colors.white),
                     ),
                   ),
                 ],
@@ -735,7 +745,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                 ],
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -850,13 +860,12 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     ),
                                   ),
                                   const SizedBox(height: 10),
-                                  // 🚀 الخيار الجديد لعدم التسميع رغم الحضور
                                   Container(
                                     decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
                                     child: SwitchListTile(
                                       activeColor: Colors.blueGrey,
                                       value: didNotRecite,
-                                      title: Text("حضر لكن لم يقرأ/يسمّع شيء؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                      title: Text("حضر لكن لم يقرأ/يسمّع شيء?", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                                       secondary: Icon(Icons.speaker_notes_off_outlined, color: didNotRecite ? Colors.blueGrey : (isDarkMode ? Colors.white70 : primaryColor)),
                                       onChanged: (v) { 
                                         setState(() { 
@@ -980,7 +989,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                               isDarkMode: isDarkMode,
                               child: Column(
                                 children: [
-                                  // 🚀 إخفاء التقييمات القرآنية إذا كان الطالب لم يقرأ شيء، لكن نبقي حالة السلوك
                                   if (!didNotRecite && !isCompletedStudent && hasNewMemorization) ...[
                                     DropdownButtonFormField<String>(
                                       value: memorizationRating,
@@ -1134,7 +1142,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                   TextField(
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                                     controller: absenceReasonController,
-                                    decoration: _glassInputDecoration("سبب الغياب (اختياري مثل: مرض، سفر...)", Icons.help_outline, isDarkMode, suffixIcon: _buildMicButton(absenceReasonController, isDarkMode)),
+                                    decoration: _glassInputDecoration("سبب الغياب (العذر بالتفصيل...)", Icons.help_outline, isDarkMode, suffixIcon: _buildMicButton(absenceReasonController, isDarkMode)),
                                   ),
                                 ],
                               ),
@@ -1179,30 +1187,24 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   }
 
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = const EdgeInsets.all(16)}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(25),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4),
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.03),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: child,
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(
+          color: isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.75),
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDarkMode ? 0.25 : 0.03),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
+      child: child,
     );
   }
 
