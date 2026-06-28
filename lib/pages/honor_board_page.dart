@@ -39,7 +39,6 @@ class HonorBoardPage extends StatelessWidget {
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
         actions: [
-          // 🚀 زر مشاركة البوستر الجديد
           IconButton(
             icon: Icon(Icons.ios_share_rounded, color: isDarkMode ? goldColor : primaryColor),
             tooltip: "مشاركة البوستر كصورة",
@@ -97,7 +96,7 @@ class HonorBoardPage extends StatelessWidget {
                           children: [
                             Text("فرسان الحلقة", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                             const SizedBox(height: 5),
-                            Text("الطلاب الأكثر تميزاً وإنجازاً باختيار الإدارة", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 13, fontWeight: FontWeight.w600)),
+                            Text("الطلاب الأكثر تميزاً وإنجازاً باختيار الإدارة", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
                           ],
                         ),
                       ),
@@ -141,20 +140,27 @@ class HonorBoardPage extends StatelessWidget {
             if (!snapshot.data!.exists) {
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Text("لم يتم اختيار فرسان هذه الفئة بعد.", style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+                child: Text("لم يتم اختيار فرسان هذه الفئة بعد.", style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.grey, fontSize: 13, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
               );
             }
 
             var data = snapshot.data!.data() as Map<String, dynamic>;
-            List<dynamic> positions = [data['first'], data['second'], data['third']];
+            
+            // 🚀 الدعم المزدوج للنظام القديم (3 فرسان) والجديد (قائمة مفتوحة)
+            List<dynamic> knights = data.containsKey('knights') ? data['knights'] : [];
+            if (knights.isEmpty && data.containsKey('first')) {
+              knights = [data['first'], data['second'], data['third']];
+            }
 
-            return Column(
-              children: List.generate(3, (index) {
-                var student = positions[index];
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: knights.length,
+              itemBuilder: (context, index) {
+                var student = knights[index];
                 if (student == null || student['name'] == "لم يحدد") return const SizedBox();
 
-                Color medalColor = index == 0 ? goldColor : (index == 1 ? silverColor : bronzeColor);
-                bool isFirst = index == 0;
+                Color medalColor = index == 0 ? goldColor : (index == 1 ? silverColor : (index == 2 ? bronzeColor : primaryColor.withOpacity(0.6)));
 
                 final dynamic rawSerial = student['serial'];
                 final int serialNumber = rawSerial is int ? rawSerial : (int.tryParse(rawSerial?.toString() ?? '') ?? 0);
@@ -175,7 +181,7 @@ class HonorBoardPage extends StatelessWidget {
                       child: _buildGlassContainer(
                         isDarkMode: isDarkMode,
                         padding: const EdgeInsets.all(12),
-                        customColor: isDarkMode ? Colors.white.withOpacity(0.05) : (isFirst ? goldColor.withOpacity(0.08) : Colors.white.withOpacity(0.4)),
+                        customColor: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.4),
                         customBorderColor: medalColor.withOpacity(isDarkMode ? 0.6 : 0.8), 
                         child: Row(
                           children: [
@@ -203,9 +209,9 @@ class HonorBoardPage extends StatelessWidget {
                                     ? CachedNetworkImage(
                                         imageUrl: imageUrl, fit: BoxFit.cover,
                                         placeholder: (c, u) => const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                                        errorWidget: (c, u, e) => Center(child: Text(firstLetter, style: TextStyle(color: medalColor, fontWeight: FontWeight.bold, fontSize: 20))),
+                                        errorWidget: (c, u, e) => Center(child: Text(firstLetter, style: TextStyle(color: medalColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'))),
                                       )
-                                    : Center(child: Text(firstLetter, style: TextStyle(color: medalColor, fontWeight: FontWeight.bold, fontSize: 20))),
+                                    : Center(child: Text(firstLetter, style: TextStyle(color: medalColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Cairo'))),
                               ),
                             ),
                             const SizedBox(width: 15),
@@ -215,7 +221,7 @@ class HonorBoardPage extends StatelessWidget {
                                 children: [
                                   Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor)),
                                   const SizedBox(height: 4),
-                                  Text("الرقم التسلسلي: $serialNumber", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.grey[700], fontWeight: FontWeight.w600)),
+                                  Text("الرقم التسلسلي: $serialNumber", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.grey[700], fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
                                 ],
                               ),
                             ),
@@ -225,7 +231,7 @@ class HonorBoardPage extends StatelessWidget {
                     );
                   }
                 );
-              }),
+              },
             );
           },
         ),
@@ -254,7 +260,7 @@ class HonorBoardPage extends StatelessWidget {
 }
 
 // 🚀=============================================================🚀
-// 🚀 شاشة توليد البوستر التسويقي الأوتوماتيكي (The Marketing Engine) 🚀
+// 🚀 شاشة توليد البوستر التسويقي الديناميكي الشبكي (The Grid Engine) 🚀
 // 🚀=============================================================🚀
 class HonorBoardPosterScreen extends StatefulWidget {
   const HonorBoardPosterScreen({super.key});
@@ -268,9 +274,8 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
   bool _isCapturing = false;
   bool _isLoading = true;
 
-  List<Map<String, dynamic>> newStudents = [];
-  List<Map<String, dynamic>> oldStudents = [];
-  List<Map<String, dynamic>> completedStudents = [];
+  // قائمة موحدة لجميع النجوم
+  List<Map<String, dynamic>> allWinners = [];
 
   final Color royalNavy = const Color(0xff1A2A3A);
   final Color pureGold = const Color(0xffD4AF37);
@@ -278,29 +283,38 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchAllWinners();
+    _loadAllCategoryWinners();
   }
 
-  // 🚀 دالة سحب بيانات الفرسان لتجهيز البوستر
-  Future<void> _fetchAllWinners() async {
-    newStudents = await _fetchCategoryData('new_students');
-    oldStudents = await _fetchCategoryData('old_students');
-    completedStudents = await _fetchCategoryData('completed_students');
-    setState(() { _isLoading = false; });
+  Future<void> _loadAllCategoryWinners() async {
+    List<Map<String, dynamic>> newS = await _fetchCategoryKnights('new_students');
+    List<Map<String, dynamic>> oldS = await _fetchCategoryKnights('old_students');
+    List<Map<String, dynamic>> compS = await _fetchCategoryKnights('completed_students');
+    
+    if (mounted) {
+      setState(() {
+        allWinners = [...newS, ...oldS, ...compS];
+        _isLoading = false;
+      });
+    }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchCategoryData(String docId) async {
+  Future<List<Map<String, dynamic>>> _fetchCategoryKnights(String docId) async {
     var doc = await FirebaseFirestore.instance.collection('honor_board').doc(docId).get();
     if (!doc.exists) return [];
     var data = doc.data()!;
-    List<dynamic> positions = [data['first'], data['second'], data['third']];
-    List<Map<String, dynamic>> validStudents = [];
+    
+    List<dynamic> knights = data.containsKey('knights') ? data['knights'] : [];
+    if (knights.isEmpty && data.containsKey('first')) {
+      knights = [data['first'], data['second'], data['third']];
+    }
 
-    for (int i = 0; i < positions.length; i++) {
-      var pos = positions[i];
-      if (pos == null || pos['name'] == 'لم يحدد') continue;
+    List<Map<String, dynamic>> list = [];
+    for (int i = 0; i < knights.length; i++) {
+      var k = knights[i];
+      if (k == null || k['name'] == 'لم يحدد') continue;
 
-      dynamic rawSerial = pos['serial'];
+      dynamic rawSerial = k['serial'];
       int serialNumber = rawSerial is int ? rawSerial : (int.tryParse(rawSerial?.toString() ?? '') ?? 0);
       
       String imageUrl = '';
@@ -309,36 +323,33 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
         imageUrl = (sSnap.docs.first.data() as Map<String, dynamic>)['imageUrl'] ?? '';
       }
 
-      validStudents.add({
-        'name': pos['name'],
+      list.add({
+        'name': k['name'],
         'imageUrl': imageUrl,
-        'rank': i + 1,
+        'index': i, // للاحتفاظ بلون الميدالية بناءً على ترتيبه في فئته
       });
     }
-    return validStudents;
+    return list;
   }
 
-  // 🚀 دالة التقاط الصورة والمشاركة (السحر الحقيقي)
   Future<void> _captureAndSharePng() async {
     setState(() { _isCapturing = true; });
     try {
-      // إعطاء وقت قصير للفلاتر ليرسم الواجهة بدون أزرار
       await Future.delayed(const Duration(milliseconds: 300));
-      
       RenderRepaintBoundary boundary = _globalKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 3.0); // جودة عالية جداً 4K
+      ui.Image image = await boundary.toImage(pixelRatio: 3.0); 
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
 
       final directory = await getTemporaryDirectory();
-      final imagePath = await File('${directory.path}/honor_stars.png').create();
+      final imagePath = await File('${directory.path}/honor_poster.png').create();
       await imagePath.writeAsBytes(pngBytes);
 
       setState(() { _isCapturing = false; });
-      await Share.shareXFiles([XFile(imagePath.path)], text: '🌟 نجوم وفرسان الحلقة لهذا الأسبوع، بارك الله فيهم وزادهم علماً 🌟');
+      await Share.shareXFiles([XFile(imagePath.path)], text: '🌟 نجوم وفرسان المعهد المتميزين، بارك الله فيهم وزادهم علماً وتفوقاً 🌟');
     } catch (e) {
       setState(() { _isCapturing = false; });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("حدث خطأ أثناء حفظ الصورة")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("حدث خطأ أثناء حفظ الصورة", style: TextStyle(fontFamily: 'Cairo'))));
     }
   }
 
@@ -358,127 +369,136 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
       floatingActionButton: _isCapturing 
           ? null 
           : FloatingActionButton.extended(
-              onPressed: _isLoading ? null : _captureAndSharePng,
+              onPressed: _isLoading || allWinners.isEmpty ? null : _captureAndSharePng,
               backgroundColor: pureGold,
               icon: const Icon(Icons.share, color: Colors.black),
               label: const Text("مشاركة الصورة", style: TextStyle(color: Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
             ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: Colors.amber))
-        : Center(
-            child: InteractiveViewer( // مشان يقدر يقرّب الصورة ويعاينها قبل النشر
-              child: RepaintBoundary(
-                key: _globalKey,
-                child: Container(
-                  width: 1080 / 2.5, // نسبة وتناسب ستوري الانستغرام وحالات الواتس
-                  height: 1920 / 2.5,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [royalNavy, const Color(0xff0f172a)],
-                      begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        : allWinners.isEmpty 
+            ? const Center(child: Text("لا يوجد نجوم لعرضهم بالبوستر حالياً", style: TextStyle(color: Colors.white, fontFamily: 'Cairo')))
+            : Center(
+                child: InteractiveViewer(
+                  child: RepaintBoundary(
+                    key: _globalKey,
+                    child: Container(
+                      width: 1080 / 2.5, 
+                      height: 1920 / 2.5,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xff1A2A3A), Color(0xff090d16)],
+                          begin: Alignment.topCenter, 
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                      child: Stack(
+                        children: [
+                          Positioned(top: 60, right: -30, child: Icon(Icons.workspace_premium, size: 180, color: pureGold.withValues(alpha: 0.04))),
+                          Positioned(bottom: 120, left: -40, child: Icon(Icons.auto_awesome, size: 220, color: pureGold.withValues(alpha: 0.04))),
+                          
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 35),
+                            child: Column(
+                              children: [
+                                Icon(Icons.stars_rounded, color: pureGold, size: 55),
+                                const SizedBox(height: 8),
+                                Text("نجوم التميز الشرفية", style: TextStyle(color: pureGold, fontSize: 26, fontWeight: FontWeight.w900, fontFamily: 'Cairo', shadows: [Shadow(color: pureGold.withValues(alpha: 0.6), blurRadius: 12)])),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                  decoration: BoxDecoration(color: pureGold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20), border: Border.all(color: pureGold.withValues(alpha: 0.4))),
+                                  child: Text("تاريخ الإعلان: $todayDate", style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                ),
+                                
+                                const SizedBox(height: 30),
+                                
+                                // 🚀 التوزيع الشبكي الديناميكي الذكي للطلاب
+                                Expanded(
+                                  child: Center(
+                                    child: GridView.builder(
+                                      shrinkWrap: true,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      itemCount: allWinners.length,
+                                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: allWinners.length <= 3 ? 1 : (allWinners.length <= 8 ? 2 : 3), 
+                                        crossAxisSpacing: 16,
+                                        mainAxisSpacing: 16,
+                                        childAspectRatio: allWinners.length <= 3 ? 2.5 : 0.85, 
+                                      ),
+                                      itemBuilder: (context, idx) {
+                                        var winner = allWinners[idx];
+                                        String wName = winner['name'];
+                                        String firstL = wName.isNotEmpty ? wName.trim().substring(0, 1) : "?";
+                                        int rankIdx = winner['index'];
+                                        
+                                        Color medalC = rankIdx == 0 ? pureGold : (rankIdx == 1 ? const Color(0xffC0C0C0) : (rankIdx == 2 ? const Color(0xffCD7F32) : Colors.white38));
+
+                                        return Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(alpha: 0.03),
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(color: medalC.withValues(alpha: 0.3), width: 1.2),
+                                          ),
+                                          child: allWinners.length <= 3 
+                                              ? Row( 
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    _buildAvatarCircle(winner['imageUrl'], firstL, medalC),
+                                                    const SizedBox(width: 15),
+                                                    Expanded(child: Text(wName, style: const TextStyle(color: Colors.white, fontSize: 15, fontFamily: 'Cairo', fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                                                  ],
+                                                )
+                                              : Column( 
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    _buildAvatarCircle(winner['imageUrl'], firstL, medalC),
+                                                    const SizedBox(height: 10),
+                                                    Text(wName, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold, height: 1.2)),
+                                                  ],
+                                                ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                                
+                                const SizedBox(height: 20),
+                                const Divider(color: Colors.white12),
+                                Text("نسأل الله لهم الثبات والمزيد من الفتوحات والتميز", style: TextStyle(color: pureGold.withValues(alpha: 0.7), fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                          
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(border: Border.all(color: pureGold.withValues(alpha: 0.4), width: 2.5)),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  child: Stack(
-                    children: [
-                      // ديكور النجوم بالخلفية
-                      Positioned(top: 50, right: -20, child: Icon(Icons.star, size: 150, color: pureGold.withOpacity(0.05))),
-                      Positioned(bottom: 100, left: -30, child: Icon(Icons.auto_awesome, size: 200, color: pureGold.withOpacity(0.05))),
-                      
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-                        child: Column(
-                          children: [
-                            // 🎩 ترويسة البوستر
-                            Icon(Icons.workspace_premium, color: pureGold, size: 60),
-                            const SizedBox(height: 10),
-                            Text("نجـوم الحلقـة", style: TextStyle(color: pureGold, fontSize: 32, fontWeight: FontWeight.w900, fontFamily: 'Cairo', shadows: [Shadow(color: pureGold.withOpacity(0.5), blurRadius: 15)])),
-                            const SizedBox(height: 5),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-                              decoration: BoxDecoration(color: pureGold.withOpacity(0.2), borderRadius: BorderRadius.circular(20), border: Border.all(color: pureGold.withOpacity(0.5))),
-                              child: Text("تاريخ الإعلان: $todayDate", style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                            ),
-                            
-                            const SizedBox(height: 30),
-                            
-                            // 👥 عرض الفرسان
-                            Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  if (newStudents.isNotEmpty) _buildPosterSection("الطلاب الجدد", newStudents),
-                                  if (oldStudents.isNotEmpty) _buildPosterSection("الطلاب القدماء", oldStudents),
-                                  if (completedStudents.isNotEmpty) _buildPosterSection("الخاتمين المتميزين", completedStudents),
-                                ],
-                              ),
-                            ),
-                            
-                            // 📜 تذييل البوستر
-                            const Divider(color: Colors.white24),
-                            Text("نسأل الله لهم الثبات والمزيد من التفوق", style: TextStyle(color: pureGold.withOpacity(0.8), fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                      
-                      // إطار ذهبي محيط بالبوستر
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(border: Border.all(color: pureGold.withOpacity(0.5), width: 3)),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),
-            ),
-          ),
     );
   }
 
-  Widget _buildPosterSection(String title, List<Map<String, dynamic>> students) {
-    return Column(
-      children: [
-        Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: students.map((student) {
-            String firstLetter = student['name'].isNotEmpty ? student['name'].trim().substring(0, 1) : "?";
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Column(
-                children: [
-                  Container(
-                    width: 65, height: 65,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: pureGold, width: 2.5),
-                      boxShadow: [BoxShadow(color: pureGold.withOpacity(0.4), blurRadius: 10)],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(40),
-                      child: student['imageUrl'].isNotEmpty
-                          ? CachedNetworkImage(imageUrl: student['imageUrl'], fit: BoxFit.cover)
-                          : Container(color: Colors.white10, child: Center(child: Text(firstLetter, style: TextStyle(color: pureGold, fontSize: 24, fontWeight: FontWeight.bold)))),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: 80,
-                    child: Text(
-                      student['name'],
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.w600, height: 1.2),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ],
+  Widget _buildAvatarCircle(String url, String firstLetter, Color medalC) {
+    return Container(
+      width: 60, height: 60,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: medalC, width: 2),
+        boxShadow: [BoxShadow(color: medalC.withOpacity(0.3), blurRadius: 8)],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(40),
+        child: url.isNotEmpty
+            ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
+            : Container(color: Colors.white10, child: Center(child: Text(firstLetter, style: TextStyle(color: medalC, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo')))),
+      ),
     );
   }
 }

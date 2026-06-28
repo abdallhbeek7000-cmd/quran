@@ -10,6 +10,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:quran_habal/widgets/offline_wrapper.dart'; 
 // 🚀 استيراد مكتبة حزمة المزامنة بالخلفية المضافة
 import 'package:workmanager/workmanager.dart';
+import 'package:flutter/foundation.dart'; // 🚀 استيراد مكتبة فحص الويب
 import 'firebase_options.dart';
 import 'utils/app_colors.dart';
 import 'pages/login_page.dart';
@@ -68,10 +69,12 @@ void main() async {
   );
 
   // 🚀 2. تهيئة الـ Workmanager وربطها بالـ callbackDispatcher المستقلة
+  if (!kIsWeb) {
   await Workmanager().initialize(
     callbackDispatcher,
     isInDebugMode: false, // اجعلها true فقط أثناء التجربة البرمجية بالـ Emulator لو أحببت فحص تفاصيل الكونسول
   );
+  }
 
   FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
   

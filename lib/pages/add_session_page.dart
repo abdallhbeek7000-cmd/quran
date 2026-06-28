@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt; 
 // 🚀 استيراد حزمة الجدولة بالخلفية المضافة
 import 'package:workmanager/workmanager.dart';
+import 'package:flutter/foundation.dart'; // 🚀 استيراد مكتبة فحص الويب
 import '../models/session_model.dart';
 import '../services/session_service.dart';
 import '../services/theme_provider.dart'; 
@@ -534,6 +535,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     };
 
     // 🚀 جدولة مهمة مزامنة فورية بالخلفية قسراً بمجرد قيام المشرف بالضغط على حفظ الجلسة
+    if (!kIsWeb) {
     Workmanager().registerOneOffTask(
       "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
       "sync_sessions_data",
@@ -541,6 +543,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         networkType: NetworkType.connected, // لا تعمل إلا عند شبك الهاتف بالإنترنت
       ),
     );
+    }
 
     FirebaseFirestore.instance.collection('sessions').add(sessionData).then((_) {
       sessionService.recalculateConsecutiveAbsences(widget.studentId);
