@@ -15,10 +15,11 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
   String selectedCategory = "new_students"; 
   String currentStudentType = "new"; 
   
-  // 🚀 تحويل البنية إلى قائمة ديناميكية مرنة تتسع لأي عدد من النجوم
   List<Map<String, dynamic>> knightsList = [];
   
   bool isSaving = false;
+  bool isClearing = false; // 🚀 حالة تحميل لزر الحذف
+
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37); 
 
@@ -30,7 +31,6 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
         knightsList = List<Map<String, dynamic>>.from(data['knights']);
       });
     } else if (doc.exists && doc.data()!.containsKey('first')) {
-      // 🚀 أمان ودعم رجعي: لو الداتا القديمة (أول، ثاني، ثالث) موجودة يحولها تلقائياً للنظام الجديد
       var data = doc.data()!;
       setState(() {
         knightsList = [
@@ -42,7 +42,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
     } else {
       setState(() {
         knightsList = [
-          {'name': 'لم يحدد', 'serial': '---'} // البداية الافتراضية بنجم واحد
+          {'name': 'لم يحدد', 'serial': '---'} 
         ];
       });
     }
@@ -57,7 +57,6 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
   void saveHonorBoard() async {
     setState(() => isSaving = true);
     
-    // 🚀 حفظ القائمة بالكامل دفعة واحدة في الفايربيز
     await FirebaseFirestore.instance.collection('honor_board').doc(selectedCategory).set({
       'knights': knightsList.isEmpty ? [{'name': 'لم يحدد', 'serial': '---'}] : knightsList,
     });
@@ -66,6 +65,55 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث لوحة الشرف بنجاح! 🏆", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
+    );
+  }
+
+  // 🚀 دالة تصفير اللوحة وحذف النجوم مع رسالة تأكيد
+  void clearHonorBoard(bool isDarkMode) async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Text("تصفير اللوحة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: isDarkMode ? Colors.white : Colors.black87)),
+          ],
+        ),
+        content: Text("هل أنت متأكد أنك تريد حذف جميع النجوم من هذه الفئة وتصفير اللوحة بالكامل؟", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: isDarkMode ? Colors.white70 : Colors.black87)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("نعم، احذف", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => isClearing = true);
+
+    // إعادة الفايربيز للوضع الافتراضي الفارغ
+    await FirebaseFirestore.instance.collection('honor_board').doc(selectedCategory).set({
+      'knights': [],
+    });
+
+    setState(() {
+      knightsList = [{'name': 'لم يحدد', 'serial': '---'}];
+      isClearing = false;
+    });
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(backgroundColor: Colors.redAccent, content: Text("تم تصفير اللوحة وحذف النجوم بنجاح! 🗑️", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
     );
   }
 
@@ -181,13 +229,12 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                       
                       const SizedBox(height: 20),
 
-                      // 🧊 كرت اختيار الفرسان والنجوم الديناميكي المطور
+                      // كرت اختيار الفرسان والنجوم
                       _buildGlassContainer(
                         isDarkMode: isDarkMode,
                         padding: const EdgeInsets.all(22),
                         child: Column(
                           children: [
-                            // 🚀 بناء حقول الاختيار ديناميكياً بحسب طول القائمة المحددة
                             ListView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
@@ -215,7 +262,6 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                             
                             const SizedBox(height: 25),
                             
-                            // 🚀 أزرار التحكم بالزيادة والنقصان في ذيل كرت النجوم
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
@@ -248,7 +294,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                       
                       const SizedBox(height: 35),
                       
-                      // زر الحفظ النهائي
+                      // 🚀 زر الحفظ الإيجابي
                       SizedBox(
                         width: double.infinity,
                         height: 55,
@@ -265,6 +311,27 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                               : const Text("حفظ اللوحة بالكامل", style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Cairo', letterSpacing: 0.5)),
                         ),
                       ),
+                      const SizedBox(height: 15),
+
+                      // 🚀 الزر الجديد: تصفير اللوحة وحذف النجوم
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                            side: BorderSide(color: Colors.redAccent.withOpacity(0.5), width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            backgroundColor: Colors.redAccent.withOpacity(0.05),
+                          ),
+                          onPressed: isClearing ? null : () => clearHonorBoard(isDarkMode),
+                          icon: isClearing 
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2)) 
+                              : const Icon(Icons.delete_sweep_rounded),
+                          label: const Text("تصفير اللوحة وحذف النجوم", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                        ),
+                      ),
+                      
                       const SizedBox(height: 30),
                     ],
                   ),
