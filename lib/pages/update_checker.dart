@@ -2,13 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart'; 
-import '../main.dart'; // استيراد الـ main لقط لـ navigatorKey السحري
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🚀 1. استيراد مكتبة الإشعارات
+import '../main.dart'; 
 
 class UpdateChecker {
 
   static Future<void> checkForUpdates() async {
     try {
       print("🎯 [UpdateChecker] بدأ فحص التحديثات المعزول تماماً...");
+
+      // 🚀 2. الاشتراك التلقائي والصامت بقناة التحديثات
+      try {
+        await FirebaseMessaging.instance.subscribeToTopic('app_updates');
+        print("🎯 [UpdateChecker] تم الاشتراك بنجاح في قناة إشعارات التحديثات");
+      } catch (e) {
+        print("❌ [UpdateChecker] فشل الاشتراك في قناة التحديثات: $e");
+      }
       
       // 1. جلب رقم إصدار التطبيق الحالي من الـ pubspec.yaml تلقائياً
       PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -27,7 +36,7 @@ class UpdateChecker {
         int serverVersion = int.tryParse(data['supervisors_current_version']?.toString() ?? '0') ?? 0;
         
         // ⚠️ قفل الأمان: نسحب فقط الحقل المخصّص للمشرفين ولا نلتفت لـ update_url نهائياً!
-        String updateUrl = data['supervisors_update_url']?.toString()?.trim() ?? '';
+        String updateUrl = data['supervisors_update_url']?.toString().trim() ?? '';
 
         print("🎯 [UpdateChecker] إصدار السيرفر المقروء: $serverVersion");
         print("🎯 [UpdateChecker] إصدار جهاز المشرف الحالي: $currentVersionCode");

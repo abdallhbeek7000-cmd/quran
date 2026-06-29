@@ -242,6 +242,73 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // 🚀 دالة عرض منبثق تأكيد إرسال إشعار التحديث للجميع
+  void _showUpdateNotificationDialog(bool isDark) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isSending = false;
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  const Icon(Icons.system_update_rounded, color: Colors.blueAccent, size: 28),
+                  const SizedBox(width: 10),
+                  Text("إشعار التحديثات", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black87)),
+                ],
+              ),
+              content: Text("هل أنت متأكد أنك تريد إرسال إشعار بوجود تحديث جديد لجميع الأجهزة المشتركة الآن؟", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: isDark ? Colors.white70 : Colors.black87, height: 1.5)),
+              actions: [
+                if (isSending)
+                  const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator())
+                else ...[
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.grey)),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                    onPressed: () async {
+                      setStateDialog(() => isSending = true);
+
+                      try {
+                        // 🎯 توثيق أمر الإرسال في قاعدة البيانات (ليتم التقاطه من السيرفر أو الدوال الخاصة بكم)
+                        await FirebaseFirestore.instance.collection('global_notifications').add({
+                          'topic': 'app_updates',
+                          'title': 'تحديث جديد متاح 🚀',
+                          'body': 'تم إطلاق نسخة جديدة من التطبيق. يرجى التحديث الآن للحصول على أفضل تجربة وأحدث الميزات.',
+                          'timestamp': FieldValue.serverTimestamp(),
+                          'sentBy': widget.uid,
+                        });
+
+                        await Future.delayed(const Duration(seconds: 1)); // تأخير جمالي بسيط
+                        
+                        if (!mounted) return;
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(backgroundColor: Colors.green, content: Text("تم إرسال إشعار التحديث للجميع بنجاح! 🚀", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
+                        );
+                      } catch (e) {
+                        setStateDialog(() => isSending = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(backgroundColor: Colors.redAccent, content: Text("حدث خطأ أثناء الإرسال: $e", style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
+                        );
+                      }
+                    },
+                    child: const Text("نعم، أرسل للجميع", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                ]
+              ],
+            );
+          }
+        );
+      }
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -275,7 +342,6 @@ class _HomePageState extends State<HomePage> {
         ),
         body: Stack(
           children: [
-            // خلفية التدرج
             Container(
               width: double.infinity, height: double.infinity,
               decoration: BoxDecoration(
@@ -286,7 +352,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             
-            // الدوائر الخلفية (ثابتة وواضحة جداً الحين دون تغبيش يخفيها)
             Stack(
               children: [
                 Positioned(
@@ -300,12 +365,10 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
 
-            // 🚀 استخدام CustomScrollView المحترف لمنع الـ Lag نهائياً وثبات السكرول
             SafeArea(
               child: CustomScrollView(
                 physics: const BouncingScrollPhysics(),
                 slivers: [
-                  // جزء البروفايل العلوي (هاد بس المسموح نخليه زجاجي ثقيل لأنه ثابت وما بيأثر ع السكرول)
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     sliver: SliverToBoxAdapter(
@@ -313,7 +376,6 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   
-                  // شبكة الأزرار الـ 12 الموزعة بخفة وسلاسة مطلقة
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
                     sliver: SliverGrid(
@@ -326,6 +388,9 @@ class _HomePageState extends State<HomePage> {
                       delegate: SliverChildListDelegate([
                         if (widget.role == "manager") ...[
                           _buildPerformanceMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
+                          // 🚀 الزر الجديد المضاف للمدير حصراً
+                          _buildPerformanceMenuCard(Icons.update_rounded, "إشعار تحديث", () => _showUpdateNotificationDialog(isDark), isDark),
+                          
                           _buildPerformanceMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
                           _buildPerformanceMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), isDark),
                           _buildPerformanceMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), isDark),
@@ -357,7 +422,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🚀 كرت البروفايل العلوي يحتفظ بالزجاج والغبش الحقيقي الفخم لأنه ثابت بالأعلى
   Widget _buildRealGlassHeader(bool isDark, String currentCollection) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),
@@ -442,7 +506,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🚀 كروت الأزرار الـ 12 أصبحت خفيفة جداً بشفافية ذكية وظلال ممتازة لتبدو زجاجية تماماً وواضحة فوق الدوائر وبسرعة صاروخية!
   Widget _buildPerformanceMenuCard(IconData icon, String title, VoidCallback onTap, bool isDark) {
     return InkWell(
       onTap: onTap,
