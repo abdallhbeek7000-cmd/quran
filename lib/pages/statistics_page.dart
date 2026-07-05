@@ -62,20 +62,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
            d.isBefore(end.add(const Duration(seconds: 1)));
   }
 
-  int _getMinNumber(String? text) {
-    if (text == null || text.trim().isEmpty) return -1;
-    var matches = RegExp(r'\d+').allMatches(text);
-    if (matches.isEmpty) return -1;
-    return matches.map((m) => int.parse(m.group(0)!)).reduce((a, b) => a < b ? a : b);
-  }
-
-  int _getMaxNumber(String? text) {
-    if (text == null || text.trim().isEmpty) return -1;
-    var matches = RegExp(r'\d+').allMatches(text);
-    if (matches.isEmpty) return -1;
-    return matches.map((m) => int.parse(m.group(0)!)).reduce((a, b) => a > b ? a : b);
-  }
-
+  // 🚀 الدالة الذكية لحساب الصفحات من النصوص (تدعم المواضع المتعددة بالفواصل | أو "و")
   int _calculatePagesFromText(String? text) {
     if (text == null || text.trim().isEmpty) return 0;
     
@@ -164,7 +151,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         var sSessions = sessionsSnap.docs.where((doc) {
           var data = doc.data();
           if (data['studentId'] != sId) return false;
-          if (filterMode == 2) return true; // 🚀 كامل الدورة: لا يوجد قيود على التاريخ
+          if (filterMode == 2) return true; // كامل الدورة: لا يوجد قيود على التاريخ
           return _isDateInRange(data['date'] ?? '', targetStart, targetEnd);
         }).map((d) => d.data()).toList();
 
@@ -183,61 +170,19 @@ class _StatisticsPageState extends State<StatisticsPage> {
         int totalPages = 0;
         int reviewPages = 0; 
         
+        // 🚀 الحل الجذري والمنطقي: حساب صفحات كل جلسة على حدة بناءً على نصوص المواضع ثم جمعها
         if (validSessions.isNotEmpty) {
           if (!isCompleted) {
-            // 🚀 إذا كان وضع "كامل الدورة" بنحسب مجموع الصفحات الفعلي التراكمي لكل جلسة تيسيراً وتجنباً لثغرات تقليب الأجزاء
-            if (filterMode == 2) {
-              for (var s in validSessions) {
-                totalPages += _calculatePagesFromText(s['newMemorization']?.toString());
-              }
-            } else {
-              // الوضع الطبيعي للأسبوعي والشهري (أول صفحة وآخر صفحة بالنطاق)
-              int minPage = 999999;
-              int maxPage = -1;
-
-              for (var s in validSessions) {
-                int currentMin = _getMinNumber(s['newMemorization']);
-                if (currentMin != -1) { minPage = currentMin; break; }
-              }
-
-              for (var s in validSessions.reversed) {
-                int currentMax = _getMaxNumber(s['newMemorization']);
-                if (currentMax != -1) { maxPage = currentMax; break; }
-              }
-
-              if (minPage != 999999 && maxPage != -1 && maxPage >= minPage) {
-                totalPages = (maxPage - minPage) + 1; 
-              }
-            }
-
             for (var s in validSessions) {
+              totalPages += _calculatePagesFromText(s['newMemorization']?.toString());
               reviewPages += _calculatePagesFromText(s['nearReview']?.toString());
               reviewPages += _calculatePagesFromText(s['farReview']?.toString());
             }
-
           } else {
-            // للطالب الخاتم
-            if (filterMode == 2) {
-              for (var s in validSessions) {
-                reviewPages += _calculatePagesFromText(s['farReview']?.toString());
-              }
-            } else {
-              int minR = 999999;
-              int maxR = -1;
-
-              for (var s in validSessions) {
-                int currentMin = _getMinNumber(s['farReview']);
-                if (currentMin != -1) { minR = currentMin; break; }
-              }
-
-              for (var s in validSessions.reversed) {
-                int currentMax = _getMaxNumber(s['farReview']);
-                if (currentMax != -1) { maxR = currentMax; break; }
-              }
-
-              if (minR != 999999 && maxR != -1 && maxR >= minR) {
-                reviewPages = (maxR - minR) + 1; 
-              }
+            // 👑 للطالب الخاتم: الاعتماد على مراجعة الختمة الشاملة (farReview) ومراكمتها بشكل سليم
+            for (var s in validSessions) {
+              reviewPages += _calculatePagesFromText(s['farReview']?.toString());
+              reviewPages += _calculatePagesFromText(s['nearReview']?.toString()); // احتياط في حال سجل بالجديد
             }
           }
         }
@@ -348,7 +293,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             SafeArea(
               child: Column(
                 children: [
-                  // 🚀 شريط التبديل الجديد المطور ليحوي 3 خيارات (أسبوعي / شهري / كامل الدورة)
+                  // 🚀 شريط التبديل المتطور (أسبوعي / شهري / كامل الدورة)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                     child: Container(
@@ -361,13 +306,13 @@ class _StatisticsPageState extends State<StatisticsPage> {
                         children: [
                           _buildTabButton(0, "أسبوعي", isDark),
                           _buildTabButton(1, "شهري", isDark),
-                          _buildTabButton(2, "كامل الدورة", isDark), // 🚀 الخيار التراكمي المضاف
+                          _buildTabButton(2, "كامل الدورة", isDark),
                         ],
                       ),
                     ),
                   ),
 
-                  // شريط التحكم بالزمن (يظهر نص توضيحي ثابت في وضع كامل الدورة)
+                  // شريط التحكم بالزمن
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                     child: Container(
@@ -444,7 +389,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
     );
   }
 
-  // ويدجت بناء أزرار الشريط العلوي لفلترة الوضع
   Widget _buildTabButton(int mode, String text, bool isDark) {
     bool isSelected = filterMode == mode;
     return Expanded(

@@ -27,6 +27,8 @@ import 'statistics_page.dart';
 import 'broadcast_page.dart'; 
 import '../services/notification_queue_manager.dart'; 
 import '../widgets/offline_wrapper.dart'; 
+import 'points_bank_page.dart'; // 🚀 استدعاء صفحة البنك الحقيقية
+
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -242,7 +244,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 🚀 دالة عرض منبثق تأكيد إرسال إشعار التحديث للجميع
   void _showUpdateNotificationDialog(bool isDark) {
     showDialog(
       context: context,
@@ -275,7 +276,6 @@ class _HomePageState extends State<HomePage> {
                       setStateDialog(() => isSending = true);
 
                       try {
-                        // 🎯 توثيق أمر الإرسال في قاعدة البيانات (ليتم التقاطه من السيرفر أو الدوال الخاصة بكم)
                         await FirebaseFirestore.instance.collection('global_notifications').add({
                           'topic': 'app_updates',
                           'title': 'تحديث جديد متاح 🚀',
@@ -284,7 +284,7 @@ class _HomePageState extends State<HomePage> {
                           'sentBy': widget.uid,
                         });
 
-                        await Future.delayed(const Duration(seconds: 1)); // تأخير جمالي بسيط
+                        await Future.delayed(const Duration(seconds: 1)); 
                         
                         if (!mounted) return;
                         Navigator.pop(ctx);
@@ -388,7 +388,6 @@ class _HomePageState extends State<HomePage> {
                       delegate: SliverChildListDelegate([
                         if (widget.role == "manager") ...[
                           _buildPerformanceMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
-                          // 🚀 الزر الجديد المضاف للمدير حصراً
                           _buildPerformanceMenuCard(Icons.update_rounded, "إشعار تحديث", () => _showUpdateNotificationDialog(isDark), isDark),
                           
                           _buildPerformanceMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
@@ -401,6 +400,10 @@ class _HomePageState extends State<HomePage> {
                           if (currentCycleModel != null)
                             _buildPerformanceMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), isDark),
                         ],
+
+                        // 🚀 الزر الجوهري الجديد (بنك النقاط والمكافآت) متاح للمدير والمشرفين 
+                        _buildPerformanceMenuCard(Icons.diamond_rounded, "بنك النقاط 💎", () => _nav(const PointsBankPage()), isDark),
+
                         if (currentCycleModel != null) ...[
                           _buildPerformanceMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
                           _buildPerformanceMenuCard(Icons.archive_rounded, "الطلاب المتوقفين", () => _nav(ArchivedStudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
