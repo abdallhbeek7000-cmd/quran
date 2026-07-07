@@ -29,7 +29,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadCycle();
   }
 
@@ -47,6 +47,84 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  // 🔮 🚀 المحرك السحري لإشعار السائل الزجاجي الذي ينزلق بفخامة من الأعلى
+  void _showTopPremiumToast({required String message, required IconData icon, required Color statusColor, required bool isDark}) {
+    final overlay = Overlay.of(context);
+    late OverlayEntry overlayEntry;
+
+    overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 15, // النزول أسفل النوتش بالملي
+        left: 20,
+        right: 20,
+        child: Material(
+          color: Colors.transparent,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: -100.0, end: 0.0), // الانزلاق السلس من الأعلى
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeOutBack,
+            builder: (context, value, child) {
+              return Transform.translate(
+                offset: Offset(0, value),
+                child: Opacity(
+                  opacity: (value + 100) / 100, // ظهور متدرج مع الانزلاق
+                  child: child,
+                ),
+              );
+            },
+            child: Directionality(
+              textDirection: TextDirection.rtl, // دعم محاذاة اللغة العربية الملكية
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // بلور زجاجي نقي خلف التنبيه
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xff1e293b).withOpacity(0.85) : Colors.white.withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: statusColor.withOpacity(0.4), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.06), blurRadius: 15, offset: const Offset(0, 8))
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: statusColor.withOpacity(0.15), shape: BoxShape.circle),
+                          child: Icon(icon, color: statusColor, size: 22),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            message,
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: isDark ? Colors.white : primaryColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // إدخال التنبيه وحذفه التلقائي بعد 3 ثوانٍ
+    overlay.insert(overlayEntry);
+    Future.delayed(const Duration(seconds: 3), () {
+      overlayEntry.remove();
+    });
   }
 
   // 🚀 1. نافذة إضافة النقاط للطالب
@@ -118,7 +196,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                       String reason = reasonController.text.trim();
 
                       if (pts <= 0 || reason.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إدخال عدد النقاط والسبب!", style: TextStyle(fontFamily: 'Cairo'))));
+                        _showTopPremiumToast(message: "يرجى إدخال عدد النقاط والسبب الفعلي!", icon: Icons.warning_amber_rounded, statusColor: Colors.orangeAccent, isDark: isDark);
                         return;
                       }
 
@@ -126,12 +204,10 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                       try {
                         String currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-                        // 1. تحديث رصيد الطالب
                         await FirebaseFirestore.instance.collection('students').doc(studentId).update({
                           'points': FieldValue.increment(pts)
                         });
 
-                        // 2. تسجيل العملية
                         await FirebaseFirestore.instance.collection('points_history').add({
                           'studentId': studentId,
                           'pointsAdded': pts,
@@ -140,7 +216,6 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                           'addedBy': currentUid,
                         });
 
-                        // 3. إرسال إشعار فوري
                         NotificationService.sendAndSaveNotification(
                           studentId: studentId,
                           title: "💎 كفو يا بطل! نقاط جديدة",
@@ -151,10 +226,12 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
 
                         if (!mounted) return;
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text("تمت إضافة النقاط بنجاح!", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))));
+                        
+                        // 🚀 استدعاء التنبيه الزجاجي الانزلاقي من الأعلى بنجاح
+                        _showTopPremiumToast(message: "تمت إضافة النقاط بنجاح وإشعار المحفظة الرقمية للطالب 💎", icon: Icons.check_circle_rounded, statusColor: Colors.green.shade600, isDark: isDark);
                       } catch (e) {
                         setDialogState(() => isAdding = false);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text("حدث خطأ: $e", style: const TextStyle(fontFamily: 'Cairo'))));
+                        _showTopPremiumToast(message: "حدث خطأ غير متوقع: $e", icon: Icons.error_outline_rounded, statusColor: Colors.redAccent, isDark: isDark);
                       }
                     },
                     child: const Text("حفظ وإشعار الطالب", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
@@ -196,19 +273,26 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                     child: StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance.collection('points_history')
                           .where('studentId', isEqualTo: studentId)
-                          .orderBy('timestamp', descending: true)
                           .snapshots(),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return Center(child: Text("لا يوجد سجل نقاط حتى الآن", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.grey)));
 
-                        var docs = snapshot.data!.docs;
+                        var docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
+                        docs.sort((a, b) {
+                          var tA = (a.data() as Map)['timestamp'] as Timestamp?;
+                          var tB = (b.data() as Map)['timestamp'] as Timestamp?;
+                          if (tA == null) return 1;
+                          if (tB == null) return -1;
+                          return tB.compareTo(tA);
+                        });
+
                         return ListView.builder(
                           physics: const BouncingScrollPhysics(),
                           itemCount: docs.length,
                           itemBuilder: (context, index) {
                             var data = docs[index].data() as Map<String, dynamic>;
-                            int pts = data['pointsAdded'] ?? 0;
+                            int pts = (data['pointsAdded'] ?? 0).toInt();
                             String reason = data['reason'] ?? '';
                             Timestamp? ts = data['timestamp'];
                             String dateStr = ts != null ? "${ts.toDate().year}-${ts.toDate().month}-${ts.toDate().day}" : "الآن";
@@ -221,7 +305,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                                 border: Border.all(color: isDark ? Colors.white12 : Colors.white),
                               ),
                               child: ListTile(
-                                leading: CircleAvatar(backgroundColor: accentGold.withOpacity(0.2), child: Text("+$pts", style: TextStyle(color: accentGold, fontWeight: FontWeight.bold))),
+                                leading: CircleAvatar(backgroundColor: accentGold.withOpacity(0.2), child: Text(pts > 0 ? "+$pts" : "$pts", style: TextStyle(color: pts > 0 ? accentGold : Colors.redAccent, fontWeight: FontWeight.bold))),
                                 title: Text(reason, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87, fontSize: 14)),
                                 subtitle: Text(dateStr, style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54, fontSize: 11)),
                               ),
@@ -236,7 +320,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
             ),
           ),
         );
-      }
+      },
     );
   }
 
@@ -338,7 +422,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                       String name = nameController.text.trim();
 
                       if (pts <= 0 || name.isEmpty || imageUrl == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إكمال جميع الحقول وإرفاق الصورة!", style: TextStyle(fontFamily: 'Cairo'))));
+                        _showTopPremiumToast(message: "يرجى ملء كافة التفاصيل وإرفاق صورة الجائزة!", icon: Icons.warning_rounded, statusColor: Colors.amber, isDark: isDark);
                         return;
                       }
 
@@ -353,10 +437,12 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
 
                         if (!mounted) return;
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text("تم إضافة الجائزة للمتجر بنجاح 🎁", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))));
+                        
+                        // 🚀 إطلاق توست زجاجي من الأعلى عند إضافة الجائزة
+                        _showTopPremiumToast(message: "تم تحديث الواجهة الموحدة للمتجر وإدراج الجائزة بنجاح 🎁", icon: Icons.shopping_bag_rounded, statusColor: accentGold, isDark: isDark);
                       } catch (e) {
                         setDialogState(() => isSaving = false);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text("حدث خطأ: $e", style: const TextStyle(fontFamily: 'Cairo'))));
+                        _showTopPremiumToast(message: "تعذر الحفظ: $e", icon: Icons.error_outline_rounded, statusColor: Colors.redAccent, isDark: isDark);
                       }
                     },
                     child: const Text("إضافة للمتجر", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
@@ -382,12 +468,11 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
           elevation: 0,
           backgroundColor: Colors.transparent,
           centerTitle: true,
-          title: Text("بنك النقاط 💎", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor)),
+          title: Text("بنك النقاط والمكافآت 💎", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor)),
           iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
         ),
         body: Stack(
           children: [
-            // 🚀 1. خلفية التدرج
             Container(
               width: double.infinity, height: double.infinity,
               decoration: BoxDecoration(
@@ -400,7 +485,6 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
               ),
             ),
             
-            // 🚀 2. الدوائر الخلفية المضيئة
             Stack(
               children: [
                 Positioned(
@@ -418,7 +502,6 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
               child: Column(
                 children: [
                   const SizedBox(height: 10),
-                  // 🚀 3. كبسولة الـ TabBar الزجاجية
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     decoration: BoxDecoration(
@@ -436,15 +519,15 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                       dividerColor: Colors.transparent,
                       labelColor: Colors.white,
                       unselectedLabelColor: isDark ? Colors.white54 : primaryColor.withOpacity(0.7),
-                      labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14),
+                      labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
                       tabs: const [
-                        Tab(text: "رصيد الطلاب", iconMargin: EdgeInsets.only(bottom: 4), icon: Icon(Icons.people_alt_rounded, size: 20)),
-                        Tab(text: "متجر الجوائز", iconMargin: EdgeInsets.only(bottom: 4), icon: Icon(Icons.storefront_rounded, size: 20)),
+                        Tab(text: "رصيد الطلاب", iconMargin: EdgeInsets.only(bottom: 4), icon: Icon(Icons.people_alt_rounded, size: 18)),
+                        Tab(text: "طلبات الاستبدال 🔔", iconMargin: EdgeInsets.only(bottom: 4), icon: Icon(Icons.shopping_cart_checkout_rounded, size: 18)),
+                        Tab(text: "متجر الجوائز", iconMargin: EdgeInsets.only(bottom: 4), icon: Icon(Icons.storefront_rounded, size: 18)),
                       ],
                     ),
                   ),
 
-                  // 🚀 4. محتوى التبويبات
                   Expanded(
                     child: isLoadingCycle
                         ? const Center(child: CircularProgressIndicator())
@@ -452,6 +535,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                             controller: _tabController,
                             children: [
                               _buildStudentsTab(isDark),
+                              _buildRequestsTab(isDark), 
                               _buildRewardsTab(isDark),
                             ],
                           ),
@@ -465,7 +549,6 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
     );
   }
 
-  // 👥 تبويبة الطلاب الزجاجية
   Widget _buildStudentsTab(bool isDark) {
     if (currentCycle == null) {
       return Center(child: Text("لا توجد دورة مفعلة حالياً", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : primaryColor)));
@@ -482,7 +565,6 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
 
         var docs = snapshot.data!.docs;
 
-        // ترتيب الطلاب بناءً على أعلى نقاط
         var sortedDocs = docs.toList()..sort((a, b) {
           int ptsA = (a.data() as Map<String, dynamic>)['points'] ?? 0;
           int ptsB = (b.data() as Map<String, dynamic>)['points'] ?? 0;
@@ -565,7 +647,133 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
     );
   }
 
-  // 🎁 تبويبة متجر الجوائز الزجاجية المتجاوبة (Responsive Grid)
+  Widget _buildRequestsTab(bool isDark) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('reward_requests').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(child: Text("لا توجد طلبات استبدال جوائز حالياً 🗓️", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : primaryColor)));
+        }
+
+        var requestDocs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
+        requestDocs.sort((a, b) {
+          var dataA = a.data() as Map<String, dynamic>;
+          var dataB = b.data() as Map<String, dynamic>;
+          String statusA = dataA['status'] ?? 'pending';
+          String statusB = dataB['status'] ?? 'pending';
+          
+          if (statusA == 'pending' && statusB != 'pending') return -1;
+          if (statusA != 'pending' && statusB == 'pending') return 1;
+          
+          Timestamp? tA = dataA['createdAt'] as Timestamp?;
+          Timestamp? tB = dataB['createdAt'] as Timestamp?;
+          if (tA == null) return 1;
+          if (tB == null) return -1;
+          return tB.compareTo(tA);
+        });
+
+        return ListView.builder(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          itemCount: requestDocs.length,
+          itemBuilder: (context, index) {
+            var req = requestDocs[index].data() as Map<String, dynamic>;
+            String requestId = requestDocs[index].id;
+            String studentName = req['studentName'] ?? 'طالب مجهول';
+            String rewardTitle = req['rewardTitle'] ?? 'جائزة';
+            String serial = req['studentSerial']?.toString() ?? '---';
+            String studentId = req['studentId'] ?? '';
+            int cost = (req['cost'] ?? 0).toInt();
+            String status = req['status'] ?? 'pending';
+            
+            bool isPending = status == 'pending';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isPending 
+                    ? (isDark ? const Color(0xff334155).withOpacity(0.4) : Colors.amber.withOpacity(0.08))
+                    : (isDark ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.02)),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: isPending ? accentGold.withOpacity(0.4) : (isDark ? Colors.white12 : Colors.black12), width: 1.2),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(color: primaryColor.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                              child: Text("تسلسلي: $serial", style: TextStyle(fontSize: 10, fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : primaryColor)),
+                            ),
+                            const SizedBox(width: 8),
+                            if (!isPending)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                                child: const Text("تم التسليم ✓", style: TextStyle(fontSize: 10, fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.green)),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(studentName, style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor)),
+                        const SizedBox(height: 2),
+                        Text("طلب استبدال: [$rewardTitle]", style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : Colors.grey.shade800)),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text("$cost نقطة", style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.w900, color: accentGold)),
+                      const SizedBox(height: 6),
+                      if (isPending)
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            minimumSize: Size.zero,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () async {
+                            await FirebaseFirestore.instance.collection('reward_requests').doc(requestId).update({
+                              'status': 'delivered',
+                              'deliveredAt': FieldValue.serverTimestamp(),
+                            });
+
+                            if (studentId.isNotEmpty) {
+                              NotificationService.sendAndSaveNotification(
+                                studentId: studentId,
+                                title: "🎉 مبارك! تم تسليم جائزتك",
+                                body: "وافقت الإدارة على طلبك وتم تسليمك [$rewardTitle]. يعطيك العافية يا بطل!",
+                                type: "reward_delivered",
+                                context: context,
+                              ).catchError((e) => print("فشل الإشعار العكسي: $e"));
+                            }
+
+                            // 🚀 إطلاق التنبيه الزجاجي الانزلاقي من الأعلى عند تأكيد التسليم
+                            _showTopPremiumToast(message: "تم تأكيد تسليم الهدية بنجاح وإرسال إشعار فوري لموبايل الطالب 🎉", icon: Icons.done_all_rounded, statusColor: Colors.greenAccent.shade700, isDark: isDark);
+                          },
+                          child: const Text("تأكيد التسليم 🎁", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                        ),
+                    ],
+                  )
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildRewardsTab(bool isDark) {
     return Stack(
       children: [
@@ -580,10 +788,9 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
             return GridView.builder(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 15, 20, 90),
-              // 🚀 التعديل السحري: شبكة متجاوبة حسب عرض الشاشة
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 180, // أقصى عرض للكرت الواحد
-                childAspectRatio: 0.85,  // تناسب الطول مع العرض
+                maxCrossAxisExtent: 180, 
+                childAspectRatio: 0.85,  
                 crossAxisSpacing: 15,
                 mainAxisSpacing: 15,
               ),
@@ -592,7 +799,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                 var data = docs[index].data() as Map<String, dynamic>;
                 String rewardId = docs[index].id;
                 String name = data['name'] ?? '';
-                int pts = data['pointsRequired'] ?? 0;
+                int pts = (data['pointsRequired'] ?? 0).toInt();
                 String img = data['imageUrl'] ?? '';
 
                 return Container(
@@ -631,6 +838,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                                   );
                                   if (confirm == true) {
                                     await FirebaseFirestore.instance.collection('rewards').doc(rewardId).delete();
+                                    _showTopPremiumToast(message: "تم حذف الجائزة وتحديث الرفوف الرقمية للمتجر", icon: Icons.delete_sweep_rounded, statusColor: Colors.redAccent, isDark: isDark);
                                   }
                                 },
                                 child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.delete_outline, color: Colors.white, size: 18)),
