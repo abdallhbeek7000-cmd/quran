@@ -146,7 +146,6 @@ class HonorBoardPage extends StatelessWidget {
 
             var data = snapshot.data!.data() as Map<String, dynamic>;
             
-            // 🚀 الدعم المزدوج للنظام القديم (3 فرسان) والجديد (قائمة مفتوحة)
             List<dynamic> knights = data.containsKey('knights') ? data['knights'] : [];
             if (knights.isEmpty && data.containsKey('first')) {
               knights = [data['first'], data['second'], data['third']];
@@ -260,7 +259,7 @@ class HonorBoardPage extends StatelessWidget {
 }
 
 // 🚀=============================================================🚀
-// 🚀 شاشة توليد البوستر التسويقي الديناميكي الشبكي (The Grid Engine) 🚀
+// 🚀 شاشة توليد البوستر التسويقي الديناميكي التكيفي الذكي 🚀
 // 🚀=============================================================🚀
 class HonorBoardPosterScreen extends StatefulWidget {
   const HonorBoardPosterScreen({super.key});
@@ -356,6 +355,30 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
   @override
   Widget build(BuildContext context) {
     String todayDate = "${DateTime.now().year} / ${DateTime.now().month} / ${DateTime.now().day}";
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // 🚀 الحسابات التكيفية الفخمة لمنع الـ Overflow وتصغير الحجم تلقائياً حسب عدد الطلاب
+    int totalStudents = allWinners.length;
+    
+    int crossAxisCount = 2; // الافتراضي لـ 4 طلاب أو أقل
+    double childAspectRatio = 0.82;
+    double avatarSize = 52.0;
+    double fontSize = 11.5;
+    double spacing = 14.0;
+
+    if (totalStudents > 4 && totalStudents <= 9) {
+      crossAxisCount = 3; // من 5 إلى 9 طلاب يقلب لـ 3 كروت بالسطر
+      childAspectRatio = 0.78;
+      avatarSize = 44.0;
+      fontSize = 9.5;
+      spacing = 10.0;
+    } else if (totalStudents > 9) {
+      crossAxisCount = 4; // أكثر من 9 طلاب يقلب لـ 4 كروت بالسطر لتوفير المساحة العمودية كلياً
+      childAspectRatio = 0.74;
+      avatarSize = 36.0;
+      fontSize = 8.5;
+      spacing = 8.0;
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -398,22 +421,22 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
                           Positioned(bottom: 120, left: -40, child: Icon(Icons.auto_awesome, size: 220, color: pureGold.withValues(alpha: 0.04))),
                           
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 35),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
                             child: Column(
                               children: [
-                                Icon(Icons.stars_rounded, color: pureGold, size: 55),
-                                const SizedBox(height: 8),
-                                Text("نجوم التميز الشرفية", style: TextStyle(color: pureGold, fontSize: 26, fontWeight: FontWeight.w900, fontFamily: 'Cairo', shadows: [Shadow(color: pureGold.withValues(alpha: 0.6), blurRadius: 12)])),
+                                Icon(Icons.stars_rounded, color: pureGold, size: 48),
+                                const SizedBox(height: 6),
+                                Text("نجوم التميز الشرفية", style: TextStyle(color: pureGold, fontSize: 24, fontWeight: FontWeight.w900, fontFamily: 'Cairo', shadows: [Shadow(color: pureGold.withValues(alpha: 0.6), blurRadius: 12)])),
                                 const SizedBox(height: 6),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                                   decoration: BoxDecoration(color: pureGold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20), border: Border.all(color: pureGold.withValues(alpha: 0.4))),
-                                  child: Text("تاريخ الإعلان: $todayDate", style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                  child: Text("تاريخ الإعلان: $todayDate", style: const TextStyle(color: Colors.white, fontSize: 10, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                                 ),
                                 
-                                const SizedBox(height: 30),
+                                const SizedBox(height: 20),
                                 
-                                // 🚀 التوزيع الشبكي الديناميكي الذكي للطلاب
+                                // 🚀 التوزيع الشبكي المطور المقاوم للـ Overflow كلياً
                                 Expanded(
                                   child: Center(
                                     child: GridView.builder(
@@ -421,10 +444,10 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
                                       physics: const NeverScrollableScrollPhysics(),
                                       itemCount: allWinners.length,
                                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: allWinners.length <= 3 ? 1 : (allWinners.length <= 8 ? 2 : 3), 
-                                        crossAxisSpacing: 16,
-                                        mainAxisSpacing: 16,
-                                        childAspectRatio: allWinners.length <= 3 ? 2.5 : 0.85, 
+                                        crossAxisCount: crossAxisCount, 
+                                        crossAxisSpacing: spacing,
+                                        mainAxisSpacing: spacing,
+                                        childAspectRatio: childAspectRatio, 
                                       ),
                                       itemBuilder: (context, idx) {
                                         var winner = allWinners[idx];
@@ -435,38 +458,35 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
                                         Color medalC = rankIdx == 0 ? pureGold : (rankIdx == 1 ? const Color(0xffC0C0C0) : (rankIdx == 2 ? const Color(0xffCD7F32) : Colors.white38));
 
                                         return Container(
-                                          padding: const EdgeInsets.all(8),
+                                          padding: const EdgeInsets.all(6),
                                           decoration: BoxDecoration(
                                             color: Colors.white.withValues(alpha: 0.03),
-                                            borderRadius: BorderRadius.circular(16),
-                                            border: Border.all(color: medalC.withValues(alpha: 0.3), width: 1.2),
+                                            borderRadius: BorderRadius.circular(14),
+                                            border: Border.all(color: medalC.withValues(alpha: 0.25), width: 1.0),
                                           ),
-                                          child: allWinners.length <= 3 
-                                              ? Row( 
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    _buildAvatarCircle(winner['imageUrl'], firstL, medalC),
-                                                    const SizedBox(width: 15),
-                                                    Expanded(child: Text(wName, style: const TextStyle(color: Colors.white, fontSize: 15, fontFamily: 'Cairo', fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis)),
-                                                  ],
-                                                )
-                                              : Column( 
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    _buildAvatarCircle(winner['imageUrl'], firstL, medalC),
-                                                    const SizedBox(height: 10),
-                                                    Text(wName, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold, height: 1.2)),
-                                                  ],
-                                                ),
+                                          child: Column( 
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              _buildAvatarCircle(winner['imageUrl'], firstL, medalC, avatarSize),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                wName, 
+                                                textAlign: TextAlign.center, 
+                                                maxLines: 2, 
+                                                overflow: TextOverflow.ellipsis, 
+                                                style: TextStyle(color: Colors.white, fontSize: fontSize, fontFamily: 'Cairo', fontWeight: FontWeight.bold, height: 1.2)
+                                              ),
+                                            ],
+                                          ),
                                         );
                                       },
                                     ),
                                   ),
                                 ),
                                 
-                                const SizedBox(height: 20),
+                                const SizedBox(height: 10),
                                 const Divider(color: Colors.white12),
-                                Text("نسأل الله لهم الثبات والمزيد من الفتوحات والتميز", style: TextStyle(color: pureGold.withValues(alpha: 0.7), fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                Text("نسأل الله لهم الثبات والمزيد من الفتوحات والتميز", style: TextStyle(color: pureGold.withValues(alpha: 0.7), fontSize: 10.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
@@ -485,19 +505,19 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
     );
   }
 
-  Widget _buildAvatarCircle(String url, String firstLetter, Color medalC) {
+  Widget _buildAvatarCircle(String url, String firstLetter, Color medalC, double size) {
     return Container(
-      width: 60, height: 60,
+      width: size, height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: medalC, width: 2),
-        boxShadow: [BoxShadow(color: medalC.withOpacity(0.3), blurRadius: 8)],
+        border: Border.all(color: medalC, width: 1.8),
+        boxShadow: [BoxShadow(color: medalC.withOpacity(0.25), blurRadius: 6)],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(40),
         child: url.isNotEmpty
             ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
-            : Container(color: Colors.white10, child: Center(child: Text(firstLetter, style: TextStyle(color: medalC, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo')))),
+            : Container(color: Colors.white10, child: Center(child: Text(firstLetter, style: TextStyle(color: medalC, fontSize: size * 0.38, fontWeight: FontWeight.bold, fontFamily: 'Cairo')))),
       ),
     );
   }

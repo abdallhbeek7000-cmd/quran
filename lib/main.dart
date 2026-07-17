@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
 import 'package:firebase_core/firebase_core.dart';
@@ -8,9 +9,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart'; 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:quran_habal/widgets/offline_wrapper.dart'; 
-// 🚀 استيراد مكتبة حزمة المزامنة بالخلفية المضافة
 import 'package:workmanager/workmanager.dart';
-import 'package:flutter/foundation.dart'; // 🚀 استيراد مكتبة فحص الويب
+import 'package:flutter/foundation.dart'; 
 import 'firebase_options.dart';
 import 'utils/app_colors.dart';
 import 'pages/login_page.dart';
@@ -20,24 +20,66 @@ import 'services/theme_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+const String syncTaskName = "sync_sessions_data_forced";
 
-// 🚀 1. هذه الدالة السحرية المستقلة التي يستدعيها نظام التشغيل بالخلفية فور توفر الإنترنت
+// 🚀 محرك الخلفية الصامت والقاطع: يستيقظ فور لقط الإنترنت والتطبيق مغلق تماماً لرفع طابور الجلسات
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
-    print("🎯 [WorkManager] بدأت مهمة المزامنة القسرية بالخلفية: $taskName");
+    print("🎯 [WorkManager] تم استشعار الإنترنت بالخلفية! بدء فحص طابور الجلسات الصامت...");
     try {
-      // تهيئة الفايربيز بالخلفية بشكل معزول
+      // 1. تهيئة الفايربيز مع السيرفر بالخلفية
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      final prefs = await SharedPreferences.getInstance();
       
-      // نبضة إجبارية لجعل الفايربيز يستيقظ ويفرغ طابور البيانات المتراكمة بالـ Cache إلى السيرفر
-      await FirebaseFirestore.instance.waitForPendingWrites();
+      // 2. سحب طابور الجلسات المخزنة أوفلاين
+      List<String> offlineSessions = prefs.getStringList('offline_sessions_queue') ?? [];
       
-      print("✅ [WorkManager] تم تفريغ طابور البيانات ومزامنة الجلسات بنجاح والمشرف خارج التطبيق!");
+      if (offlineSessions.isEmpty) {
+        print("☕ [WorkManager] طابور الانتظار فارغ، لا يوجد جلسات أوفلاين معلقة.");
+        return Future.value(true);
+      }
+
+      print("🔥 [WorkManager] جاري رفع (${offlineSessions.length}) جلسة معلقة إلى السيرفر لايف صامتاً وبدون فتح التطبيق...");
+      
+      for (String sessionJson in offlineSessions) {
+        Map<String, dynamic> sessionMap = jsonDecode(sessionJson);
+        String studentId = sessionMap['studentId'] ?? '';
+        bool isAbsent = sessionMap['absent'] ?? false;
+
+        // إدراج التوقيت الرسمي للسيرفر فوراً عند الرفع بالخلفية
+        sessionMap['timestamp'] = FieldValue.serverTimestamp();
+
+        // أ. رفع الجلسة مباشرة
+        await FirebaseFirestore.instance.collection('sessions').add(sessionMap);
+
+        // ب. تحديث وتصفير عداد الطالب تلقائياً لمنع تعليق شريط التنبيهات
+        if (!isAbsent) {
+          await FirebaseFirestore.instance.collection('students').doc(studentId).update({
+            'consecutiveAbsences': 0,
+          });
+        } else {
+          // إعادة الحساب التراكمي في الخلفية للغياب لضمان الدقة
+          final snap = await FirebaseFirestore.instance.collection('sessions').where('studentId', isEqualTo: studentId).get();
+          List<Map<String, dynamic>> totalSessions = snap.docs.map((e) => e.data()).toList();
+          totalSessions.sort((a, b) => (b['date'] ?? '').compareTo(a['date'] ?? ''));
+          
+          int consecutive = 0;
+          for (var s in totalSessions) {
+            if (s['absent'] ?? false) consecutive++; else break;
+          }
+          await FirebaseFirestore.instance.collection('students').doc(studentId).update({'consecutiveAbsences': consecutive});
+        }
+      }
+
+      // 3. مسح وتطهير طابور الكاش المحلي تماماً بعد إتمام الرفع بنجاح
+      await prefs.remove('offline_sessions_queue');
+      print("✅ [WorkManager] تم إفراغ الطابور كلياً ومزامنة كل البيانات بنجاح والمشرف خارج التطبيق!");
+      
       return Future.value(true);
     } catch (e) {
-      print("❌ [WorkManager] فشلت المزامنة التلقائية بالخلفية: $e");
-      return Future.value(false);
+      print("❌ [WorkManager] فشل محرك الخلفية الصامت: $e");
+      return Future.value(false); // إعادة المحاولة لاحقاً في حال انقطع الاتصال مجدداً
     }
   });
 }
@@ -68,16 +110,25 @@ void main() async {
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
 
-  // 🚀 2. تهيئة الـ Workmanager وربطها بالـ callbackDispatcher المستقلة
+  // 🚀 تهيئة الـ Workmanager وربطها بالـ callbackDispatcher المستقلة
   if (!kIsWeb) {
-  await Workmanager().initialize(
-    callbackDispatcher,
-    isInDebugMode: false, // اجعلها true فقط أثناء التجربة البرمجية بالـ Emulator لو أحببت فحص تفاصيل الكونسول
-  );
+    await Workmanager().initialize(
+      callbackDispatcher,
+      isInDebugMode: false, 
+    );
+
+    // 🚀 جدولة وتأمين محرك الفحص الدوري الصامت بالخلفية لتبحث عن طابور المزامنة فور شبك الواي فاي أو البيانات
+    await Workmanager().registerPeriodicTask(
+      "periodic_sync_id_01",
+      syncTaskName,
+      frequency: const Duration(minutes: 15), // يفحص تلقائياً كل 15 دقيقة بالخلفية بشكل صامت
+      constraints: Constraints(
+        networkType: NetworkType.connected, // يشتعل قسرياً فور وجود شبكة اتصال
+      ),
+    );
   }
 
   FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
-  
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   
   runApp(
@@ -130,11 +181,13 @@ class _MyAppState extends State<MyApp> {
     final role = prefs.getString('userRole') ?? '';
     final uid = prefs.getString('userId') ?? '';
 
-    setState(() {
-      isLoggedIn = logged;
-      userRole = role;
-      userId = uid;
-    });
+    if (mounted) {
+      setState(() {
+        isLoggedIn = logged;
+        userRole = role;
+        userId = uid;
+      });
+    }
   }
 
   @override
@@ -171,7 +224,7 @@ class _MyAppState extends State<MyApp> {
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent, 
           foregroundColor: primaryColor,
-          centerTitle: centerTitleDefault, // تعويض لثغرة التحديث بالنسخ الجديدة
+          centerTitle: centerTitleDefault, 
           elevation: 0,
         ),
         dialogTheme: DialogThemeData(
@@ -237,5 +290,4 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-// ثابت داخلي لضمان التوافقية البرمجية مع الماتيريال الجديد
 const bool centerTitleDefault = true;

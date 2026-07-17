@@ -48,9 +48,15 @@ class _StudentsPageState extends State<StudentsPage> {
   };
 
   void _updateStudentLiveStatus(String studentId, String newStatus, String studentName) async {
-    await FirebaseFirestore.instance.collection('students').doc(studentId).update({
+    final Map<String, dynamic> updateData = {
       'livePulse': newStatus,
-    });
+    };
+
+    if (newStatus == 'green' || newStatus == 'blue') {
+      updateData['consecutiveAbsences'] = 0;
+    }
+
+    await FirebaseFirestore.instance.collection('students').doc(studentId).update(updateData);
 
     String statusText = "";
     switch (newStatus) {
@@ -67,7 +73,7 @@ class _StudentsPageState extends State<StudentsPage> {
         body: "حالة الطالب اللحظية في المعهد: $statusText",
         type: "live_status", 
         context: context, 
-      );
+      ).catchError((e) => print("fشل إرسال إشعار النبض: $e"));
       
       GlassToast.show(
         context, 
@@ -269,6 +275,152 @@ class _StudentsPageState extends State<StudentsPage> {
     return Text(_flags[nat] ?? '🌍', style: const TextStyle(fontSize: 16));
   }
 
+  void _internalNav(Widget page) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+
+  // 🚀 محرك فحص التاريخ الفعلي: جلب آخر جلسة لايف وتصفير العداد المزعج لتطهير القائمة تماماً
+  Widget _buildAbsentAlertSection(bool isDarkMode) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('students')
+          .where('cycleId', isEqualTo: widget.cycle.id)
+          .where('archived', isEqualTo: false)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox();
+        
+        final rawAlertStudents = snapshot.data!.docs.where((doc) {
+          final sData = doc.data() as Map<String, dynamic>;
+          final count = sData['consecutiveAbsences'] ?? 0;
+          return count >= 3;
+        }).toList();
+
+        if (rawAlertStudents.isEmpty) return const SizedBox();
+
+        return FutureBuilder<List<DocumentSnapshot>>(
+          future: () async {
+            List<DocumentSnapshot> activeAlerts = [];
+            for (var doc in rawAlertStudents) {
+              var sessionsSnap = await FirebaseFirestore.instance
+                  .collection('sessions') 
+                  .where('studentId', isEqualTo: doc.id)
+                  .orderBy('date', descending: true)
+                  .limit(1)
+                  .get();
+
+              if (sessionsSnap.docs.isNotEmpty) {
+                var lastSessionData = sessionsSnap.docs.first.data();
+                String lastSessionDateStr = lastSessionData['date'] ?? ''; 
+                
+                String todayStr = "${DateTime.now().day}-${DateTime.now().month}-${DateTime.now().year}";
+                if (lastSessionDateStr.trim() == todayStr.trim()) {
+                  FirebaseFirestore.instance.collection('students').doc(doc.id).update({'consecutiveAbsences': 0});
+                  continue; 
+                }
+              }
+              activeAlerts.add(doc);
+            }
+            return activeAlerts;
+          }(),
+          builder: (context, futureSnapshot) {
+            if (!futureSnapshot.hasData || futureSnapshot.data!.isEmpty) return const SizedBox();
+            final alertStudents = futureSnapshot.data!;
+
+            return Container(
+              margin: const EdgeInsets.fromLTRB(15, 10, 15, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withOpacity(isDarkMode ? 0.12 : 0.08),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.redAccent.withOpacity(0.35), width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.gpp_maybe_rounded, color: Colors.redAccent.shade200, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    "المنقطعين (${alertStudents.length}) :",
+                    style: TextStyle(color: isDarkMode ? Colors.red.shade300 : Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'Cairo'),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SizedBox(
+                      height: 34,
+                      child: ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: alertStudents.length,
+                        itemBuilder: (context, idx) {
+                          final sData = alertStudents[idx].data() as Map<String, dynamic>;
+                          final String sName = sData['name'] ?? 'طالب';
+                          final int count = sData['consecutiveAbsences'] ?? 0;
+                          final String pPhone = sData['parentPhone'] ?? ''; 
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: InkWell(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                    title: Text("متابعة غياب: $sName ⚠️", style: const TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold)),
+                                    content: Text("الطالب متغيب عن الحلقة لـ $count أيام متتالية دون عذر مسجل.", style: const TextStyle(fontFamily: 'Cairo', fontSize: 13)),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("إغلاق", style: TextStyle(fontFamily: 'Cairo', color: Colors.grey))),
+                                      if (pPhone.isNotEmpty)
+                                        ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                          onPressed: () {
+                                            Navigator.pop(ctx);
+                                            _makePhoneCall(pPhone);
+                                          },
+                                          icon: const Icon(Icons.phone, size: 16),
+                                          label: const Text("اتصال بولي الأمر", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                        )
+                                    ],
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isDarkMode ? Colors.black38 : Colors.white.withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      sName.split(' ')[0], 
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
+                                      child: Text("$countد", style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                    )
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
@@ -303,7 +455,7 @@ class _StudentsPageState extends State<StudentsPage> {
               IconButton(
                 icon: Icon(Icons.archive_outlined, color: isDarkMode ? accentGold : primaryColor), 
                 tooltip: "الطلاب المتوقفين مؤقتاً", 
-                onPressed: () => _nav(ArchivedStudentsPage(cycle: widget.cycle, role: widget.role, uid: widget.uid))
+                onPressed: () => _internalNav(ArchivedStudentsPage(cycle: widget.cycle, role: widget.role, uid: widget.uid))
               ),
             if (widget.role == "manager") 
               IconButton(icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor), tooltip: "تصدير Excel", onPressed: exportToExcel),
@@ -312,14 +464,13 @@ class _StudentsPageState extends State<StudentsPage> {
         floatingActionButton: (widget.role == "manager" && !widget.isArchivedFromHistory)
             ? FloatingActionButton(
                 backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9),
-                onPressed: () => _nav(AddStudentPage(cycle: widget.cycle)),
+                onPressed: () => _internalNav(AddStudentPage(cycle: widget.cycle)),
                 child: const Icon(Icons.person_add_alt_1, color: Colors.white),
               )
             : null,
             
         body: Stack(
           children: [
-            // 1. التدرج اللوني الأساسي
             Container(
               width: double.infinity, height: double.infinity,
               decoration: BoxDecoration(
@@ -330,7 +481,6 @@ class _StudentsPageState extends State<StudentsPage> {
               ),
             ),
             
-            // 2. الدوائر الخلفية الثابتة
             Stack(
               children: [
                 Positioned(
@@ -344,7 +494,6 @@ class _StudentsPageState extends State<StudentsPage> {
               ],
             ),
             
-            // 3. 🎯 السحر هنا: فلتر غبش واحد فقط على كامل الشاشة (يوفر 90% من استهلاك المعالج)
             Positioned.fill(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
@@ -352,12 +501,14 @@ class _StudentsPageState extends State<StudentsPage> {
               ),
             ),
 
-            // 4. محتوى الشاشة (سريع جداً لأن الكروت شفافة بدون فلتر)
             SafeArea(
               child: Column(
                 children: [
+                  if (widget.role == "manager" && !widget.isArchivedFromHistory)
+                    _buildAbsentAlertSection(isDarkMode),
+
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
                     child: _buildGlassContainer(
                       isDarkMode: isDarkMode,
                       padding: const EdgeInsets.all(15),
@@ -376,9 +527,6 @@ class _StudentsPageState extends State<StudentsPage> {
                       ),
                     ),
                   ),
-      
-                  if (widget.role == "manager" && !widget.isArchivedFromHistory)
-                    _buildAbsentAlertSection(isDarkMode),
       
                   Expanded(
                     child: StreamBuilder<QuerySnapshot>(
@@ -412,10 +560,10 @@ class _StudentsPageState extends State<StudentsPage> {
       
                         return ListView.builder(
                           physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.only(left: 15, right: 15, top: 10, bottom: 80),
+                          padding: const EdgeInsets.only(left: 15, right: 15, top: 5, bottom: 80),
                           itemCount: docs.length,
                           itemBuilder: (context, index) {
-                            return _buildStudentCard(docs[index], isDarkMode);
+                            return _buildStudentCard(context, docs[index], isDarkMode);
                           },
                         );
                       },
@@ -430,12 +578,10 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  // 🚀 التعديل السحري الجديد (إزالة الـ BackdropFilter من الكرت واستخدام شفافية فقط)
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        // لون شفاف يسمح برؤية الغبش العام خلفه
         color: customColor ?? (isDarkMode ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.55)), 
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: customBorderColor ?? (isDarkMode ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.8)), width: 1.5),
@@ -459,91 +605,8 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  Widget _buildAbsentAlertSection(bool isDarkMode) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('students')
-          .where('cycleId', isEqualTo: widget.cycle.id)
-          .where('archived', isEqualTo: false)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          print("🚨 خطأ في جلب بيانات الغياب: ${snapshot.error}");
-          return const SizedBox();
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox();
-        
-        final alertStudents = snapshot.data!.docs.where((doc) {
-          final sData = doc.data() as Map<String, dynamic>;
-          final count = sData['consecutiveAbsences'] ?? 0;
-          return count >= 3;
-        }).toList();
-
-        if (alertStudents.isEmpty) return const SizedBox();
-
-        return Container(
-          margin: const EdgeInsets.fromLTRB(15, 5, 15, 10),
-          child: _buildGlassContainer(
-            isDarkMode: isDarkMode,
-            padding: const EdgeInsets.all(12),
-            customColor: Colors.redAccent.withOpacity(isDarkMode ? 0.15 : 0.1),
-            customBorderColor: Colors.redAccent.withOpacity(0.4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.gpp_maybe_rounded, color: Colors.redAccent.shade200, size: 20),
-                    const SizedBox(width: 8),
-                    Text("تنبيه غياب متكرر (🚨 يحتاج متابعة إدارية)", style: TextStyle(color: isDarkMode ? Colors.red.shade300 : Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo')),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 65,
-                  child: ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: alertStudents.length,
-                    itemBuilder: (context, idx) {
-                      final sData = alertStudents[idx].data() as Map<String, dynamic>;
-                      final String sName = sData['name'] ?? 'طالب';
-                      final int count = sData['consecutiveAbsences'] ?? 0;
-                      final String pPhone = sData['parentPhone'] ?? ''; 
-                      return Container(
-                        margin: const EdgeInsets.only(left: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.6), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.redAccent.withOpacity(0.2))),
-                        child: Row(
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(sName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo')),
-                                Text("منقطع لـ $count أيام ⚠️", style: TextStyle(color: Colors.redAccent.shade400, fontSize: 10, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
-                              ],
-                            ),
-                            if (pPhone.isNotEmpty) ...[
-                              const SizedBox(width: 10),
-                              CircleAvatar(
-                                radius: 16, backgroundColor: Colors.green.withOpacity(0.15),
-                                child: IconButton(padding: EdgeInsets.zero, icon: const Icon(Icons.phone_forwarded_rounded, size: 16, color: Colors.green), tooltip: "اتصال بولي الأمر", onPressed: () => _makePhoneCall(pPhone)),
-                              ),
-                            ]
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildStudentCard(DocumentSnapshot doc, bool isDarkMode) {
+  // 🚀 تصحيح الخطوط الحمراء: تم دمج الـ Context الداخلي المباشر لاستدعاء صفحات التنقل بنجاح
+  Widget _buildStudentCard(BuildContext context, DocumentSnapshot doc, bool isDarkMode) {
     final data = doc.data() as Map<String, dynamic>;
     final String imageUrl = data['imageUrl'] ?? '';
     final String studentName = data['name'] ?? 'بدون اسم';
@@ -551,7 +614,6 @@ class _StudentsPageState extends State<StudentsPage> {
     final String livePulse = data['livePulse'] ?? 'none'; 
     
     final String grade = data['grade'] ?? data['schoolGrade'] ?? data['classLevel'] ?? data['studyLevel'] ?? 'غير مسجل';
-    
     final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
 
     return Container(
@@ -562,6 +624,7 @@ class _StudentsPageState extends State<StudentsPage> {
         child: Column(
           children: [
             ListTile(
+              key: Key('list_tile_${doc.id}'),
               onLongPress: () {
                 if (!widget.isArchivedFromHistory) {
                   _showArchiveDialog(context, doc.id, studentName, isDarkMode);
@@ -635,7 +698,11 @@ class _StudentsPageState extends State<StudentsPage> {
                       children: [
                         if (!widget.isArchivedFromHistory)
                           _buildPulseDot(livePulse, doc.id, studentName, isDarkMode),
-                        IconButton(icon: Icon(Icons.edit_note_rounded, color: isDarkMode ? accentGold : primaryColor, size: 26), tooltip: "تعديل بيانات الطالب", onPressed: () => _nav(EditStudentPage(student: doc))),
+                        IconButton(
+                          icon: Icon(Icons.edit_note_rounded, color: isDarkMode ? accentGold : primaryColor, size: 26), 
+                          tooltip: "تعديل بيانات الطالب", 
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditStudentPage(student: doc)))
+                        ),
                         if (widget.role == "manager") 
                           IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 24), tooltip: "حذف الطالب", onPressed: () => _showDeleteStudentDialog(context, doc.id, studentName, isDarkMode)),
                       ],
@@ -649,10 +716,10 @@ class _StudentsPageState extends State<StudentsPage> {
                 children: [
                   if (!widget.isArchivedFromHistory)
                     _buildActionButton(Icons.add_task, "جلسة جديدة", Colors.greenAccent.shade400, isDarkMode, () {
-                      _nav(AddSessionPage(studentId: doc.id, studentName: data['name'] ?? '', supervisorId: data['supervisorId'] ?? '', supervisorName: data['supervisorName'] ?? ''));
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => AddSessionPage(studentId: doc.id, studentName: data['name'] ?? '', supervisorId: data['supervisorId'] ?? '', supervisorName: data['supervisorName'] ?? '')));
                     }),
                   _buildActionButton(widget.isArchivedFromHistory ? Icons.folder_open_rounded : Icons.history, widget.isArchivedFromHistory ? "استعراض السجل القديم" : "السجل", isDarkMode ? Colors.lightBlueAccent : Colors.blue, isDarkMode, () {
-                    _nav(StudentSessionsPage(studentId: doc.id, studentName: data['name'] ?? '', role: widget.isArchivedFromHistory ? "readonly" : widget.role));
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => StudentSessionsPage(studentId: doc.id, studentName: data['name'] ?? '', role: widget.isArchivedFromHistory ? "readonly" : widget.role)));
                   }),
                 ],
               ),
@@ -777,15 +844,8 @@ class _StudentsPageState extends State<StudentsPage> {
       ),
     );
   }
-
-  void _nav(Widget page) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
-  }
 }
 
-// =========================================================
-// 🚀 صفحة الأرشيف المدمجة الخاصة بالطلاب المتوقفين مؤقتاً
-// =========================================================
 class ArchivedStudentsPage extends StatelessWidget {
   final CycleModel cycle;
   final String role;
@@ -850,7 +910,6 @@ class ArchivedStudentsPage extends StatelessWidget {
                 ),
               ],
             ),
-            // 🚀 إضافة الغبش الشامل حتى لصفحة الأرشيف
             Positioned.fill(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
@@ -891,7 +950,6 @@ class ArchivedStudentsPage extends StatelessWidget {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          // نفس الشفافية لكروت الأرشيف
                           color: isDarkMode ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.55),
                           borderRadius: BorderRadius.circular(15),
                           border: Border.all(color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.8), width: 1.5),

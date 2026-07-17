@@ -28,7 +28,7 @@ import 'broadcast_page.dart';
 import '../services/notification_queue_manager.dart'; 
 import '../widgets/offline_wrapper.dart'; 
 import 'points_bank_page.dart'; // 🚀 استدعاء صفحة البنك الحقيقية
-
+import '../services/notification_service.dart'; // 🚀 استيراد خدمة الإشعارات الخاصة بالتطبيق لإرسال التحديثات
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -244,6 +244,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // 🚀 المحرك الذكي الجديد لبث إشعار التحديث الفوري لجميع أجهزة المشرفين لايف
   void _showUpdateNotificationDialog(bool isDark) {
     showDialog(
       context: context,
@@ -261,7 +262,7 @@ class _HomePageState extends State<HomePage> {
                   Text("إشعار التحديثات", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black87)),
                 ],
               ),
-              content: Text("هل أنت متأكد أنك تريد إرسال إشعار بوجود تحديث جديد لجميع الأجهزة المشتركة الآن؟", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: isDark ? Colors.white70 : Colors.black87, height: 1.5)),
+              content: Text("هل أنت متأكد أنك تريد إرسال إشعار بوجود تحديث جديد لجميع أجهزة المشتركة والمشرفين الآن لايف؟", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: isDark ? Colors.white70 : Colors.black87, height: 1.5)),
               actions: [
                 if (isSending)
                   const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator())
@@ -276,6 +277,7 @@ class _HomePageState extends State<HomePage> {
                       setStateDialog(() => isSending = true);
 
                       try {
+                        // 1. تسجيل الحركة بجدول السجلات العام للفايربيز
                         await FirebaseFirestore.instance.collection('global_notifications').add({
                           'topic': 'app_updates',
                           'title': 'تحديث جديد متاح 🚀',
@@ -284,12 +286,31 @@ class _HomePageState extends State<HomePage> {
                           'sentBy': widget.uid,
                         });
 
+                        // 2. 🚀 جلب كل معرفات المشرفين وإطلاق نظام البث الفوري لايف عبر أجهزتهم
+                        var supervisorsSnap = await FirebaseFirestore.instance.collection('supervisors').get();
+                        
+                        for (var doc in supervisorsSnap.docs) {
+                          String supervisorId = doc.id;
+                          var supData = doc.data();
+                          
+                          // التحقق من امتلاك المشرف لـ توكن فاف تفادياً لإرسال وثائق فارغة
+                          if (supData.containsKey('fcmToken') && supData['fcmToken'].toString().isNotEmpty) {
+                            NotificationService.sendAndSaveNotification(
+                              studentId: supervisorId, // دفع التنبيه للمشرف المستهدف
+                              title: "تحديث جديد متاح 🚀",
+                              body: "تم إطلاق نسخة جديدة من نظام حلقات وعوالم القرآن. يرجى التحديث الآن للحصول على أحدث الميزات الزجاجية الفخمة والمستقرة.",
+                              type: "app_update_alert",
+                              context: context,
+                            ).catchError((e) => print("فشل الإرسال التحديثي للمشرف $supervisorId: $e"));
+                          }
+                        }
+
                         await Future.delayed(const Duration(seconds: 1)); 
                         
                         if (!mounted) return;
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(backgroundColor: Colors.green, content: Text("تم إرسال إشعار التحديث للجميع بنجاح! 🚀", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
+                          const SnackBar(backgroundColor: Colors.green, content: Text("تم بث إشعار التحديث لجميع أجهزة المشرفين لايف بنجاح! 🚀", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
                         );
                       } catch (e) {
                         setStateDialog(() => isSending = false);
@@ -399,10 +420,10 @@ class _HomePageState extends State<HomePage> {
                           _buildPerformanceMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage()), isDark),
                           if (currentCycleModel != null)
                             _buildPerformanceMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), isDark),
+                          
+                          // 🚀 بنك النقاط والمكافآت أصبح حصرياً داخل كتلة المدير فقط
+                          _buildPerformanceMenuCard(Icons.diamond_rounded, "بنك النقاط 💎", () => _nav(const PointsBankPage()), isDark),
                         ],
-
-                        // 🚀 الزر الجوهري الجديد (بنك النقاط والمكافآت) متاح للمدير والمشرفين 
-                        _buildPerformanceMenuCard(Icons.diamond_rounded, "بنك النقاط 💎", () => _nav(const PointsBankPage()), isDark),
 
                         if (currentCycleModel != null) ...[
                           _buildPerformanceMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),

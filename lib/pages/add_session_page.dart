@@ -211,89 +211,84 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(
-                  height: MediaQuery.of(context).size.height * 0.7,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.95),
-                    border: Border(top: BorderSide(color: isDarkMode ? Colors.white24 : Colors.white, width: 1.5)),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
-                      const SizedBox(height: 20),
-                      Text("حدد المشرفين المشاركين", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
-                      const SizedBox(height: 15),
-                      Expanded(
-                        child: FutureBuilder<List<QuerySnapshot>>(
-                          future: Future.wait([
-                            FirebaseFirestore.instance.collection('users').get(),
-                            FirebaseFirestore.instance.collection('supervisors').get()
-                          ]),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                            
-                            List<Map<String, String>> allStaff = [];
-                            if (snapshot.hasData) {
-                              for (var doc in snapshot.data![0].docs) {
-                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
-                              }
-                              for (var doc in snapshot.data![1].docs) {
-                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
-                              }
-                            }
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border.all(color: isDarkMode ? Colors.white12 : Colors.black12),
+          ),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Column(
+                children: [
+                  Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
+                  const SizedBox(height: 20),
+                  Text("حدد المشرفين المشاركين", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                  const SizedBox(height: 15),
+                  Expanded(
+                    child: FutureBuilder<List<QuerySnapshot>>(
+                      future: Future.wait([
+                        FirebaseFirestore.instance.collection('users').get(),
+                        FirebaseFirestore.instance.collection('supervisors').get()
+                      ]),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                        
+                        List<Map<String, String>> allStaff = [];
+                        if (snapshot.hasData) {
+                          for (var doc in snapshot.data![0].docs) {
+                            allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
+                          }
+                          for (var doc in snapshot.data![1].docs) {
+                            allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
+                          }
+                        }
 
-                            return ListView.builder(
-                              physics: const BouncingScrollPhysics(),
-                              itemCount: allStaff.length,
-                              itemBuilder: (context, index) {
-                                final staff = allStaff[index];
-                                final isSelected = selectedSupervisors.any((s) => s['id'] == staff['id']);
+                        return ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: allStaff.length,
+                          itemBuilder: (context, index) {
+                            final staff = allStaff[index];
+                            final isSelected = selectedSupervisors.any((s) => s['id'] == staff['id']);
 
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
-                                    borderRadius: BorderRadius.circular(15),
-                                    border: Border.all(color: isSelected ? accentGold : Colors.transparent),
-                                  ),
-                                  child: CheckboxListTile(
-                                    activeColor: accentGold,
-                                    title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
-                                    value: isSelected,
-                                    onChanged: (val) {
-                                      setModalState(() {
-                                        if (val == true) {
-                                          selectedSupervisors.add(staff);
-                                        } else {
-                                          if (selectedSupervisors.length > 1) {
-                                            selectedSupervisors.removeWhere((s) => s['id'] == staff['id']);
-                                          } else {
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب اختيار مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
-                                          }
-                                        }
-                                      });
-                                      setState(() {}); 
-                                    },
-                                  ),
-                                );
-                              },
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(color: isSelected ? accentGold : Colors.transparent),
+                              ),
+                              child: CheckboxListTile(
+                                activeColor: accentGold,
+                                title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
+                                value: isSelected,
+                                onChanged: (val) {
+                                  setModalState(() {
+                                    if (val == true) {
+                                      selectedSupervisors.add(staff);
+                                    } else {
+                                      if (selectedSupervisors.length > 1) {
+                                        selectedSupervisors.removeWhere((s) => s['id'] == staff['id']);
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب اختيار مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
+                                      }
+                                    }
+                                  });
+                                  setState(() {}); 
+                                },
+                              ),
                             );
                           },
-                        ),
-                      ),
-                    ],
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ),
-            );
-          }
+                ],
+              );
+            }
+          ),
         );
       }
     );
@@ -505,7 +500,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'studentName': widget.studentName,
       'supervisorId': supervisorIdsList.isNotEmpty ? supervisorIdsList.first : '', 
       'supervisorName': supervisorNamesList.isNotEmpty ? supervisorNamesList.first : '',
-      'supervisorIds': supervisorIdsList,      
+      'supervisorIds': supervisorIdsList,          
       'supervisorNames': supervisorNamesList, 
       'timestamp': FieldValue.serverTimestamp(), 
       'date': date,
@@ -536,21 +531,27 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
     // 🚀 جدولة مهمة مزامنة فورية بالخلفية قسراً بمجرد قيام المشرف بالضغط على حفظ الجلسة
     if (!kIsWeb) {
-    Workmanager().registerOneOffTask(
-      "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
-      "sync_sessions_data",
-      constraints: Constraints(
-        networkType: NetworkType.connected, // لا تعمل إلا عند شبك الهاتف بالإنترنت
-      ),
-    );
+      Workmanager().registerOneOffTask(
+        "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
+        "sync_sessions_data",
+        constraints: Constraints(
+          networkType: NetworkType.connected, 
+        ),
+      );
     }
 
     FirebaseFirestore.instance.collection('sessions').add(sessionData).then((_) {
       sessionService.recalculateConsecutiveAbsences(widget.studentId);
     });
 
-    if (!absent && !isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
-      FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
+    // 🚀 التعديل السحري: تصفير حقل غيابات الطالب التراكمية فوراً بمجرد تسجيل الجلسة الجديدة لايف لتنظيف شريط المنقطعين
+    if (!absent) {
+      await FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
+        'consecutiveAbsences': 0,
+        if (!isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) 'memorizedPages': totalPages,
+      });
+    } else if (!isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
+      await FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
         'memorizedPages': totalPages,
       });
     }
@@ -601,6 +602,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   Widget _buildMicButton(TextEditingController controller, bool isDarkMode) {
     bool isActive = _isListening && _activeController == controller;
     return IconButton(
+      key: ValueKey('mic_${controller.hashCode}'),
       tooltip: "تحدث للإدخال",
       icon: Icon(
         isActive ? Icons.mic : Icons.mic_none,
@@ -829,14 +831,14 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                 
                                 Container(
                                   decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
-                                  child: SwitchListTile(
+                                  child: CheckboxListTile(
                                     activeColor: Colors.orange,
                                     value: absent,
                                     title: Text("تسجيل الطالب غائب؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                                     secondary: Icon(absent ? Icons.person_off : Icons.person, color: isDarkMode ? Colors.white70 : primaryColor),
                                     onChanged: (v) {
                                       setState(() { 
-                                        absent = v; 
+                                        absent = v ?? false; 
                                         if (absent) { 
                                           isExam = false; 
                                           didNotRecite = false; 
