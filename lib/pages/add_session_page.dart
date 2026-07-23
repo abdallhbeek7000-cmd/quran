@@ -5,10 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt; 
-// 🚀 استيراد حزمة الجدولة بالخلفية المضافة
 import 'package:workmanager/workmanager.dart';
-import 'package:flutter/foundation.dart'; // 🚀 استيراد مكتبة فحص الويب
-import '../models/session_model.dart';
+import 'package:flutter/foundation.dart';
 import '../services/session_service.dart';
 import '../services/theme_provider.dart'; 
 import '../services/notification_service.dart'; 
@@ -230,8 +228,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                   Expanded(
                     child: FutureBuilder<List<QuerySnapshot>>(
                       future: Future.wait([
-                        FirebaseFirestore.instance.collection('users').get(),
-                        FirebaseFirestore.instance.collection('supervisors').get()
+                        FirebaseFirestore.instance.collection('users').get(const GetOptions(source: Source.cache)),
+                        FirebaseFirestore.instance.collection('supervisors').get(const GetOptions(source: Source.cache))
                       ]),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -337,7 +335,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       final querySnapshot = await FirebaseFirestore.instance
           .collection('sessions')
           .where('studentId', isEqualTo: widget.studentId)
-          .get();
+          .get(const GetOptions(source: Source.cache));
 
       if (querySnapshot.docs.isNotEmpty) {
         var docs = querySnapshot.docs.toList();
@@ -378,7 +376,10 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
   Future<void> _checkIfStudentIsCompleted() async {
     try {
-      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(widget.studentId).get();
+      DocumentSnapshot studentDoc = await FirebaseFirestore.instance
+          .collection('students')
+          .doc(widget.studentId)
+          .get(const GetOptions(source: Source.cache));
       if (studentDoc.exists && studentDoc.data() != null) {
         Map<String, dynamic> data = studentDoc.data() as Map<String, dynamic>;
         if (data['studentType'] == 'completed') {
@@ -388,7 +389,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     } catch (e) {
       print("Error checking student type: $e");
     } finally {
-      setState(() => checkingStudentType = false);
+      if (mounted) setState(() => checkingStudentType = false);
     }
   }
 
@@ -426,30 +427,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   }
 
   addSession() async {
-    setState(() => loading = true);
-    final date = "${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}";
-
-    final result = await FirebaseFirestore.instance
-        .collection('sessions')
-        .where('studentId', isEqualTo: widget.studentId)
-        .where('date', isEqualTo: date)
-        .get();
-
-    if (result.docs.isNotEmpty) {
-      if (!mounted) return;
-      setState(() => loading = false);
-      GlassToast.show(
-        context,
-        title: "تنبيه",
-        message: "تم تسجيل جلسة في هذا التاريخ مسبقاً ⚠️",
-        icon: Icons.warning_amber_rounded,
-        color: Colors.orangeAccent,
-      );
-      return;
-    }
-
     if (isExam && !absent && examScoreController.text.trim().isEmpty) {
-      setState(() => loading = false);
       GlassToast.show(
         context,
         title: "بيانات ناقصة",
@@ -460,16 +438,17 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       return;
     }
 
+    setState(() => loading = true);
+    final date = "${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}";
+
     String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevFrom, newRevTo);
     String finalFarReview = (!hasReview || absent || isExam || didNotRecite) ? '' : _buildMultiRangeString(oldReviewRanges);
     String finalReading = (!hasReading || absent || isExam || didNotRecite) ? '' : _buildRangeString(readingFrom, readingTo);
     
     String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
-    
     String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
     String finalOldRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : oldReviewRating;
-    
     String finalFallbackRevRating = isCompletedStudent ? newReviewRating : (finalNewRevRating.isNotEmpty ? finalNewRevRating : finalOldRevRating);
 
     String finalNewHW = (absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newHwFrom, newHwTo);
@@ -495,6 +474,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     List<String> supervisorIdsList = selectedSupervisors.map((e) => e['id']!).toList();
     List<String> supervisorNamesList = selectedSupervisors.map((e) => e['name']!).toList();
 
+    // 🚀 الخريطة الأصلية تماماً لتفادي تضارب الموديل
     final Map<String, dynamic> sessionData = {
       'studentId': widget.studentId,
       'studentName': widget.studentName,
@@ -529,59 +509,42 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       if (!absent && !isExam && !didNotRecite) 'total_memorized_pages': totalPages,
     };
 
-    // 🚀 جدولة مهمة مزامنة فورية بالخلفية قسراً بمجرد قيام المشرف بالضغط على حفظ الجلسة
+    // 🚀 1. الحفظ الفوري المباشر عبر SessionService (الخريطة المباشرة)
+    try {
+      await sessionService.addSession(sessionData);
+    } catch (e) {
+      print("⚠️ خطأ حفظ الجلسة: $e");
+    }
+
+    // 🚀 2. تصفير غيابات الطالب فوراً بالكاش والمستند
+    if (!absent) {
+      FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
+        'consecutiveAbsences': 0,
+        if (!isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) 'memorizedPages': totalPages,
+      }).catchError((e) => print("Absences update error: $e"));
+    }
+
+    // 🚀 3. تسجيل المزامنة بالخلفية بدون تعطيل واجهة المستخدم
     if (!kIsWeb) {
       Workmanager().registerOneOffTask(
         "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
-        "sync_sessions_data",
-        constraints: Constraints(
-          networkType: NetworkType.connected, 
-        ),
-      );
+        "sync_sessions_data_forced",
+        constraints: Constraints(networkType: NetworkType.connected),
+      ).catchError((e) => print("Workmanager error: $e"));
     }
 
-    FirebaseFirestore.instance.collection('sessions').add(sessionData).then((_) {
-      sessionService.recalculateConsecutiveAbsences(widget.studentId);
-    });
-
-    // 🚀 التعديل السحري: تصفير حقل غيابات الطالب التراكمية فوراً بمجرد تسجيل الجلسة الجديدة لايف لتنظيف شريط المنقطعين
-    if (!absent) {
-      await FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
-        'consecutiveAbsences': 0,
-        if (!isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) 'memorizedPages': totalPages,
-      });
-    } else if (!isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
-      await FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
-        'memorizedPages': totalPages,
-      });
-    }
-
+    // 🚀 4. معالجة الإشعارات
     String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : "📢 تحديث يومي من الحلقة"));
     String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
       : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 
       : (didNotRecite ? "حضر الطالب ${widget.studentName} في حلقة اليوم ولكنه لم يسمّع أو يقرأ شيئاً ⚠️" 
       : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}")));
     
-    if (!absent && !isExam && !didNotRecite) {
-       if (hasNewMemorization && finalMemoRating.isNotEmpty) notifyBody += "، الحفظ: ($finalMemoRating)";
-       if (hasReview) {
-         if (isCompletedStudent) {
-           notifyBody += "، المراجعة: ($finalFallbackRevRating)";
-         } else {
-           if (finalNewRevRating.isNotEmpty) notifyBody += "، مراجعة الجديد: ($finalNewRevRating)";
-           if (finalOldRevRating.isNotEmpty) notifyBody += "، مراجعة القديم: ($finalOldRevRating)";
-         }
-       }
-    }
-      
     String notifyType = absent ? "absent" : (isExam ? "exam" : (didNotRecite ? "info" : "regular"));
 
     NotificationService.sendAndSaveNotification(
       studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType, context: context, 
-    ).then((_) {
-      print("✅ تم إرسال الإشعار فوراً (أونلاين)");
-    }).catchError((error) async {
-      print("⚠️ فشل الإرسال، جاري التحويل لطابور الانتظار: $error");
+    ).catchError((error) async {
       await NotificationQueueManager.addToQueue(studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType);
     });
 
@@ -596,6 +559,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       color: Colors.greenAccent.shade400,
     );
     
+    // 🚀 إغلاق الشاشة فوراً
     Navigator.pop(context);
   }
 

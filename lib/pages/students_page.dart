@@ -73,7 +73,7 @@ class _StudentsPageState extends State<StudentsPage> {
         body: "حالة الطالب اللحظية في المعهد: $statusText",
         type: "live_status", 
         context: context, 
-      ).catchError((e) => print("fشل إرسال إشعار النبض: $e"));
+      ).catchError((e) => print("فشل إرسال إشعار النبض: $e"));
       
       GlassToast.show(
         context, 
@@ -176,58 +176,99 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
+  // 📊 دالة التصدير إلى إكسل المعدلة والمضمونة بدون أي خطأ برمجي
   Future<void> exportToExcel() async {
     try {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("جاري تجهيز ملف الإكسل...", style: TextStyle(fontFamily: 'Cairo'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("جاري تجهيز ملف الإكسل المنسق...", style: TextStyle(fontFamily: 'Cairo'))),
+      );
 
-      final snapshot = await FirebaseFirestore.instance.collection('students').where('cycleId', isEqualTo: widget.cycle.id).get();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('students')
+          .where('cycleId', isEqualTo: widget.cycle.id)
+          .get();
 
       if (snapshot.docs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لا يوجد طلاب لتصديرهم", style: TextStyle(fontFamily: 'Cairo'))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("لا يوجد طلاب لتصديرهم", style: TextStyle(fontFamily: 'Cairo'))),
+        );
         return;
       }
 
+      // 🚀 1. ترتيب الطلاب تصاعدياً بحسب الرقم التسلسلي (serial)
+      List<QueryDocumentSnapshot> docs = snapshot.docs.toList();
+      docs.sort((a, b) {
+        var aData = a.data() as Map<String, dynamic>;
+        var bData = b.data() as Map<String, dynamic>;
+        
+        int serialA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
+        int serialB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
+        return serialA.compareTo(serialB);
+      });
+
       var excel = excel_lib.Excel.createExcel();
-      excel_lib.Sheet sheetObject = excel['الطلاب'];
+      excel_lib.Sheet sheetObject = excel['جدول الطلاب'];
       excel.delete('Sheet1'); 
 
+      // 🚀 2. عناوين الأعمدة الشاملة وبدون تكرار (من اليمين لليسار)
       sheetObject.appendRow([
         excel_lib.TextCellValue('التسلسلي'),
         excel_lib.TextCellValue('اسم الطالب'),
-        excel_lib.TextCellValue('الجنسية'), 
-        excel_lib.TextCellValue('الرقم'),
+        excel_lib.TextCellValue('الجنسية'),
         excel_lib.TextCellValue('الصف'),
         excel_lib.TextCellValue('اسم الأب'),
         excel_lib.TextCellValue('اسم الأم'),
+        excel_lib.TextCellValue('المواليد'),
+        excel_lib.TextCellValue('مكان السكن'),
+        excel_lib.TextCellValue('رقم الهاتف'),
         excel_lib.TextCellValue('المشرف'),
       ]);
 
-      for (var doc in snapshot.docs) {
-        var data = doc.data();
-        String grade = data['grade'] ?? data['schoolGrade'] ?? data['classLevel'] ?? data['studyLevel'] ?? 'غير مسجل';
+      // 🚀 3. تعبئة بيانات الطلاب بحسب الحقول الحقيقية في الفايربيز
+      for (var doc in docs) {
+        var data = doc.data() as Map<String, dynamic>;
+
+        String serialStr = data['serial']?.toString() ?? '---';
+        String nameStr = data['name']?.toString() ?? '---';
+        String nationalityStr = data['nationality']?.toString() ?? 'سوري';
+        String gradeStr = data['schoolGrade'] ?? data['grade'] ?? data['classLevel'] ?? data['studyLevel'] ?? 'غير مسجل';
+        String fatherNameStr = data['fatherName']?.toString() ?? '---';
+        String motherNameStr = data['motherName']?.toString() ?? '---';
+
+        // استخراج تاريخ المواليد الصافي YYYY-MM-DD
+        String birthDateRaw = data['birthDate']?.toString() ?? '---';
+        String birthDateClean = birthDateRaw.contains(' ') ? birthDateRaw.split(' ')[0] : birthDateRaw;
+
+        String addressStr = data['address']?.toString() ?? '---';
+        String phoneStr = data['phone'] ?? data['parentPhone'] ?? '---';
+        String supervisorNameStr = data['supervisorName']?.toString() ?? 'غير موزع';
 
         sheetObject.appendRow([
-          excel_lib.TextCellValue(data['serial']?.toString() ?? ''),
-          excel_lib.TextCellValue(data['name']?.toString() ?? ''),
-          excel_lib.TextCellValue(data['nationality']?.toString() ?? 'سوري'), 
-          excel_lib.TextCellValue(data['serial']?.toString() ?? ''),
-          excel_lib.TextCellValue(grade),
-          excel_lib.TextCellValue(data['fatherName']?.toString() ?? ''),
-          excel_lib.TextCellValue(data['motherName']?.toString() ?? ''),
-          excel_lib.TextCellValue(data['supervisorName'] ?? 'غير موزع'),
+          excel_lib.TextCellValue(serialStr),
+          excel_lib.TextCellValue(nameStr),
+          excel_lib.TextCellValue(nationalityStr),
+          excel_lib.TextCellValue(gradeStr),
+          excel_lib.TextCellValue(fatherNameStr),
+          excel_lib.TextCellValue(motherNameStr),
+          excel_lib.TextCellValue(birthDateClean),
+          excel_lib.TextCellValue(addressStr),
+          excel_lib.TextCellValue(phoneStr),
+          excel_lib.TextCellValue(supervisorNameStr),
         ]);
       }
 
       var fileBytes = excel.save();
       final directory = await getTemporaryDirectory();
-      final filePath = '${directory.path}/طلاب_${widget.cycle.name}.xlsx';
+      final filePath = '${directory.path}/جدول_طلاب_${widget.cycle.name}.xlsx';
       final file = File(filePath);
       await file.writeAsBytes(fileBytes!);
 
-      await Share.shareXFiles([XFile(filePath)], text: 'قائمة طلاب: ${widget.cycle.name}');
+      await Share.shareXFiles([XFile(filePath)], text: 'جدول طلاب دورة: ${widget.cycle.name}');
 
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("حدث خطأ أثناء التصدير: $e", style: const TextStyle(fontFamily: 'Cairo'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("حدث خطأ أثناء التصدير: $e", style: const TextStyle(fontFamily: 'Cairo'))),
+      );
     }
   }
 
@@ -279,7 +320,6 @@ class _StudentsPageState extends State<StudentsPage> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
-  // 🚀 محرك فحص التاريخ الفعلي: جلب آخر جلسة لايف وتصفير العداد المزعج لتطهير القائمة تماماً
   Widget _buildAbsentAlertSection(bool isDarkMode) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('students')
@@ -605,7 +645,6 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  // 🚀 تصحيح الخطوط الحمراء: تم دمج الـ Context الداخلي المباشر لاستدعاء صفحات التنقل بنجاح
   Widget _buildStudentCard(BuildContext context, DocumentSnapshot doc, bool isDarkMode) {
     final data = doc.data() as Map<String, dynamic>;
     final String imageUrl = data['imageUrl'] ?? '';

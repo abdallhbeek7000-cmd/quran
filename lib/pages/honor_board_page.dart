@@ -18,7 +18,7 @@ class HonorBoardPage extends StatelessWidget {
 
   final Color primaryColor = const Color(0xff425c75);
   final Color goldColor = const Color(0xffD4AF37); 
-  final Color silverColor = const Color(0xffC0C0C0); 
+  final Color silverColor = const Color(0xff9E9E9E); 
   final Color bronzeColor = const Color(0xffCD7F32); 
 
   Stream<DocumentSnapshot> getHonorCategory(String categoryId) {
@@ -259,7 +259,7 @@ class HonorBoardPage extends StatelessWidget {
 }
 
 // 🚀=============================================================🚀
-// 🚀 شاشة توليد البوستر التسويقي الديناميكي التكيفي الذكي 🚀
+// 🚀 البوستر بالمقاس المثالي للموبايل والواتساب بدقة ناصعة بدون نقص 🚀
 // 🚀=============================================================🚀
 class HonorBoardPosterScreen extends StatefulWidget {
   const HonorBoardPosterScreen({super.key});
@@ -273,26 +273,25 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
   bool _isCapturing = false;
   bool _isLoading = true;
 
-  // قائمة موحدة لجميع النجوم
-  List<Map<String, dynamic>> allWinners = [];
+  List<Map<String, dynamic>> allStars = [];
 
-  final Color royalNavy = const Color(0xff1A2A3A);
-  final Color pureGold = const Color(0xffD4AF37);
+  final Color primaryNavy = const Color(0xff1E293B);
+  final Color royalGold = const Color(0xffD4AF37);
 
   @override
   void initState() {
     super.initState();
-    _loadAllCategoryWinners();
+    _loadAllStars();
   }
 
-  Future<void> _loadAllCategoryWinners() async {
+  Future<void> _loadAllStars() async {
     List<Map<String, dynamic>> newS = await _fetchCategoryKnights('new_students');
     List<Map<String, dynamic>> oldS = await _fetchCategoryKnights('old_students');
     List<Map<String, dynamic>> compS = await _fetchCategoryKnights('completed_students');
     
     if (mounted) {
       setState(() {
-        allWinners = [...newS, ...oldS, ...compS];
+        allStars = [...newS, ...oldS, ...compS];
         _isLoading = false;
       });
     }
@@ -325,23 +324,25 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
       list.add({
         'name': k['name'],
         'imageUrl': imageUrl,
-        'index': i, // للاحتفاظ بلون الميدالية بناءً على ترتيبه في فئته
       });
     }
     return list;
   }
 
+  // 📸 الالتقاط بمعامل بكسل عالي جداً لإخراج صورة بدقة جبارة للموبايل
   Future<void> _captureAndSharePng() async {
     setState(() { _isCapturing = true; });
     try {
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 350));
       RenderRepaintBoundary boundary = _globalKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 3.0); 
+      
+      // 🚀 معامل مضاعفة البكسلات لإعطاء دقة فائقة جداً عند الحفظ
+      ui.Image image = await boundary.toImage(pixelRatio: 3.5); 
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
 
       final directory = await getTemporaryDirectory();
-      final imagePath = await File('${directory.path}/honor_poster.png').create();
+      final imagePath = await File('${directory.path}/honor_poster_mobile.png').create();
       await imagePath.writeAsBytes(pngBytes);
 
       setState(() { _isCapturing = false; });
@@ -354,171 +355,174 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    String todayDate = "${DateTime.now().year} / ${DateTime.now().month} / ${DateTime.now().day}";
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // 🚀 الحسابات التكيفية الفخمة لمنع الـ Overflow وتصغير الحجم تلقائياً حسب عدد الطلاب
-    int totalStudents = allWinners.length;
-    
-    int crossAxisCount = 2; // الافتراضي لـ 4 طلاب أو أقل
-    double childAspectRatio = 0.82;
-    double avatarSize = 52.0;
-    double fontSize = 11.5;
-    double spacing = 14.0;
-
-    if (totalStudents > 4 && totalStudents <= 9) {
-      crossAxisCount = 3; // من 5 إلى 9 طلاب يقلب لـ 3 كروت بالسطر
-      childAspectRatio = 0.78;
-      avatarSize = 44.0;
-      fontSize = 9.5;
-      spacing = 10.0;
-    } else if (totalStudents > 9) {
-      crossAxisCount = 4; // أكثر من 9 طلاب يقلب لـ 4 كروت بالسطر لتوفير المساحة العمودية كلياً
-      childAspectRatio = 0.74;
-      avatarSize = 36.0;
-      fontSize = 8.5;
-      spacing = 8.0;
-    }
+    String todayDate = "${DateTime.now().year}-${DateTime.now().month}-${DateTime.now().day}";
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xff0F172A),
       appBar: _isCapturing 
           ? null 
           : AppBar(
-              backgroundColor: royalNavy,
+              backgroundColor: primaryNavy,
               title: const Text("معاينة البوستر", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
               iconTheme: const IconThemeData(color: Colors.white),
             ),
       floatingActionButton: _isCapturing 
           ? null 
           : FloatingActionButton.extended(
-              onPressed: _isLoading || allWinners.isEmpty ? null : _captureAndSharePng,
-              backgroundColor: pureGold,
+              onPressed: _isLoading || allStars.isEmpty ? null : _captureAndSharePng,
+              backgroundColor: royalGold,
               icon: const Icon(Icons.share, color: Colors.black),
               label: const Text("مشاركة الصورة", style: TextStyle(color: Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
             ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: Colors.amber))
-        : allWinners.isEmpty 
+        : allStars.isEmpty 
             ? const Center(child: Text("لا يوجد نجوم لعرضهم بالبوستر حالياً", style: TextStyle(color: Colors.white, fontFamily: 'Cairo')))
             : Center(
                 child: InteractiveViewer(
-                  child: RepaintBoundary(
-                    key: _globalKey,
-                    child: Container(
-                      width: 1080 / 2.5, 
-                      height: 1920 / 2.5,
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xff1A2A3A), Color(0xff090d16)],
-                          begin: Alignment.topCenter, 
-                          end: Alignment.bottomCenter,
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: RepaintBoundary(
+                      key: _globalKey,
+                      child: Container(
+                        width: 410, // 🎯 مقاس الشاشة المثالي للهواتف والواتساب لمنع أي نقص
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 26),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xffFFFFFF), Color(0xffF8FAFC), Color(0xffE2E8F0)],
+                            begin: Alignment.topCenter, 
+                            end: Alignment.bottomCenter,
+                          ),
+                          border: Border.all(color: royalGold, width: 2.5),
                         ),
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned(top: 60, right: -30, child: Icon(Icons.workspace_premium, size: 180, color: pureGold.withValues(alpha: 0.04))),
-                          Positioned(bottom: 120, left: -40, child: Icon(Icons.auto_awesome, size: 220, color: pureGold.withValues(alpha: 0.04))),
-                          
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-                            child: Column(
-                              children: [
-                                Icon(Icons.stars_rounded, color: pureGold, size: 48),
-                                const SizedBox(height: 6),
-                                Text("نجوم التميز الشرفية", style: TextStyle(color: pureGold, fontSize: 24, fontWeight: FontWeight.w900, fontFamily: 'Cairo', shadows: [Shadow(color: pureGold.withValues(alpha: 0.6), blurRadius: 12)])),
-                                const SizedBox(height: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                  decoration: BoxDecoration(color: pureGold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20), border: Border.all(color: pureGold.withValues(alpha: 0.4))),
-                                  child: Text("تاريخ الإعلان: $todayDate", style: const TextStyle(color: Colors.white, fontSize: 10, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                                ),
-                                
-                                const SizedBox(height: 20),
-                                
-                                // 🚀 التوزيع الشبكي المطور المقاوم للـ Overflow كلياً
-                                Expanded(
-                                  child: Center(
-                                    child: GridView.builder(
-                                      shrinkWrap: true,
-                                      physics: const NeverScrollableScrollPhysics(),
-                                      itemCount: allWinners.length,
-                                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: crossAxisCount, 
-                                        crossAxisSpacing: spacing,
-                                        mainAxisSpacing: spacing,
-                                        childAspectRatio: childAspectRatio, 
-                                      ),
-                                      itemBuilder: (context, idx) {
-                                        var winner = allWinners[idx];
-                                        String wName = winner['name'];
-                                        String firstL = wName.isNotEmpty ? wName.trim().substring(0, 1) : "?";
-                                        int rankIdx = winner['index'];
-                                        
-                                        Color medalC = rankIdx == 0 ? pureGold : (rankIdx == 1 ? const Color(0xffC0C0C0) : (rankIdx == 2 ? const Color(0xffCD7F32) : Colors.white38));
-
-                                        return Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withValues(alpha: 0.03),
-                                            borderRadius: BorderRadius.circular(14),
-                                            border: Border.all(color: medalC.withValues(alpha: 0.25), width: 1.0),
-                                          ),
-                                          child: Column( 
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              _buildAvatarCircle(winner['imageUrl'], firstL, medalC, avatarSize),
-                                              const SizedBox(height: 8),
-                                              Text(
-                                                wName, 
-                                                textAlign: TextAlign.center, 
-                                                maxLines: 2, 
-                                                overflow: TextOverflow.ellipsis, 
-                                                style: TextStyle(color: Colors.white, fontSize: fontSize, fontFamily: 'Cairo', fontWeight: FontWeight.bold, height: 1.2)
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min, // يتمدد رأسياً حسب عدد الطلاب بدون أي نقص
+                          children: [
+                            // 👑 الهيدر
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: primaryNavy,
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: [
+                                  BoxShadow(color: primaryNavy.withOpacity(0.25), blurRadius: 10, offset: const Offset(0, 4))
+                                ],
+                              ),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.stars_rounded, color: royalGold, size: 26),
+                                      const SizedBox(width: 8),
+                                      Text("نجوم وفرسان الحلقة", style: TextStyle(color: royalGold, fontSize: 19, fontWeight: FontWeight.w900, fontFamily: 'Cairo')),
+                                    ],
                                   ),
-                                ),
-                                
-                                const SizedBox(height: 10),
-                                const Divider(color: Colors.white12),
-                                Text("نسأل الله لهم الثبات والمزيد من الفتوحات والتميز", style: TextStyle(color: pureGold.withValues(alpha: 0.7), fontSize: 10.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                              ],
+                                  const SizedBox(height: 4),
+                                  const Text("معهد الشيخ سعيد العبدالله 🕌", style: TextStyle(color: Colors.white, fontSize: 12.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                ],
+                              ),
                             ),
-                          ),
-                          
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(border: Border.all(color: pureGold.withValues(alpha: 0.4), width: 2.5)),
+                            
+                            const SizedBox(height: 10),
+                            
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: royalGold.withOpacity(0.15), 
+                                borderRadius: BorderRadius.circular(18), 
+                                border: Border.all(color: royalGold, width: 0.8)
+                              ),
+                              child: Text("🗓️ تاريخ الإعلان: $todayDate", style: TextStyle(color: primaryNavy, fontSize: 10.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                             ),
-                          ),
-                        ],
+
+                            const SizedBox(height: 22),
+
+                            // 🌟 كروت الطلاب مقاس الموبايل المتناسق
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 12,
+                              alignment: WrapAlignment.center,
+                              children: allStars.map((star) {
+                                String name = star['name'];
+                                String url = star['imageUrl'];
+                                String firstL = name.isNotEmpty ? name.trim().substring(0, 1) : "?";
+
+                                return Container(
+                                  width: 115, // 🎯 عرض مناسب جداً لثلاثة كروت بالصف مع الحفاظ على الأبعاد
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: royalGold.withOpacity(0.55), width: 1.2),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
+                                      )
+                                    ],
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // 🌟 صورة واضحة جداً بحجم 68px
+                                      Stack(
+                                        alignment: Alignment.bottomRight,
+                                        children: [
+                                          Container(
+                                            width: 68,
+                                            height: 68,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: royalGold, width: 2.2),
+                                              boxShadow: [BoxShadow(color: royalGold.withOpacity(0.25), blurRadius: 6)],
+                                            ),
+                                            child: ClipRRect(
+                                              borderRadius: BorderRadius.circular(40),
+                                              child: url.isNotEmpty
+                                                  ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
+                                                  : Container(
+                                                      color: const Color(0xffF1F5F9), 
+                                                      child: Center(
+                                                        child: Text(firstL, style: TextStyle(color: royalGold, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))
+                                                      )
+                                                    ),
+                                            ),
+                                          ),
+                                          // 🌟 النجمة الموحدة
+                                          Container(
+                                            padding: const EdgeInsets.all(2),
+                                            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                            child: const Icon(Icons.star_rounded, color: Color(0xffD4AF37), size: 18),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        name,
+                                        textAlign: TextAlign.center,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(color: primaryNavy, fontSize: 10.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold, height: 1.2),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+
+                            const SizedBox(height: 22),
+                            const Divider(color: Colors.black12, height: 15),
+                            Text("دعواتنا لهم بالدوام والتألق وأن ينفع الله بهم الأمة 🌸", style: TextStyle(color: primaryNavy.withOpacity(0.8), fontSize: 10.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-    );
-  }
-
-  Widget _buildAvatarCircle(String url, String firstLetter, Color medalC, double size) {
-    return Container(
-      width: size, height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: medalC, width: 1.8),
-        boxShadow: [BoxShadow(color: medalC.withOpacity(0.25), blurRadius: 6)],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(40),
-        child: url.isNotEmpty
-            ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
-            : Container(color: Colors.white10, child: Center(child: Text(firstLetter, style: TextStyle(color: medalC, fontSize: size * 0.38, fontWeight: FontWeight.bold, fontFamily: 'Cairo')))),
-      ),
     );
   }
 }
