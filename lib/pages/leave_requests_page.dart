@@ -97,7 +97,7 @@ class LeaveRequestsPage extends StatelessWidget {
         'actionByRole': role, // توثيق الفئة المصلحة للإذن (مدير أو مشرف)
       });
 
-      // 🚀 2. تسجيل جلسة غياب تلقائية بعذر للطالب عند الموافقة المباشرة
+      // 🚀 2. تسجيل جلسة غياب تلقائية فريدة بعذر للطالب عند الموافقة المباشرة
       if (status == 'approved') {
         // جلب بيانات المشرف لربطه بالجلسة تلقائياً
         String activeSupervisorId = requestSupervisorId.isNotEmpty ? requestSupervisorId : supervisorId;
@@ -114,8 +114,11 @@ class LeaveRequestsPage extends StatelessWidget {
           }
         } catch (_) {}
 
-        // إنشاء وتوثيق الجلسة الأوتوماتيكية أوفلاين/أونلاين بجدول الجلسات
-        await FirebaseFirestore.instance.collection('sessions').add({
+        // 🔑 معرّف ثابت يربط الاستئذان المعتمد بجلسة اليوم ويمنع التكرار
+        String customSessionId = "${studentId}_$date";
+
+        // إنشاء وتوثيق الجلسة الموحدة بمعرف ثابت لتقرأها صفحة التفقد المبدئي مباشرة
+        await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).set({
           'studentId': studentId,
           'studentName': studentName,
           'supervisorId': activeSupervisorId,
@@ -132,9 +135,9 @@ class LeaveRequestsPage extends StatelessWidget {
           'nearReview': '',
           'farReview': '',
           'homework': '',
-          'notes': 'تم تسجليها تلقائياً بعد قبول طلب الاستئذان المعتمد.',
+          'notes': 'تم تسجيل الغياب تلقائياً بناءً على طلب استئذان مقبول مسبقاً.',
           'timestamp': FieldValue.serverTimestamp(),
-        });
+        }, SetOptions(merge: true));
       }
 
       // 3. إرسال إشعار فوري للأهل بالنتيجة لايف

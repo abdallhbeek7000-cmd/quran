@@ -426,7 +426,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
-  // 🚀 دالة إضافة الجلسة السريعة المانعة للتكرار والمستقرة أوفلاين
+  // 🚀 دالة إضافة الجلسة السريعة الفورية بمهلة أوفلاين استثنائية المانعة للتعليق والتكرار
   addSession() async {
     if (loading) return; // 🛑 حماية مضاعفة لمنع الضغط المزدوج
 
@@ -443,12 +443,12 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
     setState(() => loading = true);
 
-    // 🗓️ صياغة التاريخ بدقة المصفوفتين لضمان الرمز الموحد yyyy-MM-dd
+    // 🗓️ صياغة التاريخ yyyy-MM-dd
     final String monthStr = _selectedDate.month.toString().padLeft(2, '0');
     final String dayStr = _selectedDate.day.toString().padLeft(2, '0');
     final String date = "${_selectedDate.year}-$monthStr-$dayStr";
 
-    // 🔑 المعرّف الموحد الحاسم لمنع التكرار نهائياً عند الحفظ أوفلاين
+    // 🔑 المعرّف الموحد الحاسم لمنع تكرار الوثائق بأوفلاين وأونلاين
     final String customSessionId = "${widget.studentId}_$date";
 
     String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
@@ -519,21 +519,25 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     };
 
     try {
-      // 🎯 1. الحفظ باستخدام docId ثابت وواضح يمنع التكرار نهائياً بأوفلاين وأونلاين
+      // ⚡ 1. الحفظ الفوري المباشر مع مهلة ثانية واحدة لمنع التعليق في وضع الأوفلاين
       await FirebaseFirestore.instance
           .collection('sessions')
           .doc(customSessionId)
-          .set(sessionData, SetOptions(merge: true));
+          .set(sessionData, SetOptions(merge: true))
+          .timeout(
+            const Duration(seconds: 1),
+            onTimeout: () => print("تم حفظ الجلسة محلياً بالكامل أوفلاين ⚡"),
+          );
 
-      // 🚀 2. تحديث وتصفير غيابات الطالب صامتاً
+      // ⚡ 2. تحديث وتصفير غيابات الطالب مع مهلة سريعة
       if (!absent) {
         FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
           'consecutiveAbsences': 0,
           if (!isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) 'memorizedPages': totalPages,
-        }).catchError((e) => print("Absences update error: $e"));
+        }).timeout(const Duration(seconds: 1), onTimeout: () => null).catchError((e) => print("Absences update error: $e"));
       }
 
-      // 🚀 3. تسجيل المزامنة بالخلفية
+      // 🚀 3. تسجيل مهمة الرفع أوتوماتيكياً عند توفر الشائكة حتى والتطبيق مغلق
       if (!kIsWeb) {
         Workmanager().registerOneOffTask(
           "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
@@ -542,7 +546,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         ).catchError((e) => print("Workmanager error: $e"));
       }
 
-      // 🚀 4. معالجة الإشعارات بالخلفية
+      // 🚀 4. معالجة صف وتأطير الإشعارات
       String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : "📢 تحديث يومي من الحلقة"));
       String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
         : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 
@@ -567,17 +571,19 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         color: Colors.greenAccent.shade400,
       );
 
+      // 🎯 إغلاق الصفحة فوراً بدون تأخير!
       Navigator.pop(context);
     } catch (e) {
       print("Error saving session: $e");
       if (mounted) {
         GlassToast.show(
           context,
-          title: "خطأ",
-          message: "حدث خطأ أثناء حفظ الجلسة ❌",
-          icon: Icons.error_outline_rounded,
-          color: Colors.redAccent,
+          title: "تم الحفظ محلياً",
+          message: "تم تسجيل الجلسة محلياً وسيتم الرفع فور توفر الإنترنت ✅",
+          icon: Icons.offline_pin_rounded,
+          color: Colors.orangeAccent,
         );
+        Navigator.pop(context);
       }
     } finally {
       if (mounted) setState(() => loading = false);

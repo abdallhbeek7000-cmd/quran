@@ -13,7 +13,6 @@ import 'package:quran_habal/widgets/offline_wrapper.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:flutter/foundation.dart'; 
 import 'firebase_options.dart';
-import 'utils/app_colors.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
 import 'pages/update_checker.dart'; 
@@ -26,56 +25,21 @@ const String syncTaskName = "sync_sessions_data_forced";
 // 💬 إنشاء كائن الإشعارات المحلية لتجميع الرسائل
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
-// 🚀 محرك الخلفية القاطع: يستيقظ فوراً عند توفر الإنترنت حتى لو التطبيق مغلق
+// 🚀 محرك الخلفية القاطع: يستيقظ فوراً عند توفر الإنترنت والتطبيق مغلق لرفع الكاش أوتوماتيكياً
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
-    print("🎯 [Background Worker] تم استشعار تغيير بالشبكة! بدء الفحص والمزامنة الصامتة...");
+    print("🎯 [Background Worker] تم استشعار تغيير بالشبكة! بدء رفع الجلسات المعلقة بالخلفية...");
     try {
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-      final prefs = await SharedPreferences.getInstance();
       
-      List<String> offlineSessions = prefs.getStringList('offline_sessions_queue') ?? [];
-      
-      if (offlineSessions.isEmpty) {
-        print("☕ [Background Worker] لا توجد جلسات أوفلاين معلقة.");
-        return Future.value(true);
-      }
+      // ⚡ إجبار محرك الفايرستور على دفع ومزامنة كافة التغييرات الجاهزة بالذاكرة المحلية للسيرفر
+      await FirebaseFirestore.instance.waitForPendingWrites();
 
-      print("🔥 [Background Worker] جاري رفع (${offlineSessions.length}) جلسة معلقة للسيرفر فوراً...");
-      
-      List<String> remainingSessions = [];
-
-      for (String sessionJson in offlineSessions) {
-        try {
-          Map<String, dynamic> sessionMap = jsonDecode(sessionJson);
-          String studentId = sessionMap['studentId'] ?? '';
-          bool isAbsent = sessionMap['absent'] ?? false;
-
-          sessionMap['timestamp'] = FieldValue.serverTimestamp();
-
-          // 1. الرفع الفوري
-          await FirebaseFirestore.instance.collection('sessions').add(sessionMap);
-
-          // 2. تصفير غيابات الطالب فوراً
-          if (!isAbsent && studentId.isNotEmpty) {
-            await FirebaseFirestore.instance.collection('students').doc(studentId).update({
-              'consecutiveAbsences': 0,
-            });
-          }
-        } catch (e) {
-          print("⚠️ فشل رفع إحدى الجلسات، ستبقى بالطابور للمحاولة القادمة: $e");
-          remainingSessions.add(sessionJson);
-        }
-      }
-
-      // تحديث الطابور بما تبقى
-      await prefs.setStringList('offline_sessions_queue', remainingSessions);
-      print("✅ [Background Worker] إتمام معالجة طابور الأوفلاين بنجاح!");
-      
+      print("✅ [Background Worker] تم مزامنة ورفع كاش الجلسات المعلقة بنجاح دون أي تكرار!");
       return Future.value(true);
     } catch (e) {
-      print("❌ [Background Worker] خطأ أثناء المزامنة: $e");
+      print("❌ [Background Worker] خطأ أثناء المزامنة بالخلفية: $e");
       return Future.value(false);
     }
   });
@@ -87,33 +51,60 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print("Background message received: ${message.messageId}");
 }
 
-// 💬 دالة إظهار الإشعار المحلي التجميعي عند وصول رسائل شات
+// 💬 دالة إظهار الإشعار المحلي التجميعي الذكي مثل واتساب
 Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
   RemoteNotification? notification = message.notification;
   Map<String, dynamic> data = message.data;
 
   if (notification == null) return;
 
-  String studentId = data['studentId'] ?? 'default';
+  String studentId = data['studentId'] ?? 'default_group';
+  String groupKey = 'com.quran_habal.MESSAGES_$studentId';
 
-  // 🎯 توحيد معرف الإشعار حسب الطالب لدمجه واستبدال الإشعار القديم
-  int targetId = studentId.hashCode.abs();
+  // 🎯 معرف فريد لكل رسالة ومعرف ثابت للملخص
+  int messageId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  int summaryId = studentId.hashCode.abs();
 
-  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+  // 1️⃣ تفاصيل إشعار الرسالة الفردية ضمن المجموعة
+  AndroidNotificationDetails androidIndividualDetails = AndroidNotificationDetails(
     'high_importance_channel',
-    'إشعارات عالية الأهمية',
-    channelDescription: 'قناة إشعارات الرسائل والتنبيهات اليومية',
+    'إشعارات المحادثات والرسائل',
+    channelDescription: 'قناة تجميع إشعارات المحادثات اليومية',
     importance: Importance.max,
     priority: Priority.high,
+    groupKey: groupKey, // 🔑 الرمز الموحد لربط إشعارات هذا المرسل ببعضها
   );
 
-  const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+  NotificationDetails platformIndividualDetails = NotificationDetails(android: androidIndividualDetails);
 
+  // إظهار الرسالة الجديدة
   await flutterLocalNotificationsPlugin.show(
-    targetId,
+    messageId,
     notification.title ?? '',
     notification.body ?? '',
-    platformDetails,
+    platformIndividualDetails,
+    payload: jsonEncode(data),
+  );
+
+  // 2️⃣ إنشاء إشعار "الملخص" الذي يدمج الرسائل في كارت واحد (Group Summary)
+  AndroidNotificationDetails androidSummaryDetails = AndroidNotificationDetails(
+    'high_importance_channel',
+    'إشعارات المحادثات والرسائل',
+    channelDescription: 'قناة تجميع إشعارات المحادثات اليومية',
+    importance: Importance.max,
+    priority: Priority.high,
+    groupKey: groupKey,
+    setAsGroupSummary: true, // ⚡ يدمج الكروت المستقلة في كارت واحد مطوي
+  );
+
+  NotificationDetails platformSummaryDetails = NotificationDetails(android: androidSummaryDetails);
+
+  // إظهار ملخص المجموعة لمنع التشتت
+  await flutterLocalNotificationsPlugin.show(
+    summaryId,
+    notification.title ?? '',
+    notification.body ?? '',
+    platformSummaryDetails,
     payload: jsonEncode(data),
   );
 }
@@ -141,7 +132,7 @@ void main() async {
     await flutterLocalNotificationsPlugin.initialize(initSettings);
   }
   
-  // تفعيل الكاش المحلي اللامحدود لفايرستور
+  // ⚡ تفعيل الكاش المحلي اللامحدود لفايرستور (يضمن الحفظ والرفع أوفلاين/أونلاين)
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,

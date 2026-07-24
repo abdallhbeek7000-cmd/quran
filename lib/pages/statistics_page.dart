@@ -1,8 +1,12 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:excel/excel.dart' as excel_lib;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/theme_provider.dart';
 import '../services/cycle_service.dart';
 import '../widgets/offline_wrapper.dart'; 
@@ -21,6 +25,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
   // 🚀 وضع الفلترة: 0 = أسبوعي، 1 = شهري، 2 = كامل الدورة
   int filterMode = 0; 
   bool isLoading = true;
+  bool isExporting = false;
   
   List<Map<String, dynamic>> newStudentsStats = [];
   List<Map<String, dynamic>> oldStudentsStats = [];
@@ -62,7 +67,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
            d.isBefore(end.add(const Duration(seconds: 1)));
   }
 
-  // 🚀 الدالة الذكية لحساب الصفحات من النصوص (تدعم المواضع المتعددة بالفواصل | أو "و")
+  // 🚀 الدالة الذكية لحساب الصفحات من النصوص
   int _calculatePagesFromText(String? text) {
     if (text == null || text.trim().isEmpty) return 0;
     
@@ -147,11 +152,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
         String studentType = sData.containsKey('studentType') ? sData['studentType'] : 'new';
         bool isCompleted = studentType == 'completed';
 
-        // فحص فلترة الجلسات تاريخياً بناءً على النطاق المختار أو جلبها بالكامل للدورة
         var sSessions = sessionsSnap.docs.where((doc) {
           var data = doc.data();
           if (data['studentId'] != sId) return false;
-          if (filterMode == 2) return true; // كامل الدورة: لا يوجد قيود على التاريخ
+          if (filterMode == 2) return true;
           return _isDateInRange(data['date'] ?? '', targetStart, targetEnd);
         }).map((d) => d.data()).toList();
 
@@ -170,7 +174,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
         int totalPages = 0;
         int reviewPages = 0; 
         
-        // 🚀 الحل الجذري والمنطقي: حساب صفحات كل جلسة على حدة بناءً على نصوص المواضع ثم جمعها
         if (validSessions.isNotEmpty) {
           if (!isCompleted) {
             for (var s in validSessions) {
@@ -179,10 +182,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
               reviewPages += _calculatePagesFromText(s['farReview']?.toString());
             }
           } else {
-            // 👑 للطالب الخاتم: الاعتماد على مراجعة الختمة الشاملة (farReview) ومراكمتها بشكل سليم
             for (var s in validSessions) {
               reviewPages += _calculatePagesFromText(s['farReview']?.toString());
-              reviewPages += _calculatePagesFromText(s['nearReview']?.toString()); // احتياط في حال سجل بالجديد
+              reviewPages += _calculatePagesFromText(s['nearReview']?.toString());
             }
           }
         }
@@ -236,8 +238,69 @@ class _StatisticsPageState extends State<StatisticsPage> {
     }
   }
 
+  // 📊 دالة تصدير البيانات إلى ملف Excel
+  Future<void> _exportToExcel() async {
+    setState(() => isExporting = true);
+    try {
+      var excel = excel_lib.Excel.createExcel();
+      excel_lib.Sheet sheetObject = excel['الإحصائيات'];
+      excel.delete('Sheet1');
+
+      // العناوين الفرعية بنفس بيانات الجدول المتاحة
+      List<excel_lib.CellValue> headers = [
+        excel_lib.TextCellValue('الفئة'),
+        excel_lib.TextCellValue('اسم الطالب'),
+        excel_lib.TextCellValue('صفحات الحفظ'),
+        excel_lib.TextCellValue('صفحات المراجعة'),
+        excel_lib.TextCellValue('أيام الغياب'),
+        excel_lib.TextCellValue('أيام الحضور'),
+      ];
+
+      sheetObject.appendRow(headers);
+
+      void addSectionRows(String categoryName, List<Map<String, dynamic>> stats) {
+        for (var stat in stats) {
+          sheetObject.appendRow([
+            excel_lib.TextCellValue(categoryName),
+            excel_lib.TextCellValue(stat['name'].toString()),
+            excel_lib.IntCellValue(stat['pages'] as int),
+            excel_lib.IntCellValue(stat['reviewPages'] as int),
+            excel_lib.IntCellValue(stat['absentCount'] as int),
+            excel_lib.IntCellValue(stat['sessionsCount'] as int),
+          ]);
+        }
+      }
+
+      addSectionRows('الطلاب الجدد', newStudentsStats);
+      addSectionRows('الطلاب القدامى', oldStudentsStats);
+      addSectionRows('الطلاب الخاتمين', completedStudentsStats);
+
+      var fileBytes = excel.save();
+      if (fileBytes != null) {
+        final directory = await getTemporaryDirectory();
+        String filterName = filterMode == 0 ? "اسبوعي" : (filterMode == 1 ? "شهري" : "كامل_الدورة");
+        String filePath = '${directory.path}/احصائيات_$filterName.xlsx';
+
+        File(filePath)
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(fileBytes);
+
+        await Share.shareXFiles(
+          [XFile(filePath)],
+          text: '📊 تقرير الإحصائيات ($currentPeriodLabel)',
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.redAccent, content: Text("حدث خطأ أثناء تصدير الملف: $e", style: const TextStyle(fontFamily: 'Cairo'))),
+      );
+    } finally {
+      if (mounted) setState(() => isExporting = false);
+    }
+  }
+
   void _changePeriod(int amount) {
-    if (filterMode == 2) return; // تعطيل التنقل في وضع الدورة الكاملة
+    if (filterMode == 2) return; 
     setState(() {
       periodsBack += amount;
       if (periodsBack < 0) periodsBack = 0; 
@@ -260,6 +323,16 @@ class _StatisticsPageState extends State<StatisticsPage> {
           centerTitle: true,
           title: Text("لوحة الإحصائيات الشاملة 📊", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
           iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
+          actions: [
+            IconButton(
+              icon: isExporting 
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.greenAccent))
+                  : const Icon(Icons.explicit_outlined, color: Colors.greenAccent, size: 28),
+              tooltip: "تصدير إلى ملف إكسيل",
+              onPressed: isExporting || isLoading ? null : _exportToExcel,
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
         body: Stack(
           children: [
