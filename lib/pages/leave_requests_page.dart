@@ -79,7 +79,17 @@ class LeaveRequestsPage extends StatelessWidget {
     Future.delayed(const Duration(seconds: 3), () => overlayEntry.remove());
   }
 
-  Future<void> _updateRequestStatus(BuildContext context, String docId, String studentId, String studentName, String status, String date, bool isDark) async {
+  Future<void> _updateRequestStatus({
+    required BuildContext context,
+    required String docId,
+    required String studentId,
+    required String studentName,
+    required String status,
+    required String date,
+    required String reason,
+    required String requestSupervisorId,
+    required bool isDark,
+  }) async {
     try {
       // 1. تحديث حالة الطلب بالفايربيز
       await FirebaseFirestore.instance.collection('leave_requests').doc(docId).update({
@@ -87,10 +97,50 @@ class LeaveRequestsPage extends StatelessWidget {
         'actionByRole': role, // توثيق الفئة المصلحة للإذن (مدير أو مشرف)
       });
 
-      // 2. إرسال إشعار فوري للأهل بالنتيجة لايف
+      // 🚀 2. تسجيل جلسة غياب تلقائية بعذر للطالب عند الموافقة المباشرة
+      if (status == 'approved') {
+        // جلب بيانات المشرف لربطه بالجلسة تلقائياً
+        String activeSupervisorId = requestSupervisorId.isNotEmpty ? requestSupervisorId : supervisorId;
+        String activeSupervisorName = "المشرف";
+
+        try {
+          var studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
+          if (studentDoc.exists) {
+            var sData = studentDoc.data()!;
+            activeSupervisorName = sData['supervisorName'] ?? "المشرف";
+            if (activeSupervisorId.isEmpty) {
+              activeSupervisorId = sData['supervisorId'] ?? '';
+            }
+          }
+        } catch (_) {}
+
+        // إنشاء وتوثيق الجلسة الأوتوماتيكية أوفلاين/أونلاين بجدول الجلسات
+        await FirebaseFirestore.instance.collection('sessions').add({
+          'studentId': studentId,
+          'studentName': studentName,
+          'supervisorId': activeSupervisorId,
+          'supervisorName': activeSupervisorName,
+          'supervisorIds': [activeSupervisorId],
+          'supervisorNames': [activeSupervisorName],
+          'date': date,
+          'absent': true,
+          'absenceType': "بعذر",
+          'absenceReason': reason,
+          'isExam': false,
+          'didNotRecite': false,
+          'newMemorization': '',
+          'nearReview': '',
+          'farReview': '',
+          'homework': '',
+          'notes': 'تم تسجليها تلقائياً بعد قبول طلب الاستئذان المعتمد.',
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // 3. إرسال إشعار فوري للأهل بالنتيجة لايف
       String title = status == 'approved' ? "✅ تم قبول إذن الغياب" : "❌ اعتذر المعهد عن قبول الإذن";
       String body = status == 'approved' 
-          ? "تمت الموافقة على إذن الغياب الخاص بالطالب $studentName ليوم $date."
+          ? "تمت الموافقة على إذن الغياب الخاص بالطالب $studentName ليوم $date وتوثيقه تلقائياً بعذر."
           : "نعتذر، لم تتم الموافقة على إذن الغياب للطالب $studentName ليوم $date.";
 
       await NotificationService.sendAndSaveNotification(
@@ -104,7 +154,7 @@ class LeaveRequestsPage extends StatelessWidget {
       if (!context.mounted) return;
       _showTopPremiumToast(
         context,
-        message: status == 'approved' ? "تم قبول العذر الطبي/الخاص وإشعار الأهل بنجاح 🎉" : "تم رفض الطلب وإبلاغ عائلة الطالب 📌",
+        message: status == 'approved' ? "تم قبول الطلب وتسجيل جلسة غياب بعذر تلقائياً 🎉" : "تم رفض الطلب وإبلاغ عائلة الطالب 📌",
         icon: status == 'approved' ? Icons.check_circle_rounded : Icons.remove_circle_outline_rounded,
         statusColor: status == 'approved' ? Colors.green.shade600 : Colors.redAccent,
         isDark: isDark,
@@ -185,7 +235,6 @@ class LeaveRequestsPage extends StatelessWidget {
           return _buildEmptyState(isDarkMode, isHistory);
         }
 
-        // 🚀 الفلترة المحلية المزدوجة والمقواة (المدير يرى كل شيء والمشرف يرى طلابه فقط)
         var docs = snapshot.data!.docs.where((doc) {
           var data = doc.data() as Map<String, dynamic>;
           String currentStatus = data['status'] ?? 'pending';
@@ -193,7 +242,6 @@ class LeaveRequestsPage extends StatelessWidget {
           bool statusMatches = isHistory ? (currentStatus != 'pending') : (currentStatus == 'pending');
           bool isMyStudent = true; 
           
-          // قفل الأمان: الفلترة تطبق فقط على المشرف، بينما المدير مستثنى ليرى الجميع
           if (role == 'supervisor') {
             isMyStudent = data['supervisorId'] == supervisorId;
           }
@@ -211,6 +259,7 @@ class LeaveRequestsPage extends StatelessWidget {
             var doc = docs[index];
             var data = doc.data() as Map<String, dynamic>;
             String currentStatus = data['status'] ?? 'pending';
+            String requestTime = data['requestTime'] ?? 'غير محدد';
 
             return Container(
               margin: const EdgeInsets.only(bottom: 15),
@@ -240,8 +289,10 @@ class LeaveRequestsPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text("تاريخ الغياب المطلوب: ${data['date']}", style: TextStyle(color: Colors.redAccent.shade200, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
-                    const SizedBox(height: 5),
-                    Text("السبب: ${data['reason']}", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text("سبب الغياب: ${data['reason']}", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text("⏱️ وقت إرسال الطلب: $requestTime", style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w600)),
                     
                     if (!isHistory) ...[
                       const SizedBox(height: 15),
@@ -250,7 +301,17 @@ class LeaveRequestsPage extends StatelessWidget {
                           Expanded(
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 2),
-                              onPressed: () => _updateRequestStatus(context, doc.id, data['studentId'], data['studentName'], 'approved', data['date'], isDarkMode),
+                              onPressed: () => _updateRequestStatus(
+                                context: context,
+                                docId: doc.id,
+                                studentId: data['studentId'] ?? '',
+                                studentName: data['studentName'] ?? 'طالب',
+                                status: 'approved',
+                                date: data['date'] ?? '',
+                                reason: data['reason'] ?? 'بعذر',
+                                requestSupervisorId: data['supervisorId'] ?? '',
+                                isDark: isDarkMode,
+                              ),
                               icon: const Icon(Icons.check_circle, color: Colors.white, size: 18),
                               label: const Text("قبول العذر", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                             ),
@@ -259,7 +320,17 @@ class LeaveRequestsPage extends StatelessWidget {
                           Expanded(
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 2),
-                              onPressed: () => _updateRequestStatus(context, doc.id, data['studentId'], data['studentName'], 'rejected', data['date'], isDarkMode),
+                              onPressed: () => _updateRequestStatus(
+                                context: context,
+                                docId: doc.id,
+                                studentId: data['studentId'] ?? '',
+                                studentName: data['studentName'] ?? 'طالب',
+                                status: 'rejected',
+                                date: data['date'] ?? '',
+                                reason: data['reason'] ?? '',
+                                requestSupervisorId: data['supervisorId'] ?? '',
+                                isDark: isDarkMode,
+                              ),
                               icon: const Icon(Icons.cancel, color: Colors.white, size: 18),
                               label: const Text("رفض", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                             ),

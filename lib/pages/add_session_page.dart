@@ -84,7 +84,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   String absenceType = "بدون عذر"; 
   String memorizationRating = "جيد"; 
   String newReviewRating = "جيد"; 
-  String oldReviewRating = "جيد";     
+  String oldReviewRating = "جيد";      
   String studentStatus = "مهذب";
 
   DateTime _selectedDate = DateTime.now();
@@ -426,6 +426,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
+  // 🚀 دالة إضافة الجلسة السريعة والأوفلاين القاطعة
   addSession() async {
     if (isExam && !absent && examScoreController.text.trim().isEmpty) {
       GlassToast.show(
@@ -474,7 +475,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     List<String> supervisorIdsList = selectedSupervisors.map((e) => e['id']!).toList();
     List<String> supervisorNamesList = selectedSupervisors.map((e) => e['name']!).toList();
 
-    // 🚀 الخريطة الأصلية تماماً لتفادي تضارب الموديل
     final Map<String, dynamic> sessionData = {
       'studentId': widget.studentId,
       'studentName': widget.studentName,
@@ -509,14 +509,10 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       if (!absent && !isExam && !didNotRecite) 'total_memorized_pages': totalPages,
     };
 
-    // 🚀 1. الحفظ الفوري المباشر عبر SessionService (الخريطة المباشرة)
-    try {
-      await sessionService.addSession(sessionData);
-    } catch (e) {
-      print("⚠️ خطأ حفظ الجلسة: $e");
-    }
+    // 🚀 1. الحفظ السريع الحاسم محلياً / أونلاين بمهلة أوفلاين سريعة
+    await sessionService.addSession(sessionData);
 
-    // 🚀 2. تصفير غيابات الطالب فوراً بالكاش والمستند
+    // 🚀 2. تحديث وتصفير غيابات الطالب صامتاً بدون تعطيل إغلاق الصفحة
     if (!absent) {
       FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
         'consecutiveAbsences': 0,
@@ -533,7 +529,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       ).catchError((e) => print("Workmanager error: $e"));
     }
 
-    // 🚀 4. معالجة الإشعارات
+    // 🚀 4. معالجة الإشعارات صامتاً بالخلفية
     String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : "📢 تحديث يومي من الحلقة"));
     String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
       : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 
@@ -559,7 +555,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       color: Colors.greenAccent.shade400,
     );
     
-    // 🚀 إغلاق الشاشة فوراً
+    // 🚀 إغلاق الشاشة فوراً وبسرعة فائقة
     Navigator.pop(context);
   }
 

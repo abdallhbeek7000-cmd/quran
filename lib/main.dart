@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:firebase_messaging/firebase_messaging.dart'; 
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:provider/provider.dart'; 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:quran_habal/widgets/offline_wrapper.dart'; 
@@ -22,64 +23,60 @@ import 'package:shared_preferences/shared_preferences.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 const String syncTaskName = "sync_sessions_data_forced";
 
-// 🚀 محرك الخلفية الصامت والقاطع: يستيقظ فور لقط الإنترنت والتطبيق مغلق تماماً لرفع طابور الجلسات
+// 💬 إنشاء كائن الإشعارات المحلية لتجميع الرسائل
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+// 🚀 محرك الخلفية القاطع: يستيقظ فوراً عند توفر الإنترنت حتى لو التطبيق مغلق
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
-    print("🎯 [WorkManager] تم استشعار الإنترنت بالخلفية! بدء فحص طابور الجلسات الصامت...");
+    print("🎯 [Background Worker] تم استشعار تغيير بالشبكة! بدء الفحص والمزامنة الصامتة...");
     try {
-      // 1. تهيئة الفايربيز مع السيرفر بالخلفية
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
       final prefs = await SharedPreferences.getInstance();
       
-      // 2. سحب طابور الجلسات المخزنة أوفلاين
       List<String> offlineSessions = prefs.getStringList('offline_sessions_queue') ?? [];
       
       if (offlineSessions.isEmpty) {
-        print("☕ [WorkManager] طابور الانتظار فارغ، لا يوجد جلسات أوفلاين معلقة.");
+        print("☕ [Background Worker] لا توجد جلسات أوفلاين معلقة.");
         return Future.value(true);
       }
 
-      print("🔥 [WorkManager] جاري رفع (${offlineSessions.length}) جلسة معلقة إلى السيرفر لايف صامتاً وبدون فتح التطبيق...");
+      print("🔥 [Background Worker] جاري رفع (${offlineSessions.length}) جلسة معلقة للسيرفر فوراً...");
       
+      List<String> remainingSessions = [];
+
       for (String sessionJson in offlineSessions) {
-        Map<String, dynamic> sessionMap = jsonDecode(sessionJson);
-        String studentId = sessionMap['studentId'] ?? '';
-        bool isAbsent = sessionMap['absent'] ?? false;
+        try {
+          Map<String, dynamic> sessionMap = jsonDecode(sessionJson);
+          String studentId = sessionMap['studentId'] ?? '';
+          bool isAbsent = sessionMap['absent'] ?? false;
 
-        // إدراج التوقيت الرسمي للسيرفر فوراً عند الرفع بالخلفية
-        sessionMap['timestamp'] = FieldValue.serverTimestamp();
+          sessionMap['timestamp'] = FieldValue.serverTimestamp();
 
-        // أ. رفع الجلسة مباشرة
-        await FirebaseFirestore.instance.collection('sessions').add(sessionMap);
+          // 1. الرفع الفوري
+          await FirebaseFirestore.instance.collection('sessions').add(sessionMap);
 
-        // ب. تحديث وتصفير عداد الطالب تلقائياً لمنع تعليق شريط التنبيهات
-        if (!isAbsent) {
-          await FirebaseFirestore.instance.collection('students').doc(studentId).update({
-            'consecutiveAbsences': 0,
-          });
-        } else {
-          // إعادة الحساب التراكمي في الخلفية للغياب لضمان الدقة
-          final snap = await FirebaseFirestore.instance.collection('sessions').where('studentId', isEqualTo: studentId).get();
-          List<Map<String, dynamic>> totalSessions = snap.docs.map((e) => e.data()).toList();
-          totalSessions.sort((a, b) => (b['date'] ?? '').compareTo(a['date'] ?? ''));
-          
-          int consecutive = 0;
-          for (var s in totalSessions) {
-            if (s['absent'] ?? false) consecutive++; else break;
+          // 2. تصفير غيابات الطالب فوراً
+          if (!isAbsent && studentId.isNotEmpty) {
+            await FirebaseFirestore.instance.collection('students').doc(studentId).update({
+              'consecutiveAbsences': 0,
+            });
           }
-          await FirebaseFirestore.instance.collection('students').doc(studentId).update({'consecutiveAbsences': consecutive});
+        } catch (e) {
+          print("⚠️ فشل رفع إحدى الجلسات، ستبقى بالطابور للمحاولة القادمة: $e");
+          remainingSessions.add(sessionJson);
         }
       }
 
-      // 3. مسح وتطهير طابور الكاش المحلي تماماً بعد إتمام الرفع بنجاح
-      await prefs.remove('offline_sessions_queue');
-      print("✅ [WorkManager] تم إفراغ الطابور كلياً ومزامنة كل البيانات بنجاح والمشرف خارج التطبيق!");
+      // تحديث الطابور بما تبقى
+      await prefs.setStringList('offline_sessions_queue', remainingSessions);
+      print("✅ [Background Worker] إتمام معالجة طابور الأوفلاين بنجاح!");
       
       return Future.value(true);
     } catch (e) {
-      print("❌ [WorkManager] فشل محرك الخلفية الصامت: $e");
-      return Future.value(false); // إعادة المحاولة لاحقاً في حال انقطع الاتصال مجدداً
+      print("❌ [Background Worker] خطأ أثناء المزامنة: $e");
+      return Future.value(false);
     }
   });
 }
@@ -88,6 +85,37 @@ void callbackDispatcher() {
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   print("Background message received: ${message.messageId}");
+}
+
+// 💬 دالة إظهار الإشعار المحلي التجميعي عند وصول رسائل شات
+Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
+  RemoteNotification? notification = message.notification;
+  Map<String, dynamic> data = message.data;
+
+  if (notification == null) return;
+
+  String studentId = data['studentId'] ?? 'default';
+
+  // 🎯 توحيد معرف الإشعار حسب الطالب لدمجه واستبدال الإشعار القديم
+  int targetId = studentId.hashCode.abs();
+
+  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    'high_importance_channel',
+    'إشعارات عالية الأهمية',
+    channelDescription: 'قناة إشعارات الرسائل والتنبيهات اليومية',
+    importance: Importance.max,
+    priority: Priority.high,
+  );
+
+  const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+
+  await flutterLocalNotificationsPlugin.show(
+    targetId,
+    notification.title ?? '',
+    notification.body ?? '',
+    platformDetails,
+    payload: jsonEncode(data),
+  );
 }
 
 void main() async {
@@ -103,27 +131,36 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // 💬 تهيئة الإشعارات المحلية
+  if (!kIsWeb) {
+    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+    );
+    await flutterLocalNotificationsPlugin.initialize(initSettings);
+  }
   
-  // الاحتفاظ بإعدادات الحفظ المحلي اللامحدود للـ Offline الطبيعي
+  // تفعيل الكاش المحلي اللامحدود لفايرستور
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
 
-  // 🚀 تهيئة الـ Workmanager وربطها بالـ callbackDispatcher المستقلة
+  // 🚀 تهيئة محرك الخلفية الفوري
   if (!kIsWeb) {
     await Workmanager().initialize(
       callbackDispatcher,
       isInDebugMode: false, 
     );
 
-    // 🚀 جدولة وتأمين محرك الفحص الدوري الصامت بالخلفية لتبحث عن طابور المزامنة فور شبك الواي فاي أو البيانات
+    // تسجيل مهمة فورية ودورية تعمل عند الاتصال بالشبكة
     await Workmanager().registerPeriodicTask(
       "periodic_sync_id_01",
       syncTaskName,
-      frequency: const Duration(minutes: 15), // يفحص تلقائياً كل 15 دقيقة بالخلفية بشكل صامت
+      frequency: const Duration(minutes: 15), 
       constraints: Constraints(
-        networkType: NetworkType.connected, // يشتعل قسرياً فور وجود شبكة اتصال
+        networkType: NetworkType.connected, 
       ),
     );
   }
@@ -146,7 +183,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool isLoggedIn = false;
   String userRole = '';
   String userId = '';
@@ -154,12 +191,43 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     checkLogin();
     _setupInteractedMessage();
     
+    // 💬 الاستماع المباشر للإشعارات القادمة أثناء عمل التطبيق
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      _showGroupedLocalNotification(message);
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       UpdateChecker.checkForUpdates();
+      _triggerInstantSyncIfOnline();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // 🚀 تشغيل المزامنة الفورية فور عودة التطبيق للعمل
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _triggerInstantSyncIfOnline();
+    }
+  }
+
+  void _triggerInstantSyncIfOnline() {
+    if (!kIsWeb) {
+      Workmanager().registerOneOffTask(
+        "instant_sync_${DateTime.now().millisecondsSinceEpoch}",
+        syncTaskName,
+        constraints: Constraints(networkType: NetworkType.connected),
+      ).catchError((_) {});
+    }
   }
 
   Future<void> _setupInteractedMessage() async {

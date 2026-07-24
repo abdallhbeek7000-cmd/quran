@@ -1,13 +1,12 @@
 import 'dart:io';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart'; 
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:widgets_to_image/widgets_to_image.dart';
 import '../services/theme_provider.dart';
 import 'manage_honor_board_page.dart'; 
 
@@ -259,7 +258,7 @@ class HonorBoardPage extends StatelessWidget {
 }
 
 // 🚀=============================================================🚀
-// 🚀 البوستر بالمقاس المثالي للموبايل والواتساب بدقة ناصعة بدون نقص 🚀
+// 🚀 البوستر فائق الدقة HD (باستخدام محرك widgets_to_image الجبار) 🚀
 // 🚀=============================================================🚀
 class HonorBoardPosterScreen extends StatefulWidget {
   const HonorBoardPosterScreen({super.key});
@@ -269,8 +268,8 @@ class HonorBoardPosterScreen extends StatefulWidget {
 }
 
 class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
-  final GlobalKey _globalKey = GlobalKey();
-  bool _isCapturing = false;
+  final WidgetsToImageController controller = WidgetsToImageController();
+  bool _isExporting = false;
   bool _isLoading = true;
 
   List<Map<String, dynamic>> allStars = [];
@@ -329,27 +328,25 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
     return list;
   }
 
-  // 📸 الالتقاط بمعامل بكسل عالي جداً لإخراج صورة بدقة جبارة للموبايل
+  // 📸 دالة الالتقاط فائقة الدقة باستخدام widgets_to_image (نفس آلية بوستر الغياب تماماً)
   Future<void> _captureAndSharePng() async {
-    setState(() { _isCapturing = true; });
+    setState(() { _isExporting = true; });
     try {
-      await Future.delayed(const Duration(milliseconds: 350));
-      RenderRepaintBoundary boundary = _globalKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      
-      // 🚀 معامل مضاعفة البكسلات لإعطاء دقة فائقة جداً عند الحفظ
-      ui.Image image = await boundary.toImage(pixelRatio: 3.5); 
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
+      final bytes = await controller.capture();
+      if (bytes != null) {
+        final tempDir = await getTemporaryDirectory();
+        final file = await File('${tempDir.path}/لوحة_الشرف_HD.png').create();
+        await file.writeAsBytes(bytes);
 
-      final directory = await getTemporaryDirectory();
-      final imagePath = await File('${directory.path}/honor_poster_mobile.png').create();
-      await imagePath.writeAsBytes(pngBytes);
-
-      setState(() { _isCapturing = false; });
-      await Share.shareXFiles([XFile(imagePath.path)], text: '🌟 نجوم وفرسان المعهد المتميزين، بارك الله فيهم وزادهم علماً وتفوقاً 🌟');
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: '🌟 نجوم وفرسان المعهد المتميزين، بارك الله فيهم وزادهم علماً وتفوقاً 🌟\nمعهد الشيخ سعيد العبدالله 🕌',
+        );
+      }
     } catch (e) {
-      setState(() { _isCapturing = false; });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("حدث خطأ أثناء حفظ الصورة", style: TextStyle(fontFamily: 'Cairo'))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("حدث خطأ أثناء إنشاء الصورة: $e", style: const TextStyle(fontFamily: 'Cairo'))));
+    } finally {
+      if (mounted) setState(() { _isExporting = false; });
     }
   }
 
@@ -359,21 +356,19 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xff0F172A),
-      appBar: _isCapturing 
-          ? null 
-          : AppBar(
-              backgroundColor: primaryNavy,
-              title: const Text("معاينة البوستر", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
-              iconTheme: const IconThemeData(color: Colors.white),
-            ),
-      floatingActionButton: _isCapturing 
-          ? null 
-          : FloatingActionButton.extended(
-              onPressed: _isLoading || allStars.isEmpty ? null : _captureAndSharePng,
-              backgroundColor: royalGold,
-              icon: const Icon(Icons.share, color: Colors.black),
-              label: const Text("مشاركة الصورة", style: TextStyle(color: Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-            ),
+      appBar: AppBar(
+        backgroundColor: primaryNavy,
+        title: const Text("معاينة البوستر HD", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: (_isLoading || allStars.isEmpty || _isExporting) ? null : _captureAndSharePng,
+        backgroundColor: royalGold,
+        icon: _isExporting 
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+            : const Icon(Icons.share, color: Colors.black),
+        label: Text(_isExporting ? "جاري التصدير..." : "مشاركة الصورة HD", style: const TextStyle(color: Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+      ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: Colors.amber))
         : allStars.isEmpty 
@@ -382,147 +377,157 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
                 child: InteractiveViewer(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
-                    child: RepaintBoundary(
-                      key: _globalKey,
-                      child: Container(
-                        width: 410, // 🎯 مقاس الشاشة المثالي للهواتف والواتساب لمنع أي نقص
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 26),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xffFFFFFF), Color(0xffF8FAFC), Color(0xffE2E8F0)],
-                            begin: Alignment.topCenter, 
-                            end: Alignment.bottomCenter,
-                          ),
-                          border: Border.all(color: royalGold, width: 2.5),
+                    child: Column(
+                      children: [
+                        // 🌟 البوستر الخفي / الجاهز للالتقاط بدقة عالية HD
+                        WidgetsToImage(
+                          controller: controller,
+                          child: _buildExportablePoster(todayDate),
                         ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min, // يتمدد رأسياً حسب عدد الطلاب بدون أي نقص
-                          children: [
-                            // 👑 الهيدر
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                              decoration: BoxDecoration(
-                                color: primaryNavy,
-                                borderRadius: BorderRadius.circular(18),
-                                boxShadow: [
-                                  BoxShadow(color: primaryNavy.withOpacity(0.25), blurRadius: 10, offset: const Offset(0, 4))
-                                ],
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.stars_rounded, color: royalGold, size: 26),
-                                      const SizedBox(width: 8),
-                                      Text("نجوم وفرسان الحلقة", style: TextStyle(color: royalGold, fontSize: 19, fontWeight: FontWeight.w900, fontFamily: 'Cairo')),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text("معهد الشيخ سعيد العبدالله 🕌", style: TextStyle(color: Colors.white, fontSize: 12.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                            ),
-                            
-                            const SizedBox(height: 10),
-                            
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: royalGold.withOpacity(0.15), 
-                                borderRadius: BorderRadius.circular(18), 
-                                border: Border.all(color: royalGold, width: 0.8)
-                              ),
-                              child: Text("🗓️ تاريخ الإعلان: $todayDate", style: TextStyle(color: primaryNavy, fontSize: 10.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                            ),
-
-                            const SizedBox(height: 22),
-
-                            // 🌟 كروت الطلاب مقاس الموبايل المتناسق
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 12,
-                              alignment: WrapAlignment.center,
-                              children: allStars.map((star) {
-                                String name = star['name'];
-                                String url = star['imageUrl'];
-                                String firstL = name.isNotEmpty ? name.trim().substring(0, 1) : "?";
-
-                                return Container(
-                                  width: 115, // 🎯 عرض مناسب جداً لثلاثة كروت بالصف مع الحفاظ على الأبعاد
-                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: royalGold.withOpacity(0.55), width: 1.2),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 3),
-                                      )
-                                    ],
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // 🌟 صورة واضحة جداً بحجم 68px
-                                      Stack(
-                                        alignment: Alignment.bottomRight,
-                                        children: [
-                                          Container(
-                                            width: 68,
-                                            height: 68,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: royalGold, width: 2.2),
-                                              boxShadow: [BoxShadow(color: royalGold.withOpacity(0.25), blurRadius: 6)],
-                                            ),
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(40),
-                                              child: url.isNotEmpty
-                                                  ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
-                                                  : Container(
-                                                      color: const Color(0xffF1F5F9), 
-                                                      child: Center(
-                                                        child: Text(firstL, style: TextStyle(color: royalGold, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))
-                                                      )
-                                                    ),
-                                            ),
-                                          ),
-                                          // 🌟 النجمة الموحدة
-                                          Container(
-                                            padding: const EdgeInsets.all(2),
-                                            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                                            child: const Icon(Icons.star_rounded, color: Color(0xffD4AF37), size: 18),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        name,
-                                        textAlign: TextAlign.center,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(color: primaryNavy, fontSize: 10.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold, height: 1.2),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-
-                            const SizedBox(height: 22),
-                            const Divider(color: Colors.black12, height: 15),
-                            Text("دعواتنا لهم بالدوام والتألق وأن ينفع الله بهم الأمة 🌸", style: TextStyle(color: primaryNavy.withOpacity(0.8), fontSize: 10.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                 ),
               ),
+    );
+  }
+
+  // 🎨 البوستر المصمم بدقة فائقة HD بأسلوب العرض الواضح
+  Widget _buildExportablePoster(String todayDate) {
+    return Container(
+      width: 600, // 🎯 عرض البوستر عالي الدقة HD
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xffFFFFFF), Color(0xffF8FAFC), Color(0xffE2E8F0)],
+          begin: Alignment.topCenter, 
+          end: Alignment.bottomCenter,
+        ),
+        border: Border.all(color: royalGold, width: 3.5),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 👑 الهيدر
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+            decoration: BoxDecoration(
+              color: primaryNavy,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(color: primaryNavy.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 5))
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.stars_rounded, color: royalGold, size: 32),
+                    const SizedBox(width: 10),
+                    Text("نجوم وفرسان الحلقة", style: TextStyle(color: royalGold, fontSize: 24, fontWeight: FontWeight.w900, fontFamily: 'Cairo')),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text("معهد الشيخ سعيد العبدالله 🕌", style: TextStyle(color: Colors.white, fontSize: 15, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 14),
+          
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            decoration: BoxDecoration(
+              color: royalGold.withOpacity(0.15), 
+              borderRadius: BorderRadius.circular(20), 
+              border: Border.all(color: royalGold, width: 1.0)
+            ),
+            child: Text("🗓️ تاريخ الإعلان: $todayDate", style: TextStyle(color: primaryNavy, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+          ),
+
+          const SizedBox(height: 28),
+
+          // 🌟 كروت الطلاب الموحدة المكبرة والواضحة جداً (HD)
+          Wrap(
+            spacing: 14,
+            runSpacing: 16,
+            alignment: WrapAlignment.center,
+            children: allStars.map((star) {
+              String name = star['name'];
+              String url = star['imageUrl'];
+              String firstL = name.isNotEmpty ? name.trim().substring(0, 1) : "?";
+
+              return Container(
+                width: 160, // 🎯 كرت واسع بدقة عالية
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: royalGold.withOpacity(0.65), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 🚀 صورة ناصعة بقطر 90px
+                    Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        Container(
+                          width: 90,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: royalGold, width: 2.8),
+                            boxShadow: [BoxShadow(color: royalGold.withOpacity(0.3), blurRadius: 8)],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(50),
+                            child: url.isNotEmpty
+                                ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
+                                : Container(
+                                    color: const Color(0xffF1F5F9), 
+                                    child: Center(
+                                      child: Text(firstL, style: TextStyle(color: royalGold, fontSize: 32, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))
+                                    )
+                                  ),
+                          ),
+                        ),
+                        // 🌟 النجمة الموحدة
+                        Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                          child: const Icon(Icons.star_rounded, color: Color(0xffD4AF37), size: 22),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      name,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: primaryNavy, fontSize: 13, fontFamily: 'Cairo', fontWeight: FontWeight.bold, height: 1.25),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 28),
+          const Divider(color: Colors.black12, height: 20),
+          Text("دعواتنا لهم بالدوام والتألق وأن ينفع الله بهم الأمة 🌸", style: TextStyle(color: primaryNavy.withOpacity(0.85), fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }

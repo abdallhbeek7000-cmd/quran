@@ -6,7 +6,7 @@ import '../models/session_model.dart';
 class SessionService {
   final firestore = FirebaseFirestore.instance;
 
-  // 🚀 دالة إضافة الجلسة الذكية: تقبل إما SessionModel أو Map<String, dynamic>
+  // 🚀 دالة إضافة الجلسة السريعة الفائقة (Offline-First / Instantly Return)
   Future<void> addSession(dynamic sessionInput) async {
     Map<String, dynamic> sessionMap;
     String studentId = '';
@@ -26,21 +26,33 @@ class SessionService {
 
     // 1. تصفير أولي لعداد الغيابات محلياً لو كان حاضراً
     if (!isAbsent && studentId.isNotEmpty) {
-      await firestore.collection('students').doc(studentId).update({
+      firestore.collection('students').doc(studentId).update({
         'consecutiveAbsences': 0,
       }).catchError((e) => print("⚠️ فشل التحديث المسبق للعداد: $e"));
     }
 
     try {
-      // 2. محاولة الرفع المباشر أونلاين
-      await firestore.collection('sessions').add(sessionMap);
+      // 🚀 إنشاء معرف للجلسة محلياً مسبقاً لضمان سرعة الحفظ بالأوفلاين بدون انتظار إسناد سيرفر
+      final DocumentReference newDocRef = firestore.collection('sessions').doc();
+
+      // 2. محاولة الحفظ المباشر في كاش الفايرستور والشبكة بمهلة زمنية حاسمة (ثانيتين فقط)
+      await newDocRef.set(sessionMap).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {
+          print("⏱️ [Offline Detection] انتهت المهلة الزمنية للرفع المباشر، تحويل الحفظ للطابور المحلي بالخلفية.");
+          throw Exception("Network_Timeout_Offline");
+        },
+      );
+
       if (studentId.isNotEmpty) {
-        await recalculateConsecutiveAbsences(studentId);
+        recalculateConsecutiveAbsences(studentId);
       }
+      print("✅ تم حفظ الجلسة بنجاح في فايرستور (أونلاين / كاش).");
+
     } catch (e) {
-      print("🚨 [Offline] تعذر الرفع المباشر، جاري الحفظ في طابور الانتظار المحلي بالخلفية...");
-      
-      // تجهيز الخريطة للحفظ كـ JSON وتحويل التوقيت لنص لتفادي الأخطاء
+      print("🚨 [Offline Engine] تعذر الرفع الفوري ($e)، جاري الحفظ في طابور SharedPreferences للمزامنة بالخلفية...");
+
+      // 3. تجهيز الخريطة للحفظ كـ JSON وتحويل التوقيت لنص لتفادي الأخطاء عند القراءة بالخلفية
       final Map<String, dynamic> jsonMap = Map<String, dynamic>.from(sessionMap);
       if (jsonMap['timestamp'] is FieldValue || jsonMap['timestamp'] == null) {
         jsonMap['timestamp'] = DateTime.now().toIso8601String();
@@ -50,12 +62,16 @@ class SessionService {
         jsonMap['timestamp'] = (jsonMap['timestamp'] as DateTime).toIso8601String();
       }
 
-      final prefs = await SharedPreferences.getInstance();
-      List<String> offlineSessions = prefs.getStringList('offline_sessions_queue') ?? [];
-      
-      offlineSessions.add(jsonEncode(jsonMap));
-      await prefs.setStringList('offline_sessions_queue', offlineSessions);
-      print("💾 تم حفظ الجلسة بنجاح داخل طابور الانتظار المحلي ومستعدة للطيران بالخلفية!");
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        List<String> offlineSessions = prefs.getStringList('offline_sessions_queue') ?? [];
+
+        offlineSessions.add(jsonEncode(jsonMap));
+        await prefs.setStringList('offline_sessions_queue', offlineSessions);
+        print("💾 تم الحفظ بنجاح داخل طابور الانتظار المحلي ومستعدة للمزامنة بالخلفية عبر Workmanager!");
+      } catch (err) {
+        print("❌ خطأ أثناء الكتابة في SharedPreferences: $err");
+      }
     }
   }
 
@@ -74,17 +90,27 @@ class SessionService {
   Future<bool> hasSessionToday(String studentId) async {
     final now = DateTime.now();
     final today = "${now.year}-${now.month}-${now.day}";
-    final result = await firestore.collection('sessions')
-        .where('studentId', isEqualTo: studentId)
-        .where('date', isEqualTo: today)
-        .get();
-    return result.docs.isNotEmpty;
+    try {
+      final result = await firestore.collection('sessions')
+          .where('studentId', isEqualTo: studentId)
+          .where('date', isEqualTo: today)
+          .get()
+          .timeout(const Duration(seconds: 2));
+      return result.docs.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   // 🚀 خوارزمية المسح الزمني لحساب الغياب المتكرر بدقة 100%
   Future<void> recalculateConsecutiveAbsences(String studentId) async {
     try {
-      final snap = await FirebaseFirestore.instance.collection('sessions').where('studentId', isEqualTo: studentId).get();
+      final snap = await FirebaseFirestore.instance
+          .collection('sessions')
+          .where('studentId', isEqualTo: studentId)
+          .get()
+          .timeout(const Duration(seconds: 2));
+
       if (snap.docs.isEmpty) {
         await FirebaseFirestore.instance.collection('students').doc(studentId).update({'consecutiveAbsences': 0});
         return;
@@ -115,7 +141,7 @@ class SessionService {
       await FirebaseFirestore.instance.collection('students').doc(studentId).update({'consecutiveAbsences': consecutiveAbsences});
       print("✅ تم إعادة حساب غيابات الطالب بدقة: $consecutiveAbsences");
     } catch (e) {
-      print("❌ خطأ في حساب الغيابات: $e");
+      print("⚠️ تعذر إعادة حساب الغيابات أوفلاين (سيتم الحساب المباشر فور توفر الشبكة): $e");
     }
   }
 }

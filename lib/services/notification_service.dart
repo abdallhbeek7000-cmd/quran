@@ -26,12 +26,13 @@ class NotificationService {
     }
   }
 
-  // 🚀 الدالة الجوكر: ترسل الإشعار للطالب أو المشرف بذكاء
+  // 🚀 الدالة الجوكر: ترسل الإشعار للطالب أو المشرف بذكاء مع دعم تجميع إشعارات الشات
   static Future<void> sendAndSaveNotification({
     required String studentId, // يعمل كمعرف عام (يستقبل آي دي طالب أو مشرف)
     required String title,
     required String body,
     required String type, 
+    String? chatStudentId, // 💬 معرف الطالب الخاص بالمحادثة لتجميع الإشعارات
     BuildContext? context, 
   }) async {
     try {
@@ -96,6 +97,12 @@ class NotificationService {
           'Authorization': 'Bearer $accessToken',
         };
 
+        // 💬 تخصيص الـ Tag و Group Key لإشعارات المحادثة لمنع التكرار
+        String? notificationTag;
+        if (type == 'chat') {
+          notificationTag = 'chat_${chatStudentId ?? studentId}';
+        }
+
         var requestBody = jsonEncode({
           'message': {
             'token': fcmToken,
@@ -103,7 +110,6 @@ class NotificationService {
               'title': title,
               'body': body,
             },
-            // 🚀 الداتا المخفية التي يستلمها التطبيق عند الفتح
             'data': {
               'studentId': studentId,
               'type': type,
@@ -113,7 +119,8 @@ class NotificationService {
               'notification': {
                 'channel_id': 'high_importance_channel',
                 'sound': 'default',
-                // 🛑 تم مسح click_action المزعج من هنا ليفتح التطبيق تلقائياً!
+                if (type == 'chat') 'group_key': 'supervisor_chat_group',
+                if (notificationTag != null) 'tag': notificationTag,
               }
             },
           }
