@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:widgets_to_image/widgets_to_image.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:path_provider/path_provider.dart';
 import '../services/theme_provider.dart';
 import '../widgets/offline_wrapper.dart';
 
@@ -22,7 +22,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 
   DateTime selectedDate = DateTime.now();
 
-  String get formattedDate => "${selectedDate.year}-${selectedDate.month}-${selectedDate.day}";
+  String get formattedDate => "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}";
 
   Future<void> _pickDate(BuildContext context, bool isDarkMode) async {
     final DateTime? picked = await showDatePicker(
@@ -66,8 +66,8 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         title: Text(
-          "الإحصائيات اليومية",
-          style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor),
+          "الإحصائيات اليومية 📊",
+          style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo'),
         ),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
@@ -112,6 +112,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // اختيار التاريخ
                   InkWell(
                     borderRadius: BorderRadius.circular(25),
                     onTap: () => _pickDate(context, isDarkMode),
@@ -125,8 +126,8 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                             children: [
                               Icon(Icons.event, color: isDarkMode ? accentGold : primaryColor, size: 22),
                               const SizedBox(width: 12),
-                              Text("إحصائيات اليوم: ", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontWeight: FontWeight.bold, fontSize: 14)),
-                              Text(formattedDate, style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 15)),
+                              Text("إحصائيات التاريخ: ", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo')),
+                              Text(formattedDate, style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo')),
                             ],
                           ),
                           Icon(Icons.edit_calendar_rounded, color: isDarkMode ? accentGold : primaryColor, size: 20),
@@ -135,29 +136,13 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(25),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DailyAbsentStudentsPage(targetDate: formattedDate),
-                        ),
-                      );
-                    },
-                    child: _buildStreamCard(
-                      title: "عدد الغائبين اليوم",
-                      icon: Icons.person_off_rounded,
-                      color: Colors.redAccent,
-                      stream: FirebaseFirestore.instance
-                          .collection('sessions')
-                          .where('date', isEqualTo: formattedDate)
-                          .where('absent', isEqualTo: true)
-                          .snapshots(),
-                      isDarkMode: isDarkMode,
-                    ),
-                  ),
+
+                  // 1️⃣ كارت الحضور المبدئي (المفروض يتسجلو جلسة)
+                  _buildExpectedSessionsCard(formattedDate, isDarkMode),
+
                   const SizedBox(height: 16),
+
+                  // 2️⃣ كارت التسميعات والجلسات الفعلية المسجلة
                   InkWell(
                     borderRadius: BorderRadius.circular(25),
                     onTap: () {
@@ -169,7 +154,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                       );
                     },
                     child: _buildStreamCard(
-                      title: "عدد التسميعات اليوم",
+                      title: "الجلسات المسجلة فعلياً اليوم 📝",
                       icon: Icons.menu_book_rounded,
                       color: Colors.green,
                       stream: FirebaseFirestore.instance
@@ -180,7 +165,52 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                       isDarkMode: isDarkMode,
                     ),
                   ),
+
                   const SizedBox(height: 16),
+
+                  // ⚖️ 3️⃣ كارت ميزان الإنجاز والمقارنة الذكية (مفعل للنقر للتنقل لصفحة غير المسجلين)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(25),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PendingSessionsPage(targetDate: formattedDate),
+                        ),
+                      );
+                    },
+                    child: _buildAttendanceComparisonCard(formattedDate, isDarkMode),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 4️⃣ كارت عدد الغائبين
+                  InkWell(
+                    borderRadius: BorderRadius.circular(25),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DailyAbsentStudentsPage(targetDate: formattedDate),
+                        ),
+                      );
+                    },
+                    child: _buildStreamCard(
+                      title: "عدد الغائبين اليوم 🔴",
+                      icon: Icons.person_off_rounded,
+                      color: Colors.redAccent,
+                      stream: FirebaseFirestore.instance
+                          .collection('sessions')
+                          .where('date', isEqualTo: formattedDate)
+                          .where('absent', isEqualTo: true)
+                          .snapshots(),
+                      isDarkMode: isDarkMode,
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 5️⃣ كارت نسبة الحضور
                   _buildPercentageCard(formattedDate, isDarkMode),
                 ],
               ),
@@ -188,6 +218,129 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  // 🟢 كارت حساب عدد الحاضرين بالتدقيق المبدئي (الجلسات المفترضة)
+  Widget _buildExpectedSessionsCard(String targetDate, bool isDarkMode) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('daily_attendance').doc(targetDate).snapshots(),
+      builder: (context, snapshot) {
+        int expectedCount = 0;
+        if (snapshot.hasData && snapshot.data!.exists && snapshot.data!.data() != null) {
+          var records = snapshot.data!['records'] as Map<String, dynamic>? ?? {};
+          records.forEach((studentId, val) {
+            if (val is Map && val['status'] == 'present') {
+              expectedCount++;
+            } else if (val == 'present') {
+              expectedCount++;
+            }
+          });
+        }
+        return _statsUI(
+          "المستهدفين للتسميع (الحضور المبدئي) 🟢",
+          expectedCount.toString(),
+          Icons.fact_check_rounded,
+          Colors.blueAccent,
+          snapshot.connectionState == ConnectionState.waiting,
+          isDarkMode,
+        );
+      },
+    );
+  }
+
+  // ⚖️ كارت المقارنة الحية بين الحضور المبدئي والجلسات المسجلة
+  Widget _buildAttendanceComparisonCard(String targetDate, bool isDarkMode) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('daily_attendance').doc(targetDate).snapshots(),
+      builder: (context, attendanceSnap) {
+        int expectedCount = 0;
+        if (attendanceSnap.hasData && attendanceSnap.data!.exists && attendanceSnap.data!.data() != null) {
+          var records = attendanceSnap.data!['records'] as Map<String, dynamic>? ?? {};
+          records.forEach((studentId, val) {
+            if ((val is Map && val['status'] == 'present') || val == 'present') {
+              expectedCount++;
+            }
+          });
+        }
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('sessions')
+              .where('date', isEqualTo: targetDate)
+              .where('absent', isEqualTo: false)
+              .snapshots(),
+          builder: (context, sessionSnap) {
+            int actualCount = 0;
+            if (sessionSnap.hasData) {
+              actualCount = sessionSnap.data!.docs.length;
+            }
+
+            int diff = expectedCount - actualCount;
+            bool isComplete = expectedCount > 0 && diff <= 0;
+
+            return _buildGlassContainer(
+              isDarkMode: isDarkMode,
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: (isComplete ? Colors.green : Colors.orange).withOpacity(0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isComplete ? Icons.verified_rounded : Icons.warning_amber_rounded,
+                      color: isComplete ? Colors.green : Colors.orange,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "متابعة إنجاز المشرفين اليوم ⚖️",
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: isDarkMode ? Colors.white70 : Colors.black87,
+                              ),
+                            ),
+                            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: isDarkMode ? accentGold : primaryColor),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        if (expectedCount == 0)
+                          Text(
+                            "لم يتم تسجيل تفقد مبدئي لهذا اليوم بعد.",
+                            style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: isDarkMode ? Colors.white54 : Colors.grey[700]),
+                          )
+                        else if (isComplete)
+                          const Text(
+                            "تم إنجاز وتسميع جميع جلسات الطلاب الحاضرين بنجاح! 🎉",
+                            style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green),
+                          )
+                        else
+                          Text(
+                            "تنبيه: باقي ($diff) طلاب حاضرين لم تُسجّل جلساتهم بعد! (اضغط هنا للتفاصيل) ⚠️",
+                            style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -224,7 +377,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
           percentage = "${((presentCount / docs.length) * 100).round()}%";
         }
         return _statsUI(
-          "نسبة الحضور اليوم",
+          "نسبة الحضور اليوم 📈",
           percentage,
           Icons.pie_chart_rounded,
           isDarkMode ? accentGold : Colors.blue,
@@ -245,11 +398,11 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.grey[700], fontSize: 15, fontWeight: FontWeight.bold)),
+              Text(title, style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.grey[700], fontSize: 14, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
               const SizedBox(height: 12),
               isLoading
                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
-                  : Text(value, style: TextStyle(fontSize: 38, fontWeight: FontWeight.bold, color: color, letterSpacing: 0.5)),
+                  : Text(value, style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, letterSpacing: 0.5, fontFamily: 'Cairo')),
             ],
           ),
           Container(
@@ -259,7 +412,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
               shape: BoxShape.circle,
               border: Border.all(color: color.withOpacity(0.2), width: 1),
             ),
-            child: Icon(icon, color: color, size: 32),
+            child: Icon(icon, color: color, size: 30),
           ),
         ],
       ),
@@ -296,7 +449,198 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 }
 
 // =========================================================================
-// 🚀 1. واجهة الطلاب الغائبين (البوستر مخفي تماماً بالخلفية ويرتفع بدقة عالية عند المشاركة)
+// 🚀 1. واجهة الطلاب الحاضرين الذين لم تُسجل جلساتهم بعد (الجديدة بالكامل)
+// =========================================================================
+class PendingSessionsPage extends StatelessWidget {
+  final String targetDate;
+  const PendingSessionsPage({super.key, required this.targetDate});
+
+  final Color primaryColor = const Color(0xff425c75);
+  final Color accentGold = const Color(0xffd4af37);
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text("الطلاب المتبقين للتسميع ($targetDate)", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 15)),
+          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+        ),
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity, height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('daily_attendance').doc(targetDate).snapshots(),
+                builder: (context, attendanceSnap) {
+                  if (!attendanceSnap.hasData) return const Center(child: CircularProgressIndicator());
+
+                  if (!attendanceSnap.data!.exists || attendanceSnap.data!.data() == null) {
+                    return Center(
+                      child: Text("لم يتم تسجيل تفقد مبدئي لليوم المختار بعد.", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 14)),
+                    );
+                  }
+
+                  // 1️⃣ جلب قائمة الطلاب الحاضرين مبدئياً اليوم
+                  var records = attendanceSnap.data!['records'] as Map<String, dynamic>? ?? {};
+                  List<String> presentStudentIds = [];
+
+                  records.forEach((studentId, val) {
+                    if ((val is Map && val['status'] == 'present') || val == 'present') {
+                      presentStudentIds.add(studentId);
+                    }
+                  });
+
+                  if (presentStudentIds.isEmpty) {
+                    return Center(
+                      child: Text("لا يوجد طلاب حاضرون مبدئياً بانتظار التسميع 🎉", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 14)),
+                    );
+                  }
+
+                  // 2️⃣ جلب الجلسات المسجلة فعلياً لليوم
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('sessions')
+                        .where('date', isEqualTo: targetDate)
+                        .snapshots(),
+                    builder: (context, sessionsSnap) {
+                      if (!sessionsSnap.hasData) return const Center(child: CircularProgressIndicator());
+
+                      // تحديد معرّفات الطلاب الذين تسجلت لهم جلسة
+                      Set<String> recordedStudentIds = sessionsSnap.data!.docs.map((doc) => doc['studentId'].toString()).toSet();
+
+                      // تصفية المعرفات لمعرفة من حضر أوفلاين/مبدئياً ولم تسجل له جلسة
+                      List<String> pendingStudentIds = presentStudentIds.where((id) => !recordedStudentIds.contains(id)).toList();
+
+                      if (pendingStudentIds.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.verified_rounded, color: Colors.green, size: 60),
+                              const SizedBox(height: 12),
+                              Text("اكتمل الإنجاز! 🎉", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: isDarkMode ? Colors.white : primaryColor)),
+                              const SizedBox(height: 6),
+                              Text("تم تسجيل جلسات لجميع الطلاب الحاضرين بنجاح.", style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDarkMode ? Colors.white60 : Colors.black54)),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.all(20),
+                        itemCount: pendingStudentIds.length,
+                        itemBuilder: (context, index) {
+                          String studentId = pendingStudentIds[index];
+
+                          return FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance.collection('students').doc(studentId).get(),
+                            builder: (context, studentSnap) {
+                              if (!studentSnap.hasData || !studentSnap.data!.exists) {
+                                return const SizedBox();
+                              }
+
+                              var student = studentSnap.data!.data() as Map<String, dynamic>;
+                              String studentName = student['name'] ?? 'طالب';
+                              String supervisorName = student['supervisorName'] ?? 'غير محدد';
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 14),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.55),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: Colors.orange.withOpacity(0.4), width: 1.2),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 22,
+                                            backgroundColor: primaryColor.withOpacity(0.15),
+                                            backgroundImage: student['imageUrl'] != null && student['imageUrl'].toString().isNotEmpty
+                                                ? NetworkImage(student['imageUrl'])
+                                                : null,
+                                            child: (student['imageUrl'] == null || student['imageUrl'].toString().isEmpty)
+                                                ? Icon(Icons.person, color: isDarkMode ? Colors.white : primaryColor)
+                                                : null,
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  studentName,
+                                                  style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 15, color: isDarkMode ? Colors.white : primaryColor),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  "المشرف المسؤول: $supervisorName",
+                                                  style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black54),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange.withOpacity(0.18),
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: Colors.orange, width: 0.8),
+                                            ),
+                                            child: const Row(
+                                              children: [
+                                                Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 14),
+                                                SizedBox(width: 4),
+                                                Text("بانتظار التسميع", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.orange)),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// 🚀 2. واجهة الطلاب الغائبين
 // =========================================================================
 class DailyAbsentStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -321,7 +665,6 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
     }
   }
 
-  // 📸 دالة الالتقاط والمشاركة
   Future<void> _shareAbsentListAsImage() async {
     setState(() => isExporting = true);
     try {
@@ -397,20 +740,18 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 
                   return Stack(
                     children: [
-                      // 🌟 البوستر رسمياً مخفي خارج أبعاد الشاشة لمنع ظهوره
                       Positioned(
                         left: -9999,
                         top: -9999,
                         child: WidgetsToImage(
                           controller: controller,
                           child: SizedBox(
-                            width: 600, // 🎯 عرض عالي الدقة للبوستر HD
+                            width: 600,
                             child: _buildExportablePoster(absentDocs),
                           ),
                         ),
                       ),
 
-                      // 📱 القائمة الأساسية الأنيقة التي تظهر للمستخدم حصراً
                       ListView.builder(
                         physics: const BouncingScrollPhysics(),
                         padding: const EdgeInsets.all(20),
@@ -497,7 +838,6 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
     );
   }
 
-  // 🎨 تصميم البوستر الاحترافي فائق الدقة المخصص للتصدير حصراً
   Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
     return Container(
       padding: const EdgeInsets.all(30),
@@ -582,7 +922,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 }
 
 // =========================================================================
-// 🚀 2. واجهة التسميعات والجلسات اليومية
+// 🚀 3. واجهة التسميعات والجلسات اليومية
 // =========================================================================
 class DailyRecitationsPage extends StatefulWidget {
   final String targetDate;

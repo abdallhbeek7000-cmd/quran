@@ -27,8 +27,9 @@ import 'statistics_page.dart';
 import 'broadcast_page.dart'; 
 import '../services/notification_queue_manager.dart'; 
 import '../widgets/offline_wrapper.dart'; 
-import 'points_bank_page.dart'; // 🚀 استدعاء صفحة البنك الحقيقية
-import '../services/notification_service.dart'; // 🚀 استيراد خدمة الإشعارات الخاصة بالتطبيق لإرسال التحديثات
+import 'points_bank_page.dart'; 
+import 'initial_attendance_page.dart'; 
+import '../services/notification_service.dart'; 
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -244,7 +245,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 🚀 المحرك الذكي الجديد لبث إشعار التحديث الفوري لجميع أجهزة المشرفين لايف
+  // 🚀 إرسال إشعار التحديثات لجميع المشرفين باستخدام fcmToken المباشر من مجموعة supervisors
   void _showUpdateNotificationDialog(bool isDark) {
     showDialog(
       context: context,
@@ -262,7 +263,7 @@ class _HomePageState extends State<HomePage> {
                   Text("إشعار التحديثات", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black87)),
                 ],
               ),
-              content: Text("هل أنت متأكد أنك تريد إرسال إشعار بوجود تحديث جديد لجميع أجهزة المشتركة والمشرفين الآن لايف؟", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: isDark ? Colors.white70 : Colors.black87, height: 1.5)),
+              content: Text("هل أنت متأكد أنك تريد إرسال إشعار بوجود تحديث جديد لجميع أجهزة المشرفين الآن لايف؟", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: isDark ? Colors.white70 : Colors.black87, height: 1.5)),
               actions: [
                 if (isSending)
                   const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator())
@@ -277,7 +278,7 @@ class _HomePageState extends State<HomePage> {
                       setStateDialog(() => isSending = true);
 
                       try {
-                        // 1. تسجيل الحركة بجدول السجلات العام للفايربيز
+                        // 1. تسجيل الإشعار بالسجل العام
                         await FirebaseFirestore.instance.collection('global_notifications').add({
                           'topic': 'app_updates',
                           'title': 'تحديث جديد متاح 🚀',
@@ -286,22 +287,34 @@ class _HomePageState extends State<HomePage> {
                           'sentBy': widget.uid,
                         });
 
-                        // 2. 🚀 جلب كل معرفات المشرفين وإطلاق نظام البث الفوري لايف عبر أجهزتهم
+                        // 2. 📲 جلب المشرفين وقراءة fcmToken لكل واحد وإرسال التنبيه
                         var supervisorsSnap = await FirebaseFirestore.instance.collection('supervisors').get();
                         
                         for (var doc in supervisorsSnap.docs) {
                           String supervisorId = doc.id;
                           var supData = doc.data();
+                          String? token = supData['fcmToken']?.toString();
                           
-                          // التحقق من امتلاك المشرف لـ توكن فاف تفادياً لإرسال وثائق فارغة
-                          if (supData.containsKey('fcmToken') && supData['fcmToken'].toString().isNotEmpty) {
+                          if (token != null && token.isNotEmpty) {
+                            // إرسال الإشعار لـ المشرف
                             NotificationService.sendAndSaveNotification(
-                              studentId: supervisorId, // دفع التنبيه للمشرف المستهدف
+                              studentId: supervisorId,
                               title: "تحديث جديد متاح 🚀",
                               body: "تم إطلاق نسخة جديدة من نظام حلقات وعوالم القرآن. يرجى التحديث الآن للحصول على أحدث الميزات الزجاجية الفخمة والمستقرة.",
                               type: "app_update_alert",
                               context: context,
-                            ).catchError((e) => print("فشل الإرسال التحديثي للمشرف $supervisorId: $e"));
+                            ).catchError((e) => print("فشل الإرسال عبر الخدمة للمشرف $supervisorId: $e"));
+
+                            // حفظ الإشعار بفايرستور لضمان الظهور الفوري بالإشعارات
+                            await FirebaseFirestore.instance.collection('notifications').add({
+                              'recipientId': supervisorId,
+                              'fcmToken': token,
+                              'title': "تحديث جديد متاح 🚀",
+                              'body': "تم إطلاق نسخة جديدة من نظام الحلقات القرآني. يرجى التحديث الآن.",
+                              'type': "app_update_alert",
+                              'timestamp': FieldValue.serverTimestamp(),
+                              'read': false,
+                            }).catchError((e) => print("خطأ في توثيق إشعار الفايرستور: $e"));
                           }
                         }
 
@@ -407,7 +420,11 @@ class _HomePageState extends State<HomePage> {
                         childAspectRatio: 1.1,
                       ),
                       delegate: SliverChildListDelegate([
+                        // 👑 أزرار وخدمات المدير فقط
                         if (widget.role == "manager") ...[
+                          if (currentCycleModel != null)
+                            _buildPerformanceMenuCard(Icons.fact_check_rounded, "تسجيل حضور مبدئي 📋", () => _nav(InitialAttendancePage(cycle: currentCycleModel!)), isDark),
+
                           _buildPerformanceMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
                           _buildPerformanceMenuCard(Icons.update_rounded, "إشعار تحديث", () => _showUpdateNotificationDialog(isDark), isDark),
                           
@@ -421,17 +438,19 @@ class _HomePageState extends State<HomePage> {
                           if (currentCycleModel != null)
                             _buildPerformanceMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), isDark),
                           
-                          // 🚀 بنك النقاط والمكافآت أصبح حصرياً داخل كتلة المدير فقط
                           _buildPerformanceMenuCard(Icons.diamond_rounded, "بنك النقاط 💎", () => _nav(const PointsBankPage()), isDark),
+                          
+                          // 📊 تم تحويل الإحصائيات اليومية حصرياً لكتلة المدير
+                          _buildPerformanceMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                         ],
 
+                        // 👥 الخيارات المشتركة بين المدير والمشرف
                         if (currentCycleModel != null) ...[
                           _buildPerformanceMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
                           _buildPerformanceMenuCard(Icons.archive_rounded, "الطلاب المتوقفين", () => _nav(ArchivedStudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
                         ],
                         _buildPerformanceMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
                         _buildPerformanceMenuCard(Icons.pie_chart_rounded, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
-                        _buildPerformanceMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                         _buildPerformanceMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
                         _buildPerformanceMenuCard(Icons.event_busy_rounded, "طلبات الاستئذان", () => _nav(LeaveRequestsPage(supervisorId: widget.uid, role: widget.role)), isDark),
                       ]),

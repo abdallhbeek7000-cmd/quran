@@ -84,7 +84,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   String absenceType = "بدون عذر"; 
   String memorizationRating = "جيد"; 
   String newReviewRating = "جيد"; 
-  String oldReviewRating = "جيد";      
+  String oldReviewRating = "جيد";       
   String studentStatus = "مهذب";
 
   DateTime _selectedDate = DateTime.now();
@@ -426,8 +426,10 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
-  // 🚀 دالة إضافة الجلسة السريعة والأوفلاين القاطعة
+  // 🚀 دالة إضافة الجلسة السريعة المانعة للتكرار والمستقرة أوفلاين
   addSession() async {
+    if (loading) return; // 🛑 حماية مضاعفة لمنع الضغط المزدوج
+
     if (isExam && !absent && examScoreController.text.trim().isEmpty) {
       GlassToast.show(
         context,
@@ -440,7 +442,14 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
 
     setState(() => loading = true);
-    final date = "${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}";
+
+    // 🗓️ صياغة التاريخ بدقة المصفوفتين لضمان الرمز الموحد yyyy-MM-dd
+    final String monthStr = _selectedDate.month.toString().padLeft(2, '0');
+    final String dayStr = _selectedDate.day.toString().padLeft(2, '0');
+    final String date = "${_selectedDate.year}-$monthStr-$dayStr";
+
+    // 🔑 المعرّف الموحد الحاسم لمنع التكرار نهائياً عند الحفظ أوفلاين
+    final String customSessionId = "${widget.studentId}_$date";
 
     String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevFrom, newRevTo);
@@ -509,54 +518,70 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       if (!absent && !isExam && !didNotRecite) 'total_memorized_pages': totalPages,
     };
 
-    // 🚀 1. الحفظ السريع الحاسم محلياً / أونلاين بمهلة أوفلاين سريعة
-    await sessionService.addSession(sessionData);
+    try {
+      // 🎯 1. الحفظ باستخدام docId ثابت وواضح يمنع التكرار نهائياً بأوفلاين وأونلاين
+      await FirebaseFirestore.instance
+          .collection('sessions')
+          .doc(customSessionId)
+          .set(sessionData, SetOptions(merge: true));
 
-    // 🚀 2. تحديث وتصفير غيابات الطالب صامتاً بدون تعطيل إغلاق الصفحة
-    if (!absent) {
-      FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
-        'consecutiveAbsences': 0,
-        if (!isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) 'memorizedPages': totalPages,
-      }).catchError((e) => print("Absences update error: $e"));
+      // 🚀 2. تحديث وتصفير غيابات الطالب صامتاً
+      if (!absent) {
+        FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
+          'consecutiveAbsences': 0,
+          if (!isExam && !didNotRecite && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) 'memorizedPages': totalPages,
+        }).catchError((e) => print("Absences update error: $e"));
+      }
+
+      // 🚀 3. تسجيل المزامنة بالخلفية
+      if (!kIsWeb) {
+        Workmanager().registerOneOffTask(
+          "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
+          "sync_sessions_data_forced",
+          constraints: Constraints(networkType: NetworkType.connected),
+        ).catchError((e) => print("Workmanager error: $e"));
+      }
+
+      // 🚀 4. معالجة الإشعارات بالخلفية
+      String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : "📢 تحديث يومي من الحلقة"));
+      String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
+        : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 
+        : (didNotRecite ? "حضر الطالب ${widget.studentName} في حلقة اليوم ولكنه لم يسمّع أو يقرأ شيئاً ⚠️" 
+        : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}")));
+      
+      String notifyType = absent ? "absent" : (isExam ? "exam" : (didNotRecite ? "info" : "regular"));
+
+      NotificationService.sendAndSaveNotification(
+        studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType, context: context, 
+      ).catchError((error) async {
+        await NotificationQueueManager.addToQueue(studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType);
+      });
+
+      if (!mounted) return;
+
+      GlassToast.show(
+        context,
+        title: "تم الحفظ",
+        message: "تم تسجيل الجلسة للطالب بنجاح ✅",
+        icon: Icons.check_circle_outline_rounded,
+        color: Colors.greenAccent.shade400,
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      print("Error saving session: $e");
+      if (mounted) {
+        GlassToast.show(
+          context,
+          title: "خطأ",
+          message: "حدث خطأ أثناء حفظ الجلسة ❌",
+          icon: Icons.error_outline_rounded,
+          color: Colors.redAccent,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
-
-    // 🚀 3. تسجيل المزامنة بالخلفية بدون تعطيل واجهة المستخدم
-    if (!kIsWeb) {
-      Workmanager().registerOneOffTask(
-        "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
-        "sync_sessions_data_forced",
-        constraints: Constraints(networkType: NetworkType.connected),
-      ).catchError((e) => print("Workmanager error: $e"));
-    }
-
-    // 🚀 4. معالجة الإشعارات صامتاً بالخلفية
-    String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : "📢 تحديث يومي من الحلقة"));
-    String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
-      : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 
-      : (didNotRecite ? "حضر الطالب ${widget.studentName} في حلقة اليوم ولكنه لم يسمّع أو يقرأ شيئاً ⚠️" 
-      : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}")));
-    
-    String notifyType = absent ? "absent" : (isExam ? "exam" : (didNotRecite ? "info" : "regular"));
-
-    NotificationService.sendAndSaveNotification(
-      studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType, context: context, 
-    ).catchError((error) async {
-      await NotificationQueueManager.addToQueue(studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType);
-    });
-
-    if (!mounted) return;
-    setState(() => loading = false);
-    
-    GlassToast.show(
-      context,
-      title: "تم الحفظ",
-      message: "تم تسجيل الجلسة للطالب بنجاح ✅",
-      icon: Icons.check_circle_outline_rounded,
-      color: Colors.greenAccent.shade400,
-    );
-    
-    // 🚀 إغلاق الشاشة فوراً وبسرعة فائقة
-    Navigator.pop(context);
   }
 
   Widget _buildMicButton(TextEditingController controller, bool isDarkMode) {
