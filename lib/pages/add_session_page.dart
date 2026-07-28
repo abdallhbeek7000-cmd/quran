@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt; 
 import 'package:workmanager/workmanager.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import '../services/session_service.dart';
 import '../services/theme_provider.dart'; 
 import '../services/notification_service.dart'; 
@@ -84,7 +85,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   String absenceType = "بدون عذر"; 
   String memorizationRating = "جيد"; 
   String newReviewRating = "جيد"; 
-  String oldReviewRating = "جيد";       
+  String oldReviewRating = "جيد";        
   String studentStatus = "مهذب";
 
   DateTime _selectedDate = DateTime.now();
@@ -428,7 +429,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
   // 🚀 دالة إضافة الجلسة السريعة الفورية بمهلة أوفلاين استثنائية المانعة للتعليق والتكرار
   addSession() async {
-    if (loading) return; // 🛑 حماية مضاعفة لمنع الضغط المزدوج
+    if (loading) return;
 
     if (isExam && !absent && examScoreController.text.trim().isEmpty) {
       GlassToast.show(
@@ -448,8 +449,12 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     final String dayStr = _selectedDate.day.toString().padLeft(2, '0');
     final String date = "${_selectedDate.year}-$monthStr-$dayStr";
 
-    // 🔑 المعرّف الموحد الحاسم لمنع تكرار الوثائق بأوفلاين وأونلاين
+    // 🔑 المعرّف الموحد الحاسم لمنع تكرار الوثائق
     final String customSessionId = "${widget.studentId}_$date";
+
+    // 🕒 التقاط الوقت الفعلي للحفظ بالخلفية
+    DateTime realNow = DateTime.now();
+    String actualTimeFormatted = DateFormat('yyyy-MM-dd hh:mm a').format(realNow);
 
     String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevFrom, newRevTo);
@@ -492,6 +497,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'supervisorIds': supervisorIdsList,          
       'supervisorNames': supervisorNamesList, 
       'timestamp': FieldValue.serverTimestamp(), 
+      'createdTimestamp': FieldValue.serverTimestamp(), // 🕵️‍♂️ ختم النظام المباشر
+      'actualCreatedAt': actualTimeFormatted,          // 🕵️‍♂️ الوقت الفعلي المقروء للحفظ
       'date': date,
       'absent': absent,
       'isExam': isExam, 
@@ -537,7 +544,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         }).timeout(const Duration(seconds: 1), onTimeout: () => null).catchError((e) => print("Absences update error: $e"));
       }
 
-      // 🚀 3. تسجيل مهمة الرفع أوتوماتيكياً عند توفر الشائكة حتى والتطبيق مغلق
+      // 🚀 3. تسجيل مهمة الرفع أوتوماتيكياً عند توفر الشبكة
       if (!kIsWeb) {
         Workmanager().registerOneOffTask(
           "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
@@ -571,7 +578,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         color: Colors.greenAccent.shade400,
       );
 
-      // 🎯 إغلاق الصفحة فوراً بدون تأخير!
       Navigator.pop(context);
     } catch (e) {
       print("Error saving session: $e");
@@ -810,7 +816,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Text("${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+                                        Text("${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
                                         const SizedBox(width: 8),
                                         Icon(Icons.edit_calendar_rounded, color: isDarkMode ? Colors.white54 : primaryColor.withOpacity(0.7), size: 20),
                                       ],

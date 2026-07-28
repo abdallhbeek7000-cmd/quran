@@ -103,28 +103,36 @@ class NotificationService {
           notificationTag = 'chat_${chatStudentId ?? studentId}';
         }
 
-        var requestBody = jsonEncode({
-          'message': {
-            'token': fcmToken,
+        // 🎯 بناء نص الطلب ذكياً: إذا كان شات نلغي الحقل الخارجي 'notification' حتى يتولى التطبيق تجميع الإشعار
+        Map<String, dynamic> messagePayload = {
+          'token': fcmToken,
+          'data': {
+            'title': title,
+            'body': body,
+            'studentId': studentId,
+            'type': type,
+            if (chatStudentId != null) 'chatStudentId': chatStudentId,
+          },
+          'android': {
+            'priority': 'high',
             'notification': {
-              'title': title,
-              'body': body,
-            },
-            'data': {
-              'studentId': studentId,
-              'type': type,
-            },
-            'android': {
-              'priority': 'high',
-              'notification': {
-                'channel_id': 'high_importance_channel',
-                'sound': 'default',
-                if (type == 'chat') 'group_key': 'supervisor_chat_group',
-                if (notificationTag != null) 'tag': notificationTag,
-              }
-            },
-          }
-        });
+              'channel_id': 'high_importance_channel',
+              'sound': 'default',
+              if (type == 'chat') 'group_key': 'supervisor_chat_group',
+              if (notificationTag != null) 'tag': notificationTag,
+            }
+          },
+        };
+
+        // للإشعارات العادية غير الشات نُبقي على حقل notification الرئيسي
+        if (type != 'chat') {
+          messagePayload['notification'] = {
+            'title': title,
+            'body': body,
+          };
+        }
+
+        var requestBody = jsonEncode({'message': messagePayload});
 
         var response = await http.post(url, headers: headers, body: requestBody);
         

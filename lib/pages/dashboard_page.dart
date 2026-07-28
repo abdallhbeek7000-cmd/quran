@@ -1,9 +1,9 @@
-import 'dart:ui'; // 🎯 لتأثير الزجاج والـ Blur
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart'; // 🎯 لقراءة المظهر
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../services/theme_provider.dart'; // 🎯 استدعاء الـ ThemeProvider الخاص بك
+import '../services/theme_provider.dart';
 import '../widgets/offline_wrapper.dart';
 import 'edit_student_page.dart';
 
@@ -11,26 +11,24 @@ class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37); // لون الإنعكاس الزجاجي
+  final Color accentGold = const Color(0xffd4af37);
 
   @override
   Widget build(BuildContext context) {
-    // قراءة حالة المظهر
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية خلف الـ AppBar لجمالية الزجاج
+      extendBodyBehindAppBar: true,
       backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, // AppBar شفاف بالكامل
-        title: Text("إحصائيات المعهد", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
+        backgroundColor: Colors.transparent,
+        title: Text("إحصائيات المعهد", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
       ),
       body: Stack(
         children: [
-          // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة (Blobs)
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -63,7 +61,6 @@ class DashboardPage extends StatelessWidget {
             ),
           ),
 
-          // 🏢 2. المحتوى الأساسي للواجهة
           SafeArea(
             child: FutureBuilder(
               future: Future.wait([
@@ -97,7 +94,6 @@ class DashboardPage extends StatelessWidget {
                   physics: const BouncingScrollPhysics(),
                   child: Column(
                     children: [
-                      // 🧊 Header زجاجي خفيف
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                         child: Column(
@@ -105,18 +101,17 @@ class DashboardPage extends StatelessWidget {
                           children: [
                             Text(
                               "نظرة عامة", 
-                              style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontSize: 28, fontWeight: FontWeight.bold)
+                              style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontSize: 28, fontWeight: FontWeight.bold, fontFamily: 'Cairo')
                             ),
                             Text(
                               "إليك ملخص أداء المعهد لهذه الدورة", 
-                              style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 15)
+                              style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 15, fontFamily: 'Cairo')
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 10),
 
-                      // قسم الكروت (Grid) الزجاجية
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: Column(
@@ -130,10 +125,23 @@ class DashboardPage extends StatelessWidget {
                               childAspectRatio: 1.1,
                               children: [
                                 _buildGlassCard(title: "الطلاب", value: students.length.toString(), icon: Icons.people_alt_rounded, color: isDarkMode ? Colors.lightBlueAccent : Colors.blue, isDarkMode: isDarkMode),
-                                _buildGlassCard(title: "المشرفين", value: supervisors.length.toString(), icon: Icons.admin_panel_settings_rounded, color: isDarkMode ? accentGold : Colors.amber.shade700, isDarkMode: isDarkMode),
+                                
+                                // 🚀 👑 جعل كرت المشرفين قابلاً للضغط للانتقال لشاشة توزيع وعدد الطلاب للمشرفين
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(25),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const SupervisorsStudentsCountPage(),
+                                      ),
+                                    );
+                                  },
+                                  child: _buildGlassCard(title: "المشرفين", value: supervisors.length.toString(), icon: Icons.admin_panel_settings_rounded, color: isDarkMode ? accentGold : Colors.amber.shade700, isDarkMode: isDarkMode),
+                                ),
+
                                 _buildGlassCard(title: "إجمالي الجلسات", value: sessions.length.toString(), icon: Icons.menu_book_rounded, color: Colors.greenAccent.shade400, isDarkMode: isDarkMode),
                                 
-                                // 🚀 تجعل كرت الغائبين قابلاً للضغط للانتقال لشاشة التفاصيل التراكمية
                                 InkWell(
                                   borderRadius: BorderRadius.circular(25),
                                   onTap: () {
@@ -151,7 +159,6 @@ class DashboardPage extends StatelessWidget {
                             
                             const SizedBox(height: 20),
                             
-                            // 🚀 🧊 كرت عريض للطلاب غير الموزعين أصبح قابلاً للضغط لرؤية الأسماء والتفاصيل
                             InkWell(
                               borderRadius: BorderRadius.circular(25),
                               onTap: () {
@@ -175,22 +182,19 @@ class DashboardPage extends StatelessWidget {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text("طلاب بدون مشرف", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : primaryColor)),
-                                          Text("هناك $noSupervisor طالباً لم يتم توزيعهم بعد", style: TextStyle(fontSize: 13, color: isDarkMode ? Colors.white70 : Colors.black54)),
+                                          Text("طلاب بدون مشرف", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                                          Text("هناك $noSupervisor طالباً لم يتم توزيعهم بعد", style: TextStyle(fontSize: 13, color: isDarkMode ? Colors.white70 : Colors.black54, fontFamily: 'Cairo')),
                                         ],
                                       ),
                                     ),
-                                    Text(noSupervisor.toString(), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.orange)),
+                                    Text(noSupervisor.toString(), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.orange, fontFamily: 'Cairo')),
                                   ],
                                 ),
                               ),
                             ),
 
                             const SizedBox(height: 20),
-
-                            // 🧊 كرت ملاحظات الإدارة الزجاجي
                             _buildNotesSection(isDarkMode),
-                            
                             const SizedBox(height: 30),
                           ],
                         ),
@@ -206,7 +210,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // 🧊 أداة الكرت المربع الإحصائي (Glassmorphism)
   Widget _buildGlassCard({required String title, required String value, required IconData icon, required Color color, required bool isDarkMode}) {
     return _buildGlassContainer(
       isDarkMode: isDarkMode,
@@ -229,6 +232,7 @@ class DashboardPage extends StatelessWidget {
               fontSize: 26,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : primaryColor,
+              fontFamily: 'Cairo',
             ),
           ),
           Text(
@@ -238,6 +242,7 @@ class DashboardPage extends StatelessWidget {
               color: isDarkMode ? Colors.white60 : Colors.grey[700],
               fontSize: 13,
               fontWeight: FontWeight.bold,
+              fontFamily: 'Cairo',
             ),
           ),
         ],
@@ -245,7 +250,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // 🧊 قسم الملاحظات الزجاجي
   Widget _buildNotesSection(bool isDarkMode) {
     return _buildGlassContainer(
       isDarkMode: isDarkMode,
@@ -257,7 +261,7 @@ class DashboardPage extends StatelessWidget {
             children: [
               Icon(Icons.tips_and_updates, color: isDarkMode ? accentGold : primaryColor, size: 24),
               const SizedBox(width: 10),
-              Text("توصيات الإدارة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
+              Text("توصيات الإدارة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
             ],
           ),
           Divider(height: 30, color: isDarkMode ? Colors.white24 : Colors.black12),
@@ -269,21 +273,19 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // أداة فرعية لنقاط الملاحظات
   Widget _noteItem(String text, bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("• ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDarkMode ? accentGold : primaryColor)),
-          Expanded(child: Text(text, style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 14, fontWeight: FontWeight.w600))),
+          Text("• ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDarkMode ? accentGold : primaryColor, fontFamily: 'Cairo')),
+          Expanded(child: Text(text, style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 14, fontWeight: FontWeight.w600, fontFamily: 'Cairo'))),
         ],
       ),
     );
   }
 
-  // 🧊 أداة مساعدة لتغليف العناصر وتأثير الزجاج الأساسية (Glassmorphism)
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),
@@ -314,7 +316,142 @@ class DashboardPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🚀 1. صفحة تقرير الغيابات التراكمية الشاملة لجميع الطلاب
+// 🚀 1. صفحة تعداد طلاب كل مشرف (خاصة بالإدارة)
+// =========================================================================
+class SupervisorsStudentsCountPage extends StatelessWidget {
+  const SupervisorsStudentsCountPage({super.key});
+
+  final Color primaryColor = const Color(0xff425c75);
+  final Color accentGold = const Color(0xffd4af37);
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text("توزيع الطلاب على المشرفين", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)),
+          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+        ),
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity, height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
+                builder: (context, supSnap) {
+                  if (!supSnap.hasData) return const Center(child: CircularProgressIndicator());
+
+                  final supervisors = supSnap.data!.docs;
+
+                  if (supervisors.isEmpty) {
+                    return Center(
+                      child: Text("لا يوجد مشرفين مسجلين بالنظام حالياً 📭", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
+                    );
+                  }
+
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false).snapshots(),
+                    builder: (context, stdSnap) {
+                      if (!stdSnap.hasData) return const Center(child: CircularProgressIndicator());
+
+                      final students = stdSnap.data!.docs;
+
+                      // حساب عدد طلاب كل مشرف
+                      Map<String, int> supervisorCounts = {};
+                      for (var std in students) {
+                        var data = std.data() as Map<String, dynamic>;
+                        String sId = data['supervisorId'] ?? '';
+                        if (sId.isNotEmpty) {
+                          supervisorCounts[sId] = (supervisorCounts[sId] ?? 0) + 1;
+                        }
+                      }
+
+                      return ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.all(20),
+                        itemCount: supervisors.length,
+                        itemBuilder: (context, index) {
+                          final sup = supervisors[index];
+                          final supData = sup.data() as Map<String, dynamic>;
+                          final String supId = sup.id;
+                          final String supName = supData['name'] ?? 'مشرف';
+                          final int studentCount = supervisorCounts[supId] ?? 0;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 15),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(Icons.person_rounded, color: isDarkMode ? accentGold : primaryColor, size: 24),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      supName,
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor),
+                                    ),
+                                  ],
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(15),
+                                    border: Border.all(color: isDarkMode ? accentGold.withOpacity(0.5) : primaryColor.withOpacity(0.5), width: 1),
+                                  ),
+                                  child: Text(
+                                    "$studentCount طلاب",
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? accentGold : primaryColor),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// 🚀 2. صفحة تقرير الغيابات التراكمية الشاملة لجميع الطلاب
 // =========================================================================
 class AllAbsentStudentsSummaryPage extends StatelessWidget {
   const AllAbsentStudentsSummaryPage({super.key});
@@ -485,7 +622,7 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🚀 2. صفحة عرض الطلاب غير الموزعين على مشرفين
+// 🚀 3. صفحة عرض الطلاب غير الموزعين على مشرفين
 // =========================================================================
 class UnassignedStudentsPage extends StatelessWidget {
   const UnassignedStudentsPage({super.key});
@@ -537,7 +674,6 @@ class UnassignedStudentsPage extends StatelessWidget {
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
-                  // تصفية الطلاب غير الموزعين (الذين ليس لديهم مشرف)
                   final unassignedDocs = snapshot.data!.docs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     final supId = data['supervisorId'];

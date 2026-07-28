@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:speech_to_text/speech_to_text.dart' as stt; 
+import 'package:intl/intl.dart';
 import '../services/session_service.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
@@ -60,7 +61,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   late TextEditingController totalMemorizedPagesController;
 
   bool absent = false;
-  bool didNotRecite = false; // 🚀 المتغير الجديد
+  bool didNotRecite = false;
   
   bool hasNewMemorization = true;
   bool hasReview = true;
@@ -94,7 +95,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     _speech = stt.SpeechToText(); 
 
     absent = data['absent'] ?? false;
-    didNotRecite = data['didNotRecite'] ?? false; // 🚀 استرجاع الحالة إذا كانت محفوظة مسبقاً
+    didNotRecite = data['didNotRecite'] ?? false;
     
     hasNewMemorization = (data['newMemorization'] ?? '').toString().trim().isNotEmpty;
     hasReview = (data['nearReview'] ?? '').toString().trim().isNotEmpty || 
@@ -570,7 +571,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                         child: FutureBuilder<List<QuerySnapshot>>(
                           future: Future.wait([
                             FirebaseFirestore.instance.collection('users').get(),
-                            FirebaseFirestore.instance.collection('supervisors').get()
+                            FirebaseFirestore.instance.collection('supervisors').get(),
                           ]),
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -629,9 +630,9 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                 ),
               ),
             );
-          }
+          },
         );
-      }
+      },
     );
   }
 
@@ -641,9 +642,15 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     double totalPages = isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0);
     String studentId = widget.data['studentId'] ?? '';
 
-    final date = "${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}";
+    // 🎯 توحيد التاريخ مع إضافة الأصفار التلقائية
+    final String monthStr = _selectedDate.month.toString().padLeft(2, '0');
+    final String dayStr = _selectedDate.day.toString().padLeft(2, '0');
+    final String date = "${_selectedDate.year}-$monthStr-$dayStr";
 
-    // 🚀 تطبيق استثناء (حضر ولم يقرأ)
+    // 🕒 التقاط الوقت الفعلي للتعديل بالخلفية
+    DateTime realNow = DateTime.now();
+    String actualEditedTimeFormatted = DateFormat('yyyy-MM-dd hh:mm a').format(realNow);
+
     String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
     String finalNearReview = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevFrom, newRevTo);
     String finalFarReview = (!hasReview || absent || didNotRecite) ? '' : _buildMultiRangeString(oldReviewRanges);
@@ -681,9 +688,13 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     List<String> supervisorNamesList = selectedSupervisors.map((e) => e['name']!).toList();
 
     final Map<String, dynamic> updateData = {
+      'studentId': studentId,
+      'studentName': widget.data['studentName'] ?? '',
       'date': date, 
+      'actualEditedAt': actualEditedTimeFormatted,              // 🕵️‍♂️ الوقت الفعلي المقروء للتعديل
+      'lastUpdatedTimestamp': FieldValue.serverTimestamp(),      // 🕵️‍♂️ ختم النظام المباشر
       'absent': absent,
-      'didNotRecite': didNotRecite, // 🚀 تحديث الحالة في قاعدة البيانات
+      'didNotRecite': didNotRecite,
       'supervisorId': supervisorIdsList.isNotEmpty ? supervisorIdsList.first : '', 
       'supervisorName': supervisorNamesList.isNotEmpty ? supervisorNamesList.first : '', 
       'supervisorIds': supervisorIdsList, 
@@ -702,13 +713,13 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       'oldReviewRating': finalOldRevRating, 
       'reviewRating': (absent || didNotRecite) ? '' : finalFallbackRevRating, 
       'rating': (absent || didNotRecite) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)), 
-      'studentStatus': absent ? '' : studentStatus, // يحافظ على السلوك إذا حضر ولم يقرأ
-      'religiousActivities': absent ? '' : religiousActivities.text.trim(), // يحافظ على النشاطات
+      'studentStatus': absent ? '' : studentStatus,
+      'religiousActivities': absent ? '' : religiousActivities.text.trim(),
       'notes': notes.text.trim(),
       if (!absent && !didNotRecite) 'total_memorized_pages': totalPages,
     };
 
-    FirebaseFirestore.instance.collection('sessions').doc(widget.sessionId).update(updateData).then((_) {
+    FirebaseFirestore.instance.collection('sessions').doc(widget.sessionId).set(updateData, SetOptions(merge: true)).then((_) {
       sessionService.recalculateConsecutiveAbsences(studentId);
     }).catchError((e) {
       print("خطأ في تحديث الجلسة: $e");
@@ -872,7 +883,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Text("${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+                                        Text("${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
                                         const SizedBox(width: 8),
                                         Icon(Icons.edit_calendar_rounded, color: isDarkMode ? Colors.white54 : primaryColor.withOpacity(0.7), size: 20),
                                       ],

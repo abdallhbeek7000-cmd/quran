@@ -25,6 +25,7 @@ import 'inspirations_manage_page.dart';
 import 'supervisor_inbox_page.dart'; 
 import 'statistics_page.dart'; 
 import 'broadcast_page.dart'; 
+import 'activities_manage_page.dart'; // 🚀 استيراد الصفحة المنفصلة
 import '../services/notification_queue_manager.dart'; 
 import '../widgets/offline_wrapper.dart'; 
 import 'points_bank_page.dart'; 
@@ -245,7 +246,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 🚀 إرسال إشعار التحديثات لجميع المشرفين باستخدام fcmToken المباشر من مجموعة supervisors
   void _showUpdateNotificationDialog(bool isDark) {
     showDialog(
       context: context,
@@ -278,7 +278,6 @@ class _HomePageState extends State<HomePage> {
                       setStateDialog(() => isSending = true);
 
                       try {
-                        // 1. تسجيل الإشعار بالسجل العام
                         await FirebaseFirestore.instance.collection('global_notifications').add({
                           'topic': 'app_updates',
                           'title': 'تحديث جديد متاح 🚀',
@@ -287,7 +286,6 @@ class _HomePageState extends State<HomePage> {
                           'sentBy': widget.uid,
                         });
 
-                        // 2. 📲 جلب المشرفين وقراءة fcmToken لكل واحد وإرسال التنبيه
                         var supervisorsSnap = await FirebaseFirestore.instance.collection('supervisors').get();
                         
                         for (var doc in supervisorsSnap.docs) {
@@ -296,7 +294,6 @@ class _HomePageState extends State<HomePage> {
                           String? token = supData['fcmToken']?.toString();
                           
                           if (token != null && token.isNotEmpty) {
-                            // إرسال الإشعار لـ المشرف
                             NotificationService.sendAndSaveNotification(
                               studentId: supervisorId,
                               title: "تحديث جديد متاح 🚀",
@@ -305,7 +302,6 @@ class _HomePageState extends State<HomePage> {
                               context: context,
                             ).catchError((e) => print("فشل الإرسال عبر الخدمة للمشرف $supervisorId: $e"));
 
-                            // حفظ الإشعار بفايرستور لضمان الظهور الفوري بالإشعارات
                             await FirebaseFirestore.instance.collection('notifications').add({
                               'recipientId': supervisorId,
                               'fcmToken': token,
@@ -426,6 +422,10 @@ class _HomePageState extends State<HomePage> {
                             _buildPerformanceMenuCard(Icons.fact_check_rounded, "تسجيل حضور مبدئي 📋", () => _nav(InitialAttendancePage(cycle: currentCycleModel!)), isDark),
 
                           _buildPerformanceMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
+                          
+                          // 🚀 🚌 الخدمة المستقلة الجديدة: إدارة الأنشطة والرحلات
+                          _buildPerformanceMenuCard(Icons.directions_bus_rounded, "الأنشطة والرحلات 🚌⚽", () => _nav(const ActivitiesManagePage()), isDark),
+
                           _buildPerformanceMenuCard(Icons.update_rounded, "إشعار تحديث", () => _showUpdateNotificationDialog(isDark), isDark),
                           
                           _buildPerformanceMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
@@ -440,7 +440,6 @@ class _HomePageState extends State<HomePage> {
                           
                           _buildPerformanceMenuCard(Icons.diamond_rounded, "بنك النقاط 💎", () => _nav(const PointsBankPage()), isDark),
                           
-                          // 📊 تم تحويل الإحصائيات اليومية حصرياً لكتلة المدير
                           _buildPerformanceMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                         ],
 

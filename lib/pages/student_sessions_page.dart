@@ -76,7 +76,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     return "";
   }
 
-  // 📊 دالة التصدير للإكسل (تم تحديثها لدعم "حضر ولم يقرأ")
+  // 📊 دالة التصدير للإكسل (محدثة لتصدير تاريخ التسجيل الفعلي للمدير)
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -121,9 +121,10 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
       excel.delete('Sheet1');
 
       sheetObject.appendRow([
-        pkg_excel.TextCellValue('رقم الجلسة'), // 🚀 إضافة رقم الجلسة للإكسل
-        pkg_excel.TextCellValue('التاريخ'),
+        pkg_excel.TextCellValue('رقم الجلسة'),
+        pkg_excel.TextCellValue('التاريخ المعتمد'),
         pkg_excel.TextCellValue('اليوم'), 
+        pkg_excel.TextCellValue('وقت التسجيل الفعلي بالنظام'), // 🕵️‍♂️ حقل خفي إداري
         pkg_excel.TextCellValue('نوع الجلسة'),
         pkg_excel.TextCellValue('المشرف / المشرفين'), 
         pkg_excel.TextCellValue('تقييم الحفظ'), 
@@ -147,15 +148,16 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         var doc = docs[i];
         var data = doc.data();
         
-        int sessionNum = totalSessions - i; // 🚀 حساب رقم الجلسة
+        int sessionNum = totalSessions - i;
         
         bool isAbsent = data['absent'] ?? false;
         bool isExam = data['isExam'] ?? false;
-        bool didNotRecite = data['didNotRecite'] ?? false; // 🚀 الحالة الجديدة
+        bool didNotRecite = data['didNotRecite'] ?? false;
 
         String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : (didNotRecite ? 'بدون تسميع' : 'حلقة عادية'));
         String dateStr = data['date']?.toString() ?? '';
         String dayName = _getArabicDayName(dateStr);
+        String actualTime = data['actualCreatedAt']?.toString() ?? 'غير مسجل';
 
         List<dynamic>? supNamesList = data['supervisorNames'];
         String supervisorResult = (supNamesList != null && supNamesList.isNotEmpty) ? supNamesList.join(' ، ') : (data['supervisorName'] ?? 'غير محدد');
@@ -168,7 +170,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           memRatingResult = 'علامة: ${data['examScore'] ?? 0} من 100';
           newRevRatingResult = 'اختبار';
           oldRevRatingResult = 'اختبار';
-        } else if (isAbsent || didNotRecite) { // 🚀 تصفير التقييمات في الحالتين
+        } else if (isAbsent || didNotRecite) {
           memRatingResult = '---';
           newRevRatingResult = '---';
           oldRevRatingResult = '---';
@@ -192,9 +194,10 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         }
 
         sheetObject.appendRow([
-          pkg_excel.TextCellValue(sessionNum.toString()), // 🚀 تصدير رقم الجلسة
+          pkg_excel.TextCellValue(sessionNum.toString()),
           pkg_excel.TextCellValue(dateStr),
           pkg_excel.TextCellValue(dayName), 
+          pkg_excel.TextCellValue(actualTime),
           pkg_excel.TextCellValue(sessionType),
           pkg_excel.TextCellValue(supervisorResult), 
           pkg_excel.TextCellValue((memRatingResult.isEmpty || nMemo.isEmpty) ? '---' : memRatingResult),
@@ -332,7 +335,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                         itemBuilder: (context, index) {
                           final session = sortedSessions[index];
                           final data = session.data() as Map<String, dynamic>;
-                          int sessionNum = sortedSessions.length - index; // 🚀 حساب رقم الجلسة
+                          int sessionNum = sortedSessions.length - index;
                           return _buildSessionTimelineItem(context, session.id, data, isDarkMode, isCompletedStudent, sessionNum);
                         },
                       );
@@ -347,15 +350,18 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     );
   }
 
-  // 🚀 تمرير sessionNumber للدالة
   Widget _buildSessionTimelineItem(BuildContext context, String sessionId, Map<String, dynamic> data, bool isDarkMode, bool isCompletedStudent, int sessionNumber) {
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
-    bool didNotRecite = data['didNotRecite'] ?? false; // 🚀 استقبال الحالة الجديدة
+    bool didNotRecite = data['didNotRecite'] ?? false;
 
     String sessionDateRaw = data['date'] ?? '';
     String dayName = _getArabicDayName(sessionDateRaw);
     String displayDate = dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
+
+    // 🕵️‍♂️ استخراج التوقيت الفعلي
+    String actualCreatedAt = data['actualCreatedAt']?.toString() ?? '';
+    String actualEditedAt = data['actualEditedAt']?.toString() ?? '';
 
     String nMemo = data['newMemorization']?.toString().trim() ?? '';
     String nRev = data['nearReview']?.toString().trim() ?? '';
@@ -376,7 +382,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     String supervisorsDisplay = (supNamesList != null && supNamesList.isNotEmpty) ? supNamesList.join(' ، ') : (data['supervisorName'] ?? 'غير محدد');
 
     List<Widget> activeBoxes = [];
-    // 🚀 لا يتم إظهار المربعات القرآنية في حال حضر ولم يقرأ
     if (!didNotRecite && !isAbsent && !isExam) {
       if (isCompletedStudent && fRev.isNotEmpty) {
         activeBoxes.add(_buildGridInfoBox(Icons.verified_user_rounded, "المقدار المسموع من مراجعة الختمة الشاملة", fRev, isDarkMode ? Colors.tealAccent : Colors.teal, isDarkMode));
@@ -392,14 +397,12 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
       margin: const EdgeInsets.only(bottom: 20),
       child: _buildGlassContainer(
         isDarkMode: isDarkMode,
-        // 🚀 لون الحدود يتغير حسب الحالة
         customBorderColor: isAbsent ? Colors.red.withOpacity(0.4) : (isExam ? Colors.teal.withOpacity(0.4) : (didNotRecite ? Colors.blueGrey.withOpacity(0.4) : null)),
         child: Column(
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
-                // 🚀 لون الخلفية العلوية (الهيدر) يتغير أيضاً
                 color: isAbsent 
                     ? Colors.red.withOpacity(isDarkMode ? 0.2 : 0.15) 
                     : (isExam ? Colors.teal.withOpacity(isDarkMode ? 0.2 : 0.15) 
@@ -421,7 +424,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                             color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (didNotRecite ? Colors.blueGrey : (isDarkMode ? accentGold : primaryColor)))
                           ),
                           const SizedBox(width: 8),
-                          // 🚀 إضافة رقم الجلسة للعنوان
                           Text(
                             "الجلسة #$sessionNumber | $displayDate", 
                             style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (didNotRecite ? Colors.blueGrey : (isDarkMode ? Colors.white : primaryColor))), fontFamily: 'Cairo', fontSize: 13)
@@ -432,7 +434,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                         _buildBadge("غائب ❌", Colors.redAccent) 
                       else if (isExam)
                         _buildBadge("جلسة اختبار 📝", Colors.teal) 
-                      else if (didNotRecite) // 🚀 بادج خاص لعدم التسميع
+                      else if (didNotRecite)
                         _buildBadge("بدون تسميع ℹ️", Colors.blueGrey)
                     ],
                   ),
@@ -465,6 +467,43 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 🕵️‍♂️👑 شريط التوثيق الزمني الفعلي للإدارة فقط (manager)
+                  if (widget.role == 'manager' && (actualCreatedAt.isNotEmpty || actualEditedAt.isNotEmpty)) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(isDarkMode ? 0.12 : 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.withOpacity(0.4), width: 1),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time_filled_rounded, color: Colors.amber, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (actualCreatedAt.isNotEmpty)
+                                  Text(
+                                    "تاريخ ووقت الإدخال الفعلي: $actualCreatedAt",
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.amberAccent : Colors.orange.shade900),
+                                  ),
+                                if (actualEditedAt.isNotEmpty)
+                                  Text(
+                                    "تاريخ آخر تعديل: $actualEditedAt",
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.orangeAccent : Colors.deepOrange.shade800),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   _buildMinimalistDetailRow(
                     Icons.person_outline, 
                     (supNamesList != null && supNamesList.length > 1) ? "المشرفين" : "المشرف المسجِّل", 
