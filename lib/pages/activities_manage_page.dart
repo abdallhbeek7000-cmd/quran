@@ -212,7 +212,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                             label: const Text("حضور وتصدير HD 📸", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 11)),
                           ),
 
-                          // ✏️ 🚀 زر التعديل الجديد المضاف للمدير
                           IconButton(
                             icon: const Icon(Icons.edit_note_rounded, color: Colors.amber, size: 26),
                             onPressed: () => _showCreateOrEditActivityBottomSheet(isDark: isDark, activityId: id, existingData: data),
@@ -237,8 +236,9 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     );
   }
 
+  // 📝 📸 أخذ الحضور وتصدير كشف صورة HD مخصص عبر WidgetsToImage بنفس النمط الاحترافي للغياب
   void _showActivityAttendanceSheet(String activityId, String activityTitle, String eventDateTime, bool isDark) {
-    WidgetsToImageController imageController = WidgetsToImageController();
+    final WidgetsToImageController imageController = WidgetsToImageController();
     bool isGeneratingImage = false;
 
     showModalBottomSheet(
@@ -261,162 +261,110 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
 
                     final approvedDocs = snapshot.data!.docs;
 
-                    return Column(
+                    return Stack(
                       children: [
-                        Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(10)))),
-                        const SizedBox(height: 15),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                "تفقد حضور النشاط: $activityTitle",
-                                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white : primaryColor),
-                              ),
-                            ),
-                            
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              onPressed: isGeneratingImage || approvedDocs.isEmpty
-                                  ? null
-                                  : () async {
-                                      setModalState(() => isGeneratingImage = true);
-                                      try {
-                                        final Uint8List? bytes = await imageController.capture();
-                                        if (bytes != null) {
-                                          final directory = await getTemporaryDirectory();
-                                          final imagePath = '${directory.path}/كشف_حضور_$activityTitle.png';
-                                          final file = File(imagePath);
-                                          await file.writeAsBytes(bytes);
-
-                                          await Share.shareXFiles([XFile(imagePath)], text: '📊 كشف حضور نشاط: $activityTitle\n📅 الموعد: $eventDateTime');
-                                        }
-                                      } catch (e) {
-                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في إنشاء الصورة: $e", style: const TextStyle(fontFamily: 'Cairo'))));
-                                      } finally {
-                                        setModalState(() => isGeneratingImage = false);
-                                      }
-                                    },
-                              icon: isGeneratingImage
-                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                  : const Icon(Icons.share_rounded, size: 16, color: Colors.white),
-                              label: Text(isGeneratingImage ? "جاري..." : "مشاركة HD 📸", style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 15),
-
-                        if (approvedDocs.isEmpty)
-                          const Expanded(child: Center(child: Text("لا يوجد طلاب موافقون على المشاركة بعد 📭", style: TextStyle(fontFamily: 'Cairo'))))
-                        else
-                          Expanded(
-                            child: ListView.builder(
-                              physics: const BouncingScrollPhysics(),
-                              itemCount: approvedDocs.length,
-                              itemBuilder: (context, index) {
-                                var res = approvedDocs[index].data() as Map<String, dynamic>;
-                                String studentId = res['studentId'] ?? '';
-                                String studentName = res['studentName'] ?? 'طالب';
-                                bool attended = res['attended'] ?? false;
-
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? Colors.black26 : Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: attended ? Colors.green : Colors.redAccent.withOpacity(0.4)),
-                                  ),
-                                  child: CheckboxListTile(
-                                    activeColor: Colors.green,
-                                    title: Text(studentName, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                                    subtitle: Text(attended ? "حضر النشاط ✅" : "غائب عن النشاط ❌", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: attended ? Colors.green : Colors.redAccent, fontWeight: FontWeight.bold)),
-                                    value: attended,
-                                    onChanged: (val) {
-                                      FirebaseFirestore.instance.collection('activities').doc(activityId).collection('responses').doc(studentId).set({
-                                        'attended': val ?? false,
-                                      }, SetOptions(merge: true));
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-
-                        Offstage(
-                          offstage: true,
+                        // 🖼️ العنصر الخفي بنفس أسلوب صفحة الغياب (خارج الحدود المباشرة لإعطائه أبعاد حقيقية للالتقاط)
+                        Positioned(
+                          left: -9999,
+                          top: -9999,
                           child: WidgetsToImage(
                             controller: imageController,
-                            child: Container(
+                            child: SizedBox(
                               width: 600,
-                              padding: const EdgeInsets.all(25),
-                              color: const Color(0xfff8fafc),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(15),
-                                    decoration: BoxDecoration(color: primaryColor, borderRadius: BorderRadius.circular(15)),
-                                    child: Column(
-                                      children: [
-                                        const Text("🚌 كشف حضور غياب النشاط والرحلة", style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                                        const SizedBox(height: 5),
-                                        Text(activityTitle, style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: accentGold)),
-                                        Text("الموعد: $eventDateTime", style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.white70)),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 20),
-
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.green)),
-                                          child: Text("الحاضرون: ${approvedDocs.where((d) => (d.data() as Map)['attended'] == true).length}", textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.green)),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.redAccent)),
-                                          child: Text("الغياب: ${approvedDocs.where((d) => (d.data() as Map)['attended'] != true).length}", textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  ...approvedDocs.map((doc) {
-                                    var r = doc.data() as Map<String, dynamic>;
-                                    bool att = r['attended'] ?? false;
-                                    return Container(
-                                      margin: const EdgeInsets.only(bottom: 8),
-                                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: att ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3)),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(r['studentName'] ?? '', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87)),
-                                          Text(att ? "حاضر ✅" : "غائب ❌", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12, color: att ? Colors.green : Colors.redAccent)),
-                                        ],
-                                      ),
-                                    );
-                                  }),
-                                ],
-                              ),
+                              child: _buildExportableActivityPoster(activityTitle, eventDateTime, approvedDocs),
                             ),
                           ),
+                        ),
+
+                        // الواجهة الرئيسية المنبثقة
+                        Column(
+                          children: [
+                            Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(10)))),
+                            const SizedBox(height: 15),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    "تفقد حضور النشاط: $activityTitle",
+                                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white : primaryColor),
+                                  ),
+                                ),
+                                
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  onPressed: isGeneratingImage || approvedDocs.isEmpty
+                                      ? null
+                                      : () async {
+                                          setModalState(() => isGeneratingImage = true);
+                                          try {
+                                            final Uint8List? bytes = await imageController.capture();
+                                            if (bytes != null) {
+                                              final tempDir = await getTemporaryDirectory();
+                                              final file = await File('${tempDir.path}/حضور_$activityTitle.png').create();
+                                              await file.writeAsBytes(bytes);
+
+                                              await Share.shareXFiles(
+                                                [XFile(file.path)],
+                                                text: '📊 كشف حضور نشاط وركوب الحافلة: ($activityTitle)\n📅 الموعد: $eventDateTime\nمعهد الشيخ سعيد العبدالله 🕌',
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ أثناء تصدير الصورة: $e", style: const TextStyle(fontFamily: 'Cairo'))));
+                                            }
+                                          } finally {
+                                            setModalState(() => isGeneratingImage = false);
+                                          }
+                                        },
+                                  icon: isGeneratingImage
+                                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                      : const Icon(Icons.share_rounded, size: 16, color: Colors.white),
+                                  label: Text(isGeneratingImage ? "جاري..." : "مشاركة HD 📸", style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 15),
+
+                            if (approvedDocs.isEmpty)
+                              const Expanded(child: Center(child: Text("لا يوجد طلاب موافقون على المشاركة بعد 📭", style: TextStyle(fontFamily: 'Cairo'))))
+                            else
+                              Expanded(
+                                child: ListView.builder(
+                                  physics: const BouncingScrollPhysics(),
+                                  itemCount: approvedDocs.length,
+                                  itemBuilder: (context, index) {
+                                    var res = approvedDocs[index].data() as Map<String, dynamic>;
+                                    String studentId = res['studentId'] ?? '';
+                                    String studentName = res['studentName'] ?? 'طالب';
+                                    bool attended = res['attended'] ?? false;
+
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? Colors.black26 : Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(color: attended ? Colors.green : Colors.redAccent.withOpacity(0.4)),
+                                      ),
+                                      child: CheckboxListTile(
+                                        activeColor: Colors.green,
+                                        title: Text(studentName, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                                        subtitle: Text(attended ? "حضر النشاط ✅" : "غائب عن النشاط ❌", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: attended ? Colors.green : Colors.redAccent, fontWeight: FontWeight.bold)),
+                                        value: attended,
+                                        onChanged: (val) {
+                                          FirebaseFirestore.instance.collection('activities').doc(activityId).collection('responses').doc(studentId).set({
+                                            'attended': val ?? false,
+                                          }, SetOptions(merge: true));
+                                        },
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     );
@@ -430,7 +378,113 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     );
   }
 
-  // 📝 ✏️ نافذة موحدة لإنشاء أو تعديل بيانات الرحلة والنشاط
+  // 🖼️ 🎨 تصميم كشف البوستر للتصدير كصورة عالية الدقة بنفس نمط ومستوى ثيم الغياب المعتمد بالمعهد
+  Widget _buildExportableActivityPoster(String title, String eventDateTime, List<QueryDocumentSnapshot> docs) {
+    int attendedCount = docs.where((d) => (d.data() as Map)['attended'] == true).length;
+    int absentCount = docs.length - attendedCount;
+
+    return Container(
+      padding: const EdgeInsets.all(30),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xff0f172a), Color(0xff1e293b), Color(0xff0f172a)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.mosque, color: accentGold, size: 32),
+              const SizedBox(width: 12),
+              const Text("معهد الشيخ سعيد العبدالله", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            decoration: BoxDecoration(color: accentGold.withOpacity(0.15), borderRadius: BorderRadius.circular(25), border: Border.all(color: accentGold, width: 1)),
+            child: Text("🚌 كشف حضور نشاط: $title", style: TextStyle(fontSize: 14, color: accentGold, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          ),
+          const SizedBox(height: 6),
+          Text("الموعد: $eventDateTime", style: const TextStyle(fontSize: 12, color: Colors.white70, fontFamily: 'Cairo')),
+          const SizedBox(height: 20),
+
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.green)),
+                  child: Text("الحاضرون: $attendedCount", textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.redAccent)),
+                  child: Text("الغياب: $absentCount", textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 13)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          Container(
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white24, width: 1.2)),
+            child: Table(
+              columnWidths: const {0: FlexColumnWidth(3), 1: FlexColumnWidth(1.5)},
+              children: [
+                TableRow(
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.12)),
+                  children: [
+                    _tableHeader("اسم الطالب المشترك"),
+                    _tableHeader("حالة الحضور"),
+                  ],
+                ),
+                ...docs.map((d) {
+                  var data = d.data() as Map<String, dynamic>;
+                  String name = data['studentName'] ?? 'طالب';
+                  bool att = data['attended'] ?? false;
+                  return TableRow(
+                    children: [
+                      _tableCell(name, isBold: true),
+                      _tableCell(att ? "حاضر ✅" : "غائب ❌", color: att ? Colors.greenAccent : Colors.redAccent, isBold: true),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 25),
+          const Text("يرجى المتابعة والحرص الدائم على سلامة طلابنا الكرام 🌸", style: TextStyle(fontSize: 13, color: Colors.white60, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _tableHeader(String txt) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: Text(txt, textAlign: TextAlign.center, style: TextStyle(color: accentGold, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+    );
+  }
+
+  Widget _tableCell(String txt, {bool isBold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      child: Text(
+        txt,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: color ?? Colors.white, fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontFamily: 'Cairo'),
+      ),
+    );
+  }
+
   void _showCreateOrEditActivityBottomSheet({required bool isDark, String? activityId, Map<String, dynamic>? existingData}) {
     bool isEditing = activityId != null && existingData != null;
 
@@ -697,14 +751,11 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                     };
 
                                     if (isEditing) {
-                                      // ✏️ إجراء التحديث
                                       await FirebaseFirestore.instance.collection('activities').doc(activityId).update(updatePayload);
                                     } else {
-                                      // ➕ إجراء الإنشاء الجديد
                                       updatePayload['createdAt'] = FieldValue.serverTimestamp();
                                       await FirebaseFirestore.instance.collection('activities').add(updatePayload);
 
-                                      // إرسال الإشعارات عند الإنشاء الجديد
                                       if (targetMode == 'all') {
                                         var stdSnap = await FirebaseFirestore.instance.collection('students').get();
                                         for (var std in stdSnap.docs) {

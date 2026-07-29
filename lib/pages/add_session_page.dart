@@ -331,6 +331,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     return DateTime(2000);
   }
 
+  // 🚀 🔥 الدالة المعدلة الذكية لجلب آخر واجب سليم وتخطي جلسات الغياب
   Future<void> _loadPreviousSessionData() async {
     try {
       final querySnapshot = await FirebaseFirestore.instance
@@ -360,12 +361,24 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
           return dateComparison;
         });
 
-        final lastSession = docs.first.data();
-        if (mounted) {
+        // 🎯 البحث عن أول جلسة حضور حقيقية (ليست غياب) وتوفر واجبات
+        Map<String, dynamic>? lastValidSession;
+        for (var doc in docs) {
+          var data = doc.data();
+          bool isSessionAbsent = data['absent'] == true;
+          
+          if (!isSessionAbsent) {
+            lastValidSession = data;
+            break; // وجدنا آخر جلسة حضور حقيقية!
+          }
+        }
+
+        // إذا عُثر على جلسة حضور سابقة، نعبئ الواجبات منها فوراً
+        if (lastValidSession != null && mounted) {
           setState(() {
-            _parseRangeIntoControllers(lastSession['newHomework'] ?? '', newMemoFrom, newMemoTo);
-            _parseRangeIntoControllers(lastSession['newReviewHomework'] ?? '', newRevFrom, newRevTo);
-            _parseMultiRangeIntoControllers(lastSession['oldReviewHomework'] ?? '', oldReviewRanges);
+            _parseRangeIntoControllers(lastValidSession!['newHomework'] ?? '', newMemoFrom, newMemoTo);
+            _parseRangeIntoControllers(lastValidSession!['newReviewHomework'] ?? '', newRevFrom, newRevTo);
+            _parseMultiRangeIntoControllers(lastValidSession!['oldReviewHomework'] ?? '', oldReviewRanges);
           });
           _updateTotalPages();
         }
@@ -427,7 +440,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
-  // 🚀 دالة إضافة الجلسة السريعة الفورية بمهلة أوفلاين استثنائية المانعة للتعليق والتكرار
   addSession() async {
     if (loading) return;
 
@@ -444,15 +456,12 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
     setState(() => loading = true);
 
-    // 🗓️ صياغة التاريخ yyyy-MM-dd
     final String monthStr = _selectedDate.month.toString().padLeft(2, '0');
     final String dayStr = _selectedDate.day.toString().padLeft(2, '0');
     final String date = "${_selectedDate.year}-$monthStr-$dayStr";
 
-    // 🔑 المعرّف الموحد الحاسم لمنع تكرار الوثائق
     final String customSessionId = "${widget.studentId}_$date";
 
-    // 🕒 التقاط الوقت الفعلي للحفظ بالخلفية
     DateTime realNow = DateTime.now();
     String actualTimeFormatted = DateFormat('yyyy-MM-dd hh:mm a').format(realNow);
 
@@ -497,8 +506,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'supervisorIds': supervisorIdsList,          
       'supervisorNames': supervisorNamesList, 
       'timestamp': FieldValue.serverTimestamp(), 
-      'createdTimestamp': FieldValue.serverTimestamp(), // 🕵️‍♂️ ختم النظام المباشر
-      'actualCreatedAt': actualTimeFormatted,          // 🕵️‍♂️ الوقت الفعلي المقروء للحفظ
+      'createdTimestamp': FieldValue.serverTimestamp(),
+      'actualCreatedAt': actualTimeFormatted,          
       'date': date,
       'absent': absent,
       'isExam': isExam, 
@@ -526,7 +535,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     };
 
     try {
-      // ⚡ 1. الحفظ الفوري المباشر مع مهلة ثانية واحدة لمنع التعليق في وضع الأوفلاين
       await FirebaseFirestore.instance
           .collection('sessions')
           .doc(customSessionId)
@@ -536,7 +544,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
             onTimeout: () => print("تم حفظ الجلسة محلياً بالكامل أوفلاين ⚡"),
           );
 
-      // ⚡ 2. تحديث وتصفير غيابات الطالب مع مهلة سريعة
       if (!absent) {
         FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
           'consecutiveAbsences': 0,
@@ -544,7 +551,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         }).timeout(const Duration(seconds: 1), onTimeout: () => null).catchError((e) => print("Absences update error: $e"));
       }
 
-      // 🚀 3. تسجيل مهمة الرفع أوتوماتيكياً عند توفر الشبكة
       if (!kIsWeb) {
         Workmanager().registerOneOffTask(
           "sync_task_${DateTime.now().millisecondsSinceEpoch}", 
@@ -553,7 +559,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         ).catchError((e) => print("Workmanager error: $e"));
       }
 
-      // 🚀 4. معالجة صف وتأطير الإشعارات
       String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : "📢 تحديث يومي من الحلقة"));
       String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
         : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 

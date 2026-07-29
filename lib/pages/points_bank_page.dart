@@ -26,6 +26,10 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
   CycleModel? currentCycle;
   bool isLoadingCycle = true;
 
+  // 🔍 تحكم ومتابعة البحث
+  final TextEditingController _searchController = TextEditingController();
+  String searchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -46,40 +50,41 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  // 🔮 🚀 المحرك السحري لإشعار السائل الزجاجي الذي ينزلق بفخامة من الأعلى
+  // 🔮 إشعار السائل الزجاجي الانزلاقي العائم
   void _showTopPremiumToast({required String message, required IconData icon, required Color statusColor, required bool isDark}) {
     final overlay = Overlay.of(context);
     late OverlayEntry overlayEntry;
 
     overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        top: MediaQuery.of(context).padding.top + 15, // النزول أسفل النوتش بالملي
+        top: MediaQuery.of(context).padding.top + 15,
         left: 20,
         right: 20,
         child: Material(
           color: Colors.transparent,
           child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: -100.0, end: 0.0), // الانزلاق السلس من الأعلى
+            tween: Tween(begin: -100.0, end: 0.0),
             duration: const Duration(milliseconds: 500),
             curve: Curves.easeOutBack,
             builder: (context, value, child) {
               return Transform.translate(
                 offset: Offset(0, value),
                 child: Opacity(
-                  opacity: (value + 100) / 100, // ظهور متدرج مع الانزلاق
+                  opacity: (value + 100) / 100,
                   child: child,
                 ),
               );
             },
             child: Directionality(
-              textDirection: TextDirection.rtl, // دعم محاذاة اللغة العربية الملكية
+              textDirection: TextDirection.rtl,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // بلور زجاجي نقي خلف التنبيه
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     decoration: BoxDecoration(
@@ -120,7 +125,6 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
       ),
     );
 
-    // إدخال التنبيه وحذفه التلقائي بعد 3 ثوانٍ
     overlay.insert(overlayEntry);
     Future.delayed(const Duration(seconds: 3), () {
       overlayEntry.remove();
@@ -227,7 +231,6 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                         if (!mounted) return;
                         Navigator.pop(context);
                         
-                        // 🚀 استدعاء التنبيه الزجاجي الانزلاقي من الأعلى بنجاح
                         _showTopPremiumToast(message: "تمت إضافة النقاط بنجاح وإشعار المحفظة الرقمية للطالب 💎", icon: Icons.check_circle_rounded, statusColor: Colors.green.shade600, isDark: isDark);
                       } catch (e) {
                         setDialogState(() => isAdding = false);
@@ -438,7 +441,6 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                         if (!mounted) return;
                         Navigator.pop(context);
                         
-                        // 🚀 إطلاق توست زجاجي من الأعلى عند إضافة الجائزة
                         _showTopPremiumToast(message: "تم تحديث الواجهة الموحدة للمتجر وإدراج الجائزة بنجاح 🎁", icon: Icons.shopping_bag_rounded, statusColor: accentGold, isDark: isDark);
                       } catch (e) {
                         setDialogState(() => isSaving = false);
@@ -478,8 +480,8 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isDark 
-                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
-                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
+                      ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
+                      : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
               ),
@@ -502,8 +504,59 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
               child: Column(
                 children: [
                   const SizedBox(height: 10),
+
+                  // 🔍 شريط البحث التفاعلي الأنيق
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (val) {
+                            setState(() {
+                              searchQuery = val.trim().toLowerCase();
+                            });
+                          },
+                          style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87),
+                          decoration: InputDecoration(
+                            hintText: "ابحث باسم الطالب أو الرقم التسلسلي...",
+                            hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDark ? Colors.white54 : Colors.black45),
+                            prefixIcon: Icon(Icons.search_rounded, color: isDark ? accentGold : primaryColor),
+                            suffixIcon: searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(Icons.clear, color: isDark ? Colors.white54 : Colors.black54),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => searchQuery = '');
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.5),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.white),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.white.withOpacity(0.7)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(color: isDark ? accentGold : primaryColor, width: 1.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
                   Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.5),
                       borderRadius: BorderRadius.circular(20),
@@ -563,37 +616,76 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا يوجد طلاب في هذه الدورة", style: TextStyle(fontFamily: 'Cairo')));
 
-        var docs = snapshot.data!.docs;
+        var docs = snapshot.data!.docs.toList();
 
-        var sortedDocs = docs.toList()..sort((a, b) {
-          int ptsA = (a.data() as Map<String, dynamic>)['points'] ?? 0;
-          int ptsB = (b.data() as Map<String, dynamic>)['points'] ?? 0;
-          return ptsB.compareTo(ptsA);
+        // 🔢 🚀 الترتيب التلقائي بحسب الرقم التسلسلي المعتمد (serial)
+        docs.sort((a, b) {
+          var dataA = a.data() as Map<String, dynamic>;
+          var dataB = b.data() as Map<String, dynamic>;
+
+          int serialA = int.tryParse(dataA['serial']?.toString() ?? '') ?? 99999999;
+          int serialB = int.tryParse(dataB['serial']?.toString() ?? '') ?? 99999999;
+
+          return serialA.compareTo(serialB);
         });
+
+        // 🔍 تصفية القائمة بناءً على إدخال البحث
+        if (searchQuery.isNotEmpty) {
+          docs = docs.where((doc) {
+            var data = doc.data() as Map<String, dynamic>;
+            String name = (data['name'] ?? '').toString().toLowerCase();
+            String serial = (data['serial'] ?? '').toString().toLowerCase();
+            return name.contains(searchQuery) || serial.contains(searchQuery);
+          }).toList();
+        }
+
+        if (docs.isEmpty) {
+          return const Center(child: Text("لا توجد نتائج تطابق البحث 🔍", style: TextStyle(fontFamily: 'Cairo')));
+        }
 
         return ListView.builder(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-          itemCount: sortedDocs.length,
+          itemCount: docs.length,
           itemBuilder: (context, index) {
-            var data = sortedDocs[index].data() as Map<String, dynamic>;
-            String studentId = sortedDocs[index].id;
+            var data = docs[index].data() as Map<String, dynamic>;
+            String studentId = docs[index].id;
             String name = data['name'] ?? 'طالب';
             int points = data['points'] ?? 0;
             String imageUrl = data['imageUrl'] ?? '';
+            String serial = data['serial']?.toString() ?? '---';
             String firstLetter = name.isNotEmpty ? name.substring(0, 1) : "?";
 
             return Container(
               margin: const EdgeInsets.only(bottom: 15),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(20),
+                color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(22),
                 border: Border.all(color: isDark ? Colors.white12 : Colors.white, width: 1.5),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.02), blurRadius: 10, offset: const Offset(0, 5))],
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.03), blurRadius: 10, offset: const Offset(0, 5))],
               ),
               child: Row(
                 children: [
+                  // 🔢 شارة الرقم التسلسلي المعتمد
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    margin: const EdgeInsets.only(left: 6),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      "#$serial",
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? accentGold : primaryColor,
+                      ),
+                    ),
+                  ),
+
                   CircleAvatar(
                     radius: 25,
                     backgroundColor: primaryColor.withOpacity(0.1),
@@ -605,7 +697,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87)),
+                        Text(name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87), overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 5),
                         Row(
                           children: [
@@ -657,6 +749,8 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
         }
 
         var requestDocs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
+
+        // 🔢 الفرز حسب المعلق ثم التاريخ والبحث
         requestDocs.sort((a, b) {
           var dataA = a.data() as Map<String, dynamic>;
           var dataB = b.data() as Map<String, dynamic>;
@@ -666,12 +760,24 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
           if (statusA == 'pending' && statusB != 'pending') return -1;
           if (statusA != 'pending' && statusB == 'pending') return 1;
           
-          Timestamp? tA = dataA['createdAt'] as Timestamp?;
-          Timestamp? tB = dataB['createdAt'] as Timestamp?;
-          if (tA == null) return 1;
-          if (tB == null) return -1;
-          return tB.compareTo(tA);
+          int serialA = int.tryParse(dataA['studentSerial']?.toString() ?? '') ?? 99999999;
+          int serialB = int.tryParse(dataB['studentSerial']?.toString() ?? '') ?? 99999999;
+          return serialA.compareTo(serialB);
         });
+
+        if (searchQuery.isNotEmpty) {
+          requestDocs = requestDocs.where((doc) {
+            var data = doc.data() as Map<String, dynamic>;
+            String name = (data['studentName'] ?? '').toString().toLowerCase();
+            String serial = (data['studentSerial'] ?? '').toString().toLowerCase();
+            String reward = (data['rewardTitle'] ?? '').toString().toLowerCase();
+            return name.contains(searchQuery) || serial.contains(searchQuery) || reward.contains(searchQuery);
+          }).toList();
+        }
+
+        if (requestDocs.isEmpty) {
+          return const Center(child: Text("لا توجد طلبات استبدال تطابق بحثك 🔍", style: TextStyle(fontFamily: 'Cairo')));
+        }
 
         return ListView.builder(
           physics: const BouncingScrollPhysics(),
@@ -711,7 +817,7 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(color: primaryColor.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
-                              child: Text("تسلسلي: $serial", style: TextStyle(fontSize: 10, fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : primaryColor)),
+                              child: Text("#$serial", style: TextStyle(fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : primaryColor)),
                             ),
                             const SizedBox(width: 8),
                             if (!isPending)
@@ -758,7 +864,6 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
                               ).catchError((e) => print("فشل الإشعار العكسي: $e"));
                             }
 
-                            // 🚀 إطلاق التنبيه الزجاجي الانزلاقي من الأعلى عند تأكيد التسليم
                             _showTopPremiumToast(message: "تم تأكيد تسليم الهدية بنجاح وإرسال إشعار فوري لموبايل الطالب 🎉", icon: Icons.done_all_rounded, statusColor: Colors.greenAccent.shade700, isDark: isDark);
                           },
                           child: const Text("تأكيد التسليم 🎁", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
@@ -784,6 +889,18 @@ class _PointsBankPageState extends State<PointsBankPage> with SingleTickerProvid
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return Center(child: Text("المتجر فارغ حالياً، قم بإضافة جوائز!", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.grey)));
 
             var docs = snapshot.data!.docs;
+
+            if (searchQuery.isNotEmpty) {
+              docs = docs.where((doc) {
+                var data = doc.data() as Map<String, dynamic>;
+                String name = (data['name'] ?? '').toString().toLowerCase();
+                return name.contains(searchQuery);
+              }).toList();
+            }
+
+            if (docs.isEmpty) {
+              return const Center(child: Text("لا توجد جوائز تطابق بحثك 🔍", style: TextStyle(fontFamily: 'Cairo')));
+            }
 
             return GridView.builder(
               physics: const BouncingScrollPhysics(),

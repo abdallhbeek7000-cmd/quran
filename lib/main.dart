@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'firebase_options.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
+import 'pages/splash_screen.dart'; // 👈 استدعاء شاشة التمهيد المتحركة الجديدة
 import 'pages/update_checker.dart'; 
 import 'services/theme_provider.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -132,7 +133,7 @@ void main() async {
     await flutterLocalNotificationsPlugin.initialize(initSettings);
   }
   
-  // ⚡ تفعيل الكاش المحلي اللامحدود لفايرستور (يضمن الحفظ والرفع أوفلاين/أونلاين)
+  // ⚡ تفعيل الكاش المحلي اللامحدود لفايرستور
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
@@ -175,15 +176,10 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  bool isLoggedIn = false;
-  String userRole = '';
-  String userId = '';
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    checkLogin();
     _setupInteractedMessage();
     
     // 💬 الاستماع المباشر للإشعارات القادمة أثناء عمل التطبيق
@@ -203,7 +199,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // 🚀 تشغيل المزامنة الفورية فور عودة التطبيق للعمل
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -232,21 +227,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   void _handleNotificationTap(RemoteMessage message) {
     print("Notification tapped! Data: ${message.data}");
-  }
-
-  void checkLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    final logged = prefs.getBool('isLoggedIn') ?? false;
-    final role = prefs.getString('userRole') ?? '';
-    final uid = prefs.getString('userId') ?? '';
-
-    if (mounted) {
-      setState(() {
-        isLoggedIn = logged;
-        userRole = role;
-        userId = uid;
-      });
-    }
   }
 
   @override
@@ -326,10 +306,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
       ),
 
-      home: isLoggedIn
-          ? OfflineWrapper(child: HomePage(uid: userId, role: userRole)) 
-          : const LoginPage(),
-          
+      // 🚀 فتح شاشة التمهيد المتحركة أولاً لتعرض الشعار بانسيابية ثم توجه المستخدم تلقائياً
+      home: const SplashScreen(),
+        
       onGenerateRoute: (settings) {
         if (settings.name == '/home') {
           final args = (settings.arguments as Map<String, dynamic>?) ?? {'uid': '', 'role': ''};

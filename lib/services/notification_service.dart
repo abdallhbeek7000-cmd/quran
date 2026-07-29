@@ -97,13 +97,13 @@ class NotificationService {
           'Authorization': 'Bearer $accessToken',
         };
 
-        // 💬 تخصيص الـ Tag و Group Key لإشعارات المحادثة لمنع التكرار
+        // 💬 تخصيص الـ Tag لتجميع الإشعارات
         String? notificationTag;
         if (type == 'chat') {
           notificationTag = 'chat_${chatStudentId ?? studentId}';
         }
 
-        // 🎯 بناء نص الطلب ذكياً: إذا كان شات نلغي الحقل الخارجي 'notification' حتى يتولى التطبيق تجميع الإشعار
+        // 🎯 بناء نص الطلب بالشكل المعتمد رسميًا لـ FCM v1
         Map<String, dynamic> messagePayload = {
           'token': fcmToken,
           'data': {
@@ -118,7 +118,8 @@ class NotificationService {
             'notification': {
               'channel_id': 'high_importance_channel',
               'sound': 'default',
-              if (type == 'chat') 'group_key': 'supervisor_chat_group',
+              // 🚀 تم تعديل 'group_key' الخاطئ إلى الحقل المعتمد من جوجل 'group'
+              if (type == 'chat') 'group': 'supervisor_chat_group',
               if (notificationTag != null) 'tag': notificationTag,
             }
           },

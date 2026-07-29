@@ -62,7 +62,7 @@ class DashboardPage extends StatelessWidget {
           ),
 
           SafeArea(
-            child: FutureBuilder(
+            child: FutureBuilder<List<dynamic>>(
               future: Future.wait([
                 FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false).get(),
                 FirebaseFirestore.instance.collection('supervisors').get(),
@@ -73,9 +73,9 @@ class DashboardPage extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final students = snapshot.data![0].docs;
-                final supervisors = snapshot.data![1].docs;
-                final sessions = snapshot.data![2].docs;
+                final students = (snapshot.data![0] as QuerySnapshot).docs;
+                final supervisors = (snapshot.data![1] as QuerySnapshot).docs;
+                final sessions = (snapshot.data![2] as QuerySnapshot).docs;
 
                 int absentCount = 0;
                 int noSupervisor = 0;
@@ -87,7 +87,7 @@ class DashboardPage extends StatelessWidget {
 
                 for (var s in students) {
                   final data = s.data() as Map<String, dynamic>;
-                  if (data['supervisorId'] == null || data['supervisorId'] == '') noSupervisor++;
+                  if (data['supervisorId'] == null || data['supervisorId'].toString().trim().isEmpty) noSupervisor++;
                 }
 
                 return SingleChildScrollView(
@@ -126,7 +126,6 @@ class DashboardPage extends StatelessWidget {
                               children: [
                                 _buildGlassCard(title: "الطلاب", value: students.length.toString(), icon: Icons.people_alt_rounded, color: isDarkMode ? Colors.lightBlueAccent : Colors.blue, isDarkMode: isDarkMode),
                                 
-                                // 🚀 👑 جعل كرت المشرفين قابلاً للضغط للانتقال لشاشة توزيع وعدد الطلاب للمشرفين
                                 InkWell(
                                   borderRadius: BorderRadius.circular(25),
                                   onTap: () {
@@ -316,7 +315,7 @@ class DashboardPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🚀 1. صفحة تعداد طلاب كل مشرف (خاصة بالإدارة)
+// 🚀 1. صفحة تعداد طلاب كل مشرف
 // =========================================================================
 class SupervisorsStudentsCountPage extends StatelessWidget {
   const SupervisorsStudentsCountPage({super.key});
@@ -335,7 +334,10 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.transparent,
-          title: Text("توزيع الطلاب على المشرفين", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)),
+          title: Text(
+            "توزيع الطلاب على المشرفين 👥", 
+            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)
+          ),
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
         ),
@@ -371,69 +373,140 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
 
                       final students = stdSnap.data!.docs;
 
-                      // حساب عدد طلاب كل مشرف
                       Map<String, int> supervisorCounts = {};
                       for (var std in students) {
                         var data = std.data() as Map<String, dynamic>;
-                        String sId = data['supervisorId'] ?? '';
+                        String sId = data['supervisorId']?.toString() ?? '';
                         if (sId.isNotEmpty) {
                           supervisorCounts[sId] = (supervisorCounts[sId] ?? 0) + 1;
                         }
                       }
 
+                      List<Map<String, dynamic>> supervisorsList = supervisors.map((sup) {
+                        var supData = sup.data() as Map<String, dynamic>;
+                        String supId = sup.id;
+                        return {
+                          'id': supId,
+                          'name': supData['name'] ?? 'مشرف',
+                          'imageUrl': supData['imageUrl'] ?? '',
+                          'count': supervisorCounts[supId] ?? 0,
+                        };
+                      }).toList();
+
+                      supervisorsList.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+
                       return ListView.builder(
                         physics: const BouncingScrollPhysics(),
                         padding: const EdgeInsets.all(20),
-                        itemCount: supervisors.length,
+                        itemCount: supervisorsList.length,
                         itemBuilder: (context, index) {
-                          final sup = supervisors[index];
-                          final supData = sup.data() as Map<String, dynamic>;
-                          final String supId = sup.id;
-                          final String supName = supData['name'] ?? 'مشرف';
-                          final int studentCount = supervisorCounts[supId] ?? 0;
+                          final item = supervisorsList[index];
+                          final String supName = item['name'];
+                          final String imageUrl = item['imageUrl'];
+                          final int studentCount = item['count'];
 
                           return Container(
-                            margin: const EdgeInsets.only(bottom: 15),
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                            decoration: BoxDecoration(
-                              color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.03), blurRadius: 10, offset: const Offset(0, 4))],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.15),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(Icons.person_rounded, color: isDarkMode ? accentGold : primaryColor, size: 24),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      supName,
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor),
-                                    ),
-                                  ],
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            margin: const EdgeInsets.only(bottom: 14),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(22),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(15),
-                                    border: Border.all(color: isDarkMode ? accentGold.withOpacity(0.5) : primaryColor.withOpacity(0.5), width: 1),
+                                    color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+                                    borderRadius: BorderRadius.circular(22),
+                                    border: Border.all(
+                                      color: index == 0
+                                          ? accentGold.withOpacity(0.8)
+                                          : (isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.7)),
+                                      width: index == 0 ? 1.8 : 1.2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
+                                    ],
                                   ),
-                                  child: Text(
-                                    "$studentCount طلاب",
-                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? accentGold : primaryColor),
+                                  child: Row(
+                                    children: [
+                                      Stack(
+                                        alignment: Alignment.bottomRight,
+                                        children: [
+                                          Container(
+                                            width: 52,
+                                            height: 52,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: index == 0 ? accentGold : primaryColor.withOpacity(0.3), width: 2),
+                                            ),
+                                            child: ClipRRect(
+                                              borderRadius: BorderRadius.circular(26),
+                                              child: imageUrl.isNotEmpty
+                                                  ? Image.network(
+                                                      imageUrl,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (c, e, s) => _buildAvatarFallback(supName, isDarkMode, primaryColor),
+                                                    )
+                                                  : _buildAvatarFallback(supName, isDarkMode, primaryColor),
+                                            ),
+                                          ),
+                                          if (index == 0)
+                                            const CircleAvatar(radius: 10, backgroundColor: Colors.amber, child: Icon(Icons.star_rounded, size: 12, color: Colors.white))
+                                          else if (index == 1)
+                                            const CircleAvatar(radius: 10, backgroundColor: Colors.grey, child: Icon(Icons.star_rounded, size: 12, color: Colors.white))
+                                          else if (index == 2)
+                                            const CircleAvatar(radius: 10, backgroundColor: Colors.brown, child: Icon(Icons.star_rounded, size: 12, color: Colors.white)),
+                                        ],
+                                      ),
+                                      const SizedBox(width: 15),
+
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              supName,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                                fontFamily: 'Cairo',
+                                                color: isDarkMode ? Colors.white : primaryColor,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              "الترتيب: #${index + 1}",
+                                              style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDarkMode ? Colors.white54 : Colors.black54),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: studentCount > 0 
+                                              ? (isDarkMode ? accentGold.withOpacity(0.2) : primaryColor.withOpacity(0.12)) 
+                                              : Colors.grey.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: studentCount > 0 ? (isDarkMode ? accentGold : primaryColor) : Colors.grey, 
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          "$studentCount طلاب",
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            fontFamily: 'Cairo',
+                                            color: studentCount > 0 ? (isDarkMode ? accentGold : primaryColor) : Colors.grey,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
                           );
                         },
@@ -444,6 +517,18 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback(String name, bool isDarkMode, Color primaryColor) {
+    return Container(
+      color: isDarkMode ? primaryColor.withOpacity(0.5) : primaryColor.withOpacity(0.12),
+      child: Center(
+        child: Text(
+          name.isNotEmpty ? name.substring(0, 1) : 'م',
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontSize: 18),
         ),
       ),
     );

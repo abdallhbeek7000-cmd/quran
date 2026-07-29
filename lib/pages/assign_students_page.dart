@@ -1,11 +1,11 @@
-import 'dart:ui'; // 🎯 ضرورية لتأثير الزجاج والـ Blur
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart'; 
-import 'package:provider/provider.dart'; // 🎯 ضرورية لقراءة حالة المظهر
+import 'package:provider/provider.dart';
 import '../models/cycle_model.dart';
 import '../services/student_service.dart';
-import '../services/theme_provider.dart'; // 🎯 استدعاء الـ ThemeProvider الخاص بك
+import '../services/theme_provider.dart';
 
 class AssignStudentsPage extends StatefulWidget {
   final CycleModel cycle;
@@ -23,10 +23,20 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
   final firestore = FirebaseFirestore.instance;
   final studentService = StudentService();
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37); // لون إضافي للإنعكاس الزجاجي
+  final Color accentGold = const Color(0xffd4af37);
 
   String? globalSupervisorId;
   String? globalSupervisorName;
+
+  // 🔍 تحكم بالبحث
+  final TextEditingController _searchController = TextEditingController();
+  String searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   assignStudent(String studentId, String supId, String supName) async {
     if (supId.isEmpty) return;
@@ -41,7 +51,7 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: primaryColor,
-        content: Text("تم تعيين $supName بنجاح"),
+        content: Text("تم تعيين $supName بنجاح", style: const TextStyle(fontFamily: 'Cairo')),
         duration: const Duration(seconds: 1),
       ),
     );
@@ -49,25 +59,24 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // قراءة حالة المظهر الحالية للتطبيق (داكن / فاتح)
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية الانسيابية خلف الـ AppBar
+      extendBodyBehindAppBar: true,
       backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, // جعل الـ AppBar شفافاً بالكامل
+        backgroundColor: Colors.transparent,
         title: Text(
-          "توزيع الطلاب على المشرفين", 
-          style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor),
+          "توزيع الطلاب على المشرفين 👥", 
+          style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo'),
         ),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
       ),
       body: Stack(
         children: [
-          // 🎨 1. الخلفية المتدرجة الانسيابية مع الدوائر العائمة (Blobs)
+          // 🎨 1. الخلفية المتدرجة الانسيابية
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -104,60 +113,112 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
           SafeArea(
             child: Column(
               children: [
-                // 🧊 لوحة التحكم العلوية (التوزيع السريع) بستايل زجاجي ملكي
+                // 🧊 لوحة التحكم العلوية والبحث التفاعلي
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  child: _buildGlassContainer(
-                    isDarkMode: isDarkMode,
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "التوزيع السريع لمشرف محدد:", 
-                          style: TextStyle(color: isDarkMode ? Colors.white70 : primaryColor.withOpacity(0.8), fontSize: 13, fontWeight: FontWeight.bold),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Column(
+                    children: [
+                      // 🔍 شريط البحث المصمم بزجاجية أنيقة
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (val) {
+                              setState(() {
+                                searchQuery = val.trim().toLowerCase();
+                              });
+                            },
+                            style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white : Colors.black87),
+                            decoration: InputDecoration(
+                              hintText: "ابحث باسم الطالب أو رقمه التسلسلي...",
+                              hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDarkMode ? Colors.white54 : Colors.black45),
+                              prefixIcon: Icon(Icons.search_rounded, color: isDarkMode ? accentGold : primaryColor),
+                              suffixIcon: searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: Icon(Icons.clear, color: isDarkMode ? Colors.white54 : Colors.black54),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => searchQuery = '');
+                                      },
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.5),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide(color: isDarkMode ? Colors.white12 : Colors.white),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide(color: isDarkMode ? Colors.white12 : Colors.white.withOpacity(0.7)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide(color: isDarkMode ? accentGold : primaryColor, width: 1.5),
+                              ),
+                            ),
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        StreamBuilder(
-                          stream: firestore.collection('supervisors').snapshots(),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) return const SizedBox();
-                            final supervisors = snapshot.data!.docs;
+                      ),
 
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 15),
-                              decoration: BoxDecoration(
-                                color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
-                                borderRadius: BorderRadius.circular(15),
-                                border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButtonFormField<String>(
-                                  value: globalSupervisorId,
-                                  dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                  style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                  decoration: const InputDecoration(border: InputBorder.none),
-                                  hint: Text("اختر مشرفاً لتعيينه للكل...", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black45, fontSize: 13)),
-                                  items: supervisors.map((s) {
-                                    return DropdownMenuItem(
-                                      value: s.id,
-                                      child: Text(s['name'] ?? s['email']), 
-                                    );
-                                  }).toList(),
-                                  onChanged: (v) {
-                                    final sup = supervisors.firstWhere((e) => e.id == v);
-                                    setState(() {
-                                      globalSupervisorId = sup.id;
-                                      globalSupervisorName = sup['name'] ?? sup['email'];
-                                    });
-                                  },
-                                ),
-                              ),
-                            );
-                          },
+                      const SizedBox(height: 10),
+
+                      // التوزيع السريع لمشرف محدد
+                      _buildGlassContainer(
+                        isDarkMode: isDarkMode,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "التوزيع السريع لمشرف محدد:", 
+                              style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : primaryColor.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 10),
+                            StreamBuilder(
+                              stream: firestore.collection('supervisors').snapshots(),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) return const SizedBox();
+                                final supervisors = snapshot.data!.docs;
+
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                                  decoration: BoxDecoration(
+                                    color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+                                    borderRadius: BorderRadius.circular(15),
+                                    border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButtonFormField<String>(
+                                      value: globalSupervisorId,
+                                      dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                      style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                      decoration: const InputDecoration(border: InputBorder.none),
+                                      hint: Text("اختر مشرفاً لتعيينه للكل...", style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black45, fontSize: 12)),
+                                      items: supervisors.map((s) {
+                                        return DropdownMenuItem(
+                                          value: s.id,
+                                          child: Text(s['name'] ?? s['email']), 
+                                        );
+                                      }).toList(),
+                                      onChanged: (v) {
+                                        final sup = supervisors.firstWhere((e) => e.id == v);
+                                        setState(() {
+                                          globalSupervisorId = sup.id;
+                                          globalSupervisorName = sup['name'] ?? sup['email'];
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -171,9 +232,36 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
                         .snapshots(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                      final docs = snapshot.data!.docs;
+                      var docs = snapshot.data!.docs.toList();
 
                       if (docs.isEmpty) return _buildEmptyState(isDarkMode);
+
+                      // 🔢 🚀 الترتيب التلقائي التنازلي/التصاعدي حسب الرقم التسلسلي المعتمد (serial)
+                      docs.sort((a, b) {
+                        var dataA = a.data();
+                        var dataB = b.data();
+
+                        int serialA = int.tryParse(dataA['serial']?.toString() ?? '') ?? 99999999;
+                        int serialB = int.tryParse(dataB['serial']?.toString() ?? '') ?? 99999999;
+
+                        return serialA.compareTo(serialB);
+                      });
+
+                      // 🔍 تصفية القائمة بالبحث
+                      if (searchQuery.isNotEmpty) {
+                        docs = docs.where((doc) {
+                          var data = doc.data();
+                          String name = (data['name'] ?? '').toString().toLowerCase();
+                          String serial = (data['serial'] ?? '').toString().toLowerCase();
+                          return name.contains(searchQuery) || serial.contains(searchQuery);
+                        }).toList();
+                      }
+
+                      if (docs.isEmpty) {
+                        return Center(
+                          child: Text("لا توجد نتائج تطابق بحثك 🔍", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white60 : primaryColor)),
+                        );
+                      }
 
                       return ListView.builder(
                         physics: const BouncingScrollPhysics(),
@@ -181,65 +269,90 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
                         itemCount: docs.length,
                         itemBuilder: (context, index) {
                           final student = docs[index];
-                          final data = student.data() as Map<String, dynamic>;
+                          final data = student.data();
                           final String imageUrl = data['imageUrl'] ?? '';
                           final String studentName = data['name'] ?? 'بدون اسم';
+                          final String serial = data['serial']?.toString() ?? '---';
                           final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
 
-                          // تجميل كرت كل طالب ليصبح زجاجي انسيابي متناسق
                           return Container(
-                            margin: const EdgeInsets.only(bottom: 14),
+                            margin: const EdgeInsets.only(bottom: 12),
                             child: _buildGlassContainer(
                               isDarkMode: isDarkMode,
                               padding: const EdgeInsets.symmetric(vertical: 4),
                               child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
-                                leading: Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: isDarkMode ? Colors.white10 : primaryColor.withOpacity(0.08),
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
-                                    ]
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(25),
-                                    child: imageUrl.isNotEmpty
-                                        ? CachedNetworkImage(
-                                            imageUrl: imageUrl,
-                                            fit: BoxFit.cover,
-                                            placeholder: (context, url) => const Center(
-                                              child: SizedBox(
-                                                width: 20,
-                                                height: 20,
-                                                child: CircularProgressIndicator(strokeWidth: 2),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                leading: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // 🔢 شارة الرقم التسلسلي المعتمد
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      margin: const EdgeInsets.only(left: 8),
+                                      decoration: BoxDecoration(
+                                        color: primaryColor.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        "#$serial",
+                                        style: TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDarkMode ? accentGold : primaryColor,
+                                        ),
+                                      ),
+                                    ),
+
+                                    Container(
+                                      width: 46,
+                                      height: 46,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: isDarkMode ? Colors.white10 : primaryColor.withOpacity(0.08),
+                                        boxShadow: [
+                                          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
+                                        ]
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(23),
+                                        child: imageUrl.isNotEmpty
+                                            ? CachedNetworkImage(
+                                                imageUrl: imageUrl,
+                                                fit: BoxFit.cover,
+                                                placeholder: (context, url) => const Center(
+                                                  child: SizedBox(
+                                                    width: 18,
+                                                    height: 18,
+                                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                                  ),
+                                                ),
+                                                errorWidget: (context, url, error) => Center(
+                                                  child: Text(
+                                                    firstLetter,
+                                                    style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo'),
+                                                  ),
+                                                ),
+                                              )
+                                            : Center(
+                                                child: Text(
+                                                  firstLetter,
+                                                  style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo'),
+                                                ),
                                               ),
-                                            ),
-                                            errorWidget: (context, url, error) => Center(
-                                              child: Text(
-                                                firstLetter,
-                                                style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 18),
-                                              ),
-                                            ),
-                                          )
-                                        : Center(
-                                            child: Text(
-                                              firstLetter,
-                                              style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 18),
-                                            ),
-                                          ),
-                                  ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                title: Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontSize: 15)),
+                                title: Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontSize: 14, fontFamily: 'Cairo')),
                                 subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 6.0),
+                                  padding: const EdgeInsets.only(top: 4.0),
                                   child: Text(
                                     data['supervisorName'] == '' || data['supervisorName'] == null ? '⚠️ غير موزع' : "🔹 المشرف: ${data['supervisorName']}",
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 12,
+                                      fontSize: 11,
+                                      fontFamily: 'Cairo',
                                       color: data['supervisorName'] == '' || data['supervisorName'] == null ? Colors.orange : Colors.green,
                                     ),
                                   ),
@@ -251,7 +364,7 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
                                         : (isDarkMode ? accentGold : primaryColor),
                                     elevation: globalSupervisorId == null ? 0 : 3,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                   ),
                                   onPressed: globalSupervisorId == null 
                                       ? null 
@@ -259,7 +372,9 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
                                   child: Text(
                                     "توزيع", 
                                     style: TextStyle(
+                                      fontFamily: 'Cairo',
                                       fontWeight: FontWeight.bold, 
+                                      fontSize: 12,
                                       color: globalSupervisorId == null ? Colors.grey : Colors.white
                                     )
                                   ),
@@ -283,14 +398,14 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
   // 🧊 أداة مساعدة لتغليف العناصر وتأثير الزجاج (Glassmorphism)
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero}) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(25),
+      borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.35),
-            borderRadius: BorderRadius.circular(25),
+            color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6),
               width: 1.5,
@@ -309,7 +424,7 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
     );
   }
 
-  // 🧊 واجهة الحالة الفارغة الزجاجية التفاعلية
+  // 🧊 واجهة الحالة الفارغة
   Widget _buildEmptyState(bool isDarkMode) {
     return Center(
       child: _buildGlassContainer(
@@ -324,7 +439,7 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
             Text(
               "لا يوجد طلاب حالياً في هذه الدورة",
               textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white60 : primaryColor.withOpacity(0.7), fontSize: 15),
+              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white60 : primaryColor.withOpacity(0.7), fontSize: 15),
             ),
           ],
         ),
