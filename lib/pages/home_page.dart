@@ -25,12 +25,13 @@ import 'inspirations_manage_page.dart';
 import 'supervisor_inbox_page.dart'; 
 import 'statistics_page.dart'; 
 import 'broadcast_page.dart'; 
-import 'activities_manage_page.dart'; // 🚀 استيراد الصفحة المنفصلة
+import 'activities_manage_page.dart';
 import '../services/notification_queue_manager.dart'; 
 import '../widgets/offline_wrapper.dart'; 
 import 'points_bank_page.dart'; 
 import 'initial_attendance_page.dart'; 
 import '../services/notification_service.dart'; 
+import 'quran_completions_page.dart'; // 🚀 استيراد صفحة سجل الختمات الجديدة
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -421,9 +422,11 @@ class _HomePageState extends State<HomePage> {
                           if (currentCycleModel != null)
                             _buildPerformanceMenuCard(Icons.fact_check_rounded, "تسجيل حضور مبدئي 📋", () => _nav(InitialAttendancePage(cycle: currentCycleModel!)), isDark),
 
+                          // 📖 الزر الجديد المضاف: سجل الختمات
+                          _buildPerformanceMenuCard(Icons.menu_book_rounded, "سجل الختمات 📖", () => _nav(const QuranCompletionsPage()), isDark),
+
                           _buildPerformanceMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
                           
-                          // 🚀 🚌 الخدمة المستقلة الجديدة: إدارة الأنشطة والرحلات
                           _buildPerformanceMenuCard(Icons.directions_bus_rounded, "الأنشطة والرحلات 🚌⚽", () => _nav(const ActivitiesManagePage()), isDark),
 
                           _buildPerformanceMenuCard(Icons.update_rounded, "إشعار تحديث", () => _showUpdateNotificationDialog(isDark), isDark),

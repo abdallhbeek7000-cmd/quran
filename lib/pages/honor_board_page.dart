@@ -150,6 +150,10 @@ class HonorBoardPage extends StatelessWidget {
               knights = [data['first'], data['second'], data['third']];
             }
 
+            if (knights.length > 8) {
+              knights = knights.sublist(0, 8);
+            }
+
             return ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -258,7 +262,7 @@ class HonorBoardPage extends StatelessWidget {
 }
 
 // 🚀=============================================================🚀
-// 🚀 البوستر فائق الدقة HD (باستخدام محرك widgets_to_image الجبار) 🚀
+// 🚀 البوستر المتناسق مع أبعاد الواتساب والموبايل (WhatsApp Ready) 🚀
 // 🚀=============================================================🚀
 class HonorBoardPosterScreen extends StatefulWidget {
   const HonorBoardPosterScreen({super.key});
@@ -306,6 +310,10 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
       knights = [data['first'], data['second'], data['third']];
     }
 
+    if (knights.length > 8) {
+      knights = knights.sublist(0, 8);
+    }
+
     List<Map<String, dynamic>> list = [];
     for (int i = 0; i < knights.length; i++) {
       var k = knights[i];
@@ -328,7 +336,6 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
     return list;
   }
 
-  // 📸 دالة الالتقاط فائقة الدقة باستخدام widgets_to_image (نفس آلية بوستر الغياب تماماً)
   Future<void> _captureAndSharePng() async {
     setState(() { _isExporting = true; });
     try {
@@ -358,7 +365,7 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
       backgroundColor: const Color(0xff0F172A),
       appBar: AppBar(
         backgroundColor: primaryNavy,
-        title: const Text("معاينة البوستر HD", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text("معاينة البوستر للموبايل", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -379,7 +386,6 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
                     physics: const BouncingScrollPhysics(),
                     child: Column(
                       children: [
-                        // 🌟 البوستر الخفي / الجاهز للالتقاط بدقة عالية HD
                         WidgetsToImage(
                           controller: controller,
                           child: _buildExportablePoster(todayDate),
@@ -392,31 +398,31 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
     );
   }
 
-  // 🎨 البوستر المصمم بدقة فائقة HD بأسلوب العرض الواضح
+  // 📱 تصميم مدمج ومتناسق ومثالي لشاشة الواتساب (WhatsApp Perfect Fit)
   Widget _buildExportablePoster(String todayDate) {
     return Container(
-      width: 600, // 🎯 عرض البوستر عالي الدقة HD
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+      width: 500, // 🎯 عرض البوستر متناسب تماماً مع الموبايل
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xffFFFFFF), Color(0xffF8FAFC), Color(0xffE2E8F0)],
           begin: Alignment.topCenter, 
           end: Alignment.bottomCenter,
         ),
-        border: Border.all(color: royalGold, width: 3.5),
+        border: Border.all(color: royalGold, width: 3.0),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 👑 الهيدر
+          // 👑 هيدر مدمج ومختصر
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
             decoration: BoxDecoration(
               color: primaryNavy,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
-                BoxShadow(color: primaryNavy.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 5))
+                BoxShadow(color: primaryNavy.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 3))
               ],
             ),
             child: Column(
@@ -424,108 +430,112 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.stars_rounded, color: royalGold, size: 32),
-                    const SizedBox(width: 10),
-                    Text("نجوم وفرسان الحلقة", style: TextStyle(color: royalGold, fontSize: 24, fontWeight: FontWeight.w900, fontFamily: 'Cairo')),
+                    Icon(Icons.stars_rounded, color: royalGold, size: 26),
+                    const SizedBox(width: 8),
+                    Text("نجوم وفرسان الحلقة", style: TextStyle(color: royalGold, fontSize: 20, fontWeight: FontWeight.w900, fontFamily: 'Cairo')),
                   ],
                 ),
-                const SizedBox(height: 6),
-                const Text("معهد الشيخ سعيد العبدالله 🕌", style: TextStyle(color: Colors.white, fontSize: 15, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                const Text("معهد الشيخ سعيد العبدالله 🕌", style: TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
               ],
             ),
           ),
           
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
             decoration: BoxDecoration(
               color: royalGold.withOpacity(0.15), 
-              borderRadius: BorderRadius.circular(20), 
-              border: Border.all(color: royalGold, width: 1.0)
+              borderRadius: BorderRadius.circular(15), 
+              border: Border.all(color: royalGold, width: 0.8)
             ),
-            child: Text("🗓️ تاريخ الإعلان: $todayDate", style: TextStyle(color: primaryNavy, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+            child: Text("🗓️ تاريخ الإعلان: $todayDate", style: TextStyle(color: primaryNavy, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
           ),
 
-          const SizedBox(height: 28),
+          const SizedBox(height: 16),
 
-          // 🌟 كروت الطلاب الموحدة المكبرة والواضحة جداً (HD)
-          Wrap(
-            spacing: 14,
-            runSpacing: 16,
-            alignment: WrapAlignment.center,
-            children: allStars.map((star) {
+          // 🌟 شبكة مدمجة بدقة 4 طلاب في السطر لتقليل الارتفاع العمودي
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: allStars.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4, // 🎯 4 طلاب بالسطر تجعل الصورة متناسقة وغير طويلة على الموبايل
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.78, // تناسق الارتفاع مع العرض
+            ),
+            itemBuilder: (context, index) {
+              var star = allStars[index];
               String name = star['name'];
               String url = star['imageUrl'];
               String firstL = name.isNotEmpty ? name.trim().substring(0, 1) : "?";
 
               return Container(
-                width: 160, // 🎯 كرت واسع بدقة عالية
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: royalGold.withOpacity(0.65), width: 1.5),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: royalGold.withOpacity(0.65), width: 1.2),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
                     )
                   ],
                 ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // 🚀 صورة ناصعة بقطر 90px
                     Stack(
                       alignment: Alignment.bottomRight,
                       children: [
                         Container(
-                          width: 90,
-                          height: 90,
+                          width: 58,
+                          height: 58,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: royalGold, width: 2.8),
-                            boxShadow: [BoxShadow(color: royalGold.withOpacity(0.3), blurRadius: 8)],
+                            border: Border.all(color: royalGold, width: 2.0),
+                            boxShadow: [BoxShadow(color: royalGold.withOpacity(0.2), blurRadius: 4)],
                           ),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(50),
+                            borderRadius: BorderRadius.circular(30),
                             child: url.isNotEmpty
                                 ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
                                 : Container(
                                     color: const Color(0xffF1F5F9), 
                                     child: Center(
-                                      child: Text(firstL, style: TextStyle(color: royalGold, fontSize: 32, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))
+                                      child: Text(firstL, style: TextStyle(color: royalGold, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))
                                     )
                                   ),
                           ),
                         ),
-                        // 🌟 النجمة الموحدة
                         Container(
-                          padding: const EdgeInsets.all(3),
+                          padding: const EdgeInsets.all(1.5),
                           decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                          child: const Icon(Icons.star_rounded, color: Color(0xffD4AF37), size: 22),
+                          child: const Icon(Icons.star_rounded, color: Color(0xffD4AF37), size: 15),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 6),
                     Text(
                       name,
                       textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: primaryNavy, fontSize: 13, fontFamily: 'Cairo', fontWeight: FontWeight.bold, height: 1.25),
+                      style: TextStyle(color: primaryNavy, fontSize: 10.5, fontFamily: 'Cairo', fontWeight: FontWeight.bold, height: 1.15),
                     ),
                   ],
                 ),
               );
-            }).toList(),
+            },
           ),
 
-          const SizedBox(height: 28),
-          const Divider(color: Colors.black12, height: 20),
-          Text("دعواتنا لهم بالدوام والتألق وأن ينفع الله بهم الأمة 🌸", style: TextStyle(color: primaryNavy.withOpacity(0.85), fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          const Divider(color: Colors.black12, height: 12),
+          Text("دعواتنا لهم بالدوام والتألق وأن ينفع الله بهم الأمة 🌸", style: TextStyle(color: primaryNavy.withOpacity(0.85), fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
         ],
       ),
     );

@@ -57,6 +57,7 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
     _messageController.clear();
     _scrollToBottom();
 
+    // 1️⃣ إرسال الرسالة إلى داتابيز الفايرستور (تظهر بالشات فوراً)
     await FirebaseFirestore.instance
         .collection('chats')
         .doc(widget.chatId)
@@ -80,12 +81,14 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
       'unreadByParent': FieldValue.increment(1),
     }, SetOptions(merge: true));
 
+    // 2️⃣ إرسال الإشعار بخلفية سريعة وبدون تسبب في أي خطأ بصري
     if (mounted) {
-      await NotificationService.sendAndSaveNotification(
+      NotificationService.sendAndSaveNotification(
         studentId: widget.studentId, 
         title: "💬 رسالة جديدة من مشرف الدورة",
         body: text,
         type: "chat",
+        chatStudentId: widget.studentId,
         context: context,
       );
     }
@@ -158,7 +161,7 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
+      backgroundColor: isDark ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: isDark ? const Color(0xff1e293b).withOpacity(0.7) : Colors.white.withOpacity(0.7),
@@ -182,7 +185,6 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
             ),
           ],
         ),
-        actions: [], // 🚀 تم تنظيف الأزرار
       ),
       body: Stack(
         children: [

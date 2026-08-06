@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:widgets_to_image/widgets_to_image.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/theme_provider.dart';
 import '../services/cloudinary_helper.dart';
 import '../services/notification_service.dart';
@@ -23,6 +24,22 @@ class ActivitiesManagePage extends StatefulWidget {
 class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
+
+  // 🗺️ دالة فتح الموقع في خرائط جوجل
+  Future<void> _openLocationInMaps(String locationText) async {
+    if (locationText.trim().isEmpty) return;
+    final Uri googleMapsUrl = Uri.parse("https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(locationText)}");
+    
+    if (await canLaunchUrl(googleMapsUrl)) {
+      await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("تعذر فتح خرائط جوجل", style: TextStyle(fontFamily: 'Cairo'))),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +135,18 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     String details = data['details'] ?? '';
     String imageUrl = data['imageUrl'] ?? '';
     String eventDateTime = data['eventDateTime'] ?? '';
+    String location = data['location'] ?? '';
     String targetType = data['targetType'] == 'all' ? 'جميع الطلاب 🌐' : 'طلاب محددون 🎯';
+
+    // 📅 استخراج يوم الأسبوع بالعربية إذا توفر Timestamp
+    String dayNameWithDateTime = eventDateTime;
+    if (data['eventTimestamp'] != null) {
+      DateTime dt = (data['eventTimestamp'] as Timestamp).toDate();
+      String dayName = DateFormat('EEEE', 'ar').format(dt);
+      String timeFormatted = DateFormat('jm', 'ar').format(dt);
+      String dateFormatted = DateFormat('yyyy/MM/dd').format(dt);
+      dayNameWithDateTime = "يوم $dayName ($dateFormatted) - الساعة $timeFormatted";
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -181,7 +209,46 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text("موعد النشاط: $eventDateTime", style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w600, color: isDark ? accentGold : primaryColor)),
+
+                      // 📅 عرض يوم الأسبوع والموعد بالتفصيل
+                      Row(
+                        children: [
+                          Icon(Icons.event_rounded, size: 16, color: isDark ? accentGold : primaryColor),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              "موعد النشاط: $dayNameWithDateTime",
+                              style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? accentGold : primaryColor),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+
+                      // 🗺️ عرض الموقع وزر فتح الخريطة
+                      if (location.isNotEmpty) ...[
+                        InkWell(
+                          onTap: () => _openLocationInMaps(location),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2.0),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.location_on_rounded, size: 16, color: Colors.redAccent),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    "الموقع: $location (اضغط لفتح الخريطة 🗺️)",
+                                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.redAccent, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+
                       Text("المستهدفون: $targetType", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDark ? Colors.white60 : Colors.black54)),
                       const SizedBox(height: 8),
                       Text(details, style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDark ? Colors.white70 : Colors.black87, height: 1.4)),
@@ -207,7 +274,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                               backgroundColor: accentGold,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            onPressed: () => _showActivityAttendanceSheet(id, title, eventDateTime, isDark),
+                            onPressed: () => _showActivityAttendanceSheet(id, title, dayNameWithDateTime, isDark),
                             icon: const Icon(Icons.fact_check_rounded, size: 15, color: Colors.white),
                             label: const Text("حضور وتصدير HD 📸", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 11)),
                           ),
@@ -236,7 +303,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     );
   }
 
-  // 📝 📸 أخذ الحضور وتصدير كشف صورة HD مخصص عبر WidgetsToImage بنفس النمط الاحترافي للغياب
+  // 📝 📸 أخذ الحضور وتصدير كشف صورة HD مخصص
   void _showActivityAttendanceSheet(String activityId, String activityTitle, String eventDateTime, bool isDark) {
     final WidgetsToImageController imageController = WidgetsToImageController();
     bool isGeneratingImage = false;
@@ -263,7 +330,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
 
                     return Stack(
                       children: [
-                        // 🖼️ العنصر الخفي بنفس أسلوب صفحة الغياب (خارج الحدود المباشرة لإعطائه أبعاد حقيقية للالتقاط)
                         Positioned(
                           left: -9999,
                           top: -9999,
@@ -276,7 +342,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                           ),
                         ),
 
-                        // الواجهة الرئيسية المنبثقة
                         Column(
                           children: [
                             Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(10)))),
@@ -378,7 +443,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     );
   }
 
-  // 🖼️ 🎨 تصميم كشف البوستر للتصدير كصورة عالية الدقة بنفس نمط ومستوى ثيم الغياب المعتمد بالمعهد
+  // 🖼️ 🎨 تصميم كشف البوستر للتصدير كصورة عالية الدقة
   Widget _buildExportableActivityPoster(String title, String eventDateTime, List<QueryDocumentSnapshot> docs) {
     int attendedCount = docs.where((d) => (d.data() as Map)['attended'] == true).length;
     int absentCount = docs.length - attendedCount;
@@ -490,6 +555,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
 
     final titleCtrl = TextEditingController(text: isEditing ? existingData['title'] : '');
     final detailsCtrl = TextEditingController(text: isEditing ? existingData['details'] : '');
+    final locationCtrl = TextEditingController(text: isEditing ? existingData['location'] : ''); // 📍 حقل إدخال الموقع
 
     DateTime? selectedDate = isEditing && existingData['eventTimestamp'] != null ? (existingData['eventTimestamp'] as Timestamp).toDate() : null;
     TimeOfDay? selectedTime = selectedDate != null ? TimeOfDay.fromDateTime(selectedDate) : null;
@@ -578,6 +644,21 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                       ),
                       const SizedBox(height: 12),
 
+                      // 📍 حقل إدخال عنوان / اسم الموقع
+                      TextField(
+                        controller: locationCtrl,
+                        style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87),
+                        decoration: InputDecoration(
+                          labelText: "مكان/موقع النشاط (مثال: ملعب المعهد / منتزه كذا)",
+                          hintText: "يستطيع الأهل الضغط عليه لفتحه في الخريطة",
+                          hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDark ? Colors.white38 : Colors.grey.shade400),
+                          prefixIcon: const Icon(Icons.add_location_alt_rounded, color: Colors.redAccent),
+                          labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
                       TextField(
                         controller: detailsCtrl,
                         maxLines: 3,
@@ -597,11 +678,22 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () async {
-                                final p = await showDatePicker(context: context, initialDate: selectedDate ?? DateTime.now(), firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime(2030));
+                                final p = await showDatePicker(
+                                  context: context, 
+                                  initialDate: selectedDate ?? DateTime.now(), 
+                                  firstDate: DateTime.now().subtract(const Duration(days: 30)), 
+                                  lastDate: DateTime(2030),
+                                  locale: const Locale('ar'),
+                                );
                                 if (p != null) setModalState(() => selectedDate = p);
                               },
                               icon: const Icon(Icons.calendar_month_rounded, size: 18),
-                              label: Text(selectedDate == null ? "تحديد اليوم" : DateFormat('yyyy-MM-dd').format(selectedDate!), style: const TextStyle(fontFamily: 'Cairo', fontSize: 11)),
+                              label: Text(
+                                selectedDate == null 
+                                    ? "تحديد اليوم" 
+                                    : "يوم ${DateFormat('EEEE', 'ar').format(selectedDate!)} (${DateFormat('yyyy-MM-dd').format(selectedDate!)})", 
+                                style: const TextStyle(fontFamily: 'Cairo', fontSize: 11),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -619,18 +711,29 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                       ),
                       const SizedBox(height: 15),
 
-                      Text("تاريخ وساعة انتهاء مهلة قبول/رفض الأهل:", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: Colors.redAccent)),
+                      Text("تاريخ وساعة انتهاء مهلة قبول/رفض الأهل:", style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: Colors.redAccent)),
                       const SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () async {
-                                final p = await showDatePicker(context: context, initialDate: deadlineDate ?? DateTime.now(), firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime(2030));
+                                final p = await showDatePicker(
+                                  context: context, 
+                                  initialDate: deadlineDate ?? DateTime.now(), 
+                                  firstDate: DateTime.now().subtract(const Duration(days: 30)), 
+                                  lastDate: DateTime(2030),
+                                  locale: const Locale('ar'),
+                                );
                                 if (p != null) setModalState(() => deadlineDate = p);
                               },
                               icon: const Icon(Icons.event_repeat_rounded, size: 18, color: Colors.redAccent),
-                              label: Text(deadlineDate == null ? "تحديد يوم الإغلاق" : DateFormat('yyyy-MM-dd').format(deadlineDate!), style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.redAccent)),
+                              label: Text(
+                                deadlineDate == null 
+                                    ? "تحديد يوم الإغلاق" 
+                                    : "يوم ${DateFormat('EEEE', 'ar').format(deadlineDate!)} (${DateFormat('yyyy-MM-dd').format(deadlineDate!)})", 
+                                style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.redAccent),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -737,11 +840,13 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                     DateTime eventDt = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, selectedTime!.hour, selectedTime!.minute);
                                     DateTime deadlineDt = DateTime(deadlineDate!.year, deadlineDate!.month, deadlineDate!.day, deadlineTime!.hour, deadlineTime!.minute);
 
-                                    String eventDtStr = "${DateFormat('yyyy-MM-dd').format(eventDt)} - ${selectedTime!.format(context)}";
+                                    String dayName = DateFormat('EEEE', 'ar').format(eventDt);
+                                    String eventDtStr = "يوم $dayName (${DateFormat('yyyy-MM-dd').format(eventDt)}) - الساعة ${selectedTime!.format(context)}";
 
                                     final Map<String, dynamic> updatePayload = {
                                       'title': titleCtrl.text.trim(),
                                       'details': detailsCtrl.text.trim(),
+                                      'location': locationCtrl.text.trim(), // 📍 حفظ الموقع
                                       'imageUrl': uploadedImageUrl ?? '',
                                       'eventDateTime': eventDtStr,
                                       'eventTimestamp': Timestamp.fromDate(eventDt),

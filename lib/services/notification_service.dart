@@ -26,7 +26,7 @@ class NotificationService {
     }
   }
 
-  // 🚀 الدالة الجوكر: ترسل الإشعار للطالب أو المشرف بذكاء مع دعم تجميع إشعارات الشات
+  // 🚀 الدالة الجوكر: ترسل الإشعار للطالب أو المشرف بذكاء
   static Future<void> sendAndSaveNotification({
     required String studentId, // يعمل كمعرف عام (يستقبل آي دي طالب أو مشرف)
     required String title,
@@ -59,7 +59,7 @@ class NotificationService {
         return;
       }
 
-      // 🎯 2. توثيق التنبيه في مجموعة المستلم الصحيحة
+      // 🎯 2. توثيق التنبيه في مجموعة المستلم الصحيحة (سجل الإشعارات الداخلي)
       await FirebaseFirestore.instance
           .collection(targetCollection)
           .doc(studentId)
@@ -73,7 +73,7 @@ class NotificationService {
       });
       print("Notification documented in [$targetCollection] successfully! ✅");
 
-      // 🎯 3. جلب التوكن وإرسال الإشعار
+      // 🎯 3. جلب التوكن وإرسال الإشعار عبر Google FCM
       var data = targetDoc.data() as Map<String, dynamic>;
       String? fcmToken = data['fcmToken'];
 
@@ -81,11 +81,6 @@ class NotificationService {
         final String accessToken = await _getAccessToken();
         if (accessToken.isEmpty) {
           print("Access token generation failed.");
-          if (context != null && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(backgroundColor: Colors.red, content: Text("فشل في قراءة ملف المفتاح السري.", style: TextStyle(fontFamily: 'Cairo'))),
-            );
-          }
           return;
         }
         
@@ -97,15 +92,19 @@ class NotificationService {
           'Authorization': 'Bearer $accessToken',
         };
 
-        // 💬 تخصيص الـ Tag لتجميع الإشعارات
+        // 💬 تخصيص الـ Tag لتجميع إشعارات المحادثة
         String? notificationTag;
         if (type == 'chat') {
           notificationTag = 'chat_${chatStudentId ?? studentId}';
         }
 
-        // 🎯 بناء نص الطلب بالشكل المعتمد رسميًا لـ FCM v1
+        // 🎯 بناء الـ Payload المعتمد القاطع لـ FCM v1
         Map<String, dynamic> messagePayload = {
           'token': fcmToken,
+          'notification': {
+            'title': title,
+            'body': body,
+          },
           'data': {
             'title': title,
             'body': body,
@@ -118,20 +117,10 @@ class NotificationService {
             'notification': {
               'channel_id': 'high_importance_channel',
               'sound': 'default',
-              // 🚀 تم تعديل 'group_key' الخاطئ إلى الحقل المعتمد من جوجل 'group'
-              if (type == 'chat') 'group': 'supervisor_chat_group',
               if (notificationTag != null) 'tag': notificationTag,
             }
           },
         };
-
-        // للإشعارات العادية غير الشات نُبقي على حقل notification الرئيسي
-        if (type != 'chat') {
-          messagePayload['notification'] = {
-            'title': title,
-            'body': body,
-          };
-        }
 
         var requestBody = jsonEncode({'message': messagePayload});
 
@@ -140,27 +129,27 @@ class NotificationService {
         if (response.statusCode == 200) {
           print("Push Notification fired successfully to $targetCollection! 🔔🚀");
         } else {
-          print("FCM V1 Broadcast Error: ${response.statusCode} - ${response.body}");
-          if (context != null && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                backgroundColor: Colors.red, 
-                duration: const Duration(seconds: 10),
-                content: Text("❌ خطأ من جوجل: ${response.statusCode}\n${response.body}")
-              ),
-            );
+          print("FCM V1 Broadcast Status: ${response.statusCode} - ${response.body}");
+
+          // 🛠️ معالجة التوكن التالف ومسحه لتنظيف Firestore بدون إزعاج المستخدم
+          if (response.body.contains("UNREGISTERED") || 
+              response.body.contains("NOT_FOUND") || 
+              response.body.contains("INVALID_ARGUMENT")) {
+            print("⚠️ FCM Token expired or unregistered for user ($studentId). Cleaning up token...");
+            await FirebaseFirestore.instance
+                .collection(targetCollection)
+                .doc(studentId)
+                .update({'fcmToken': FieldValue.delete()});
           }
+          
+          // 🛑 تم إلغاء الـ SnackBar الأحمر الذي كان يظهر للمستخدم ليظل الشات سلس وبدون أخطاء ظاهرة
         }
       } else {
         print("FCM Token is empty for this user ($targetCollection). لم يتم تسجيل الدخول لتلقي الإشعارات.");
       }
     } catch (e) {
       print("Error inside V1 Notification Service: $e");
-      if (context != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.orange, content: Text("⚠️ خطأ في التطبيق: $e", style: const TextStyle(fontFamily: 'Cairo'))),
-        );
-      }
+      // عدم إظهار أي SnackBar للمستخدم نهائياً في حالات إرسال الرسائل لضمان تجربة شات ممتازة
     }
   }
 }

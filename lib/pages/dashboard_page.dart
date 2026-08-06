@@ -19,16 +19,25 @@ class DashboardPage extends StatelessWidget {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+      backgroundColor: isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
-        title: Text("إحصائيات المعهد", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+        title: Text(
+          "إحصائيات المعهد 📊",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: isDarkMode ? Colors.white : primaryColor,
+            fontFamily: 'Cairo',
+            fontSize: 18,
+          ),
+        ),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
       ),
       body: Stack(
         children: [
+          // 🎨 الخلفية المتدرجة مع الدوائر العائمة
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -43,21 +52,27 @@ class DashboardPage extends StatelessWidget {
             ),
           ),
           Positioned(
-            top: -20,
+            top: -30,
             left: -50,
             child: Container(
               width: 280,
               height: 280,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.14),
+              ),
             ),
           ),
           Positioned(
-            bottom: 50,
+            bottom: 40,
             right: -60,
             child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDarkMode ? primaryColor.withOpacity(0.18) : primaryColor.withOpacity(0.22),
+              ),
             ),
           ),
 
@@ -90,114 +105,180 @@ class DashboardPage extends StatelessWidget {
                   if (data['supervisorId'] == null || data['supervisorId'].toString().trim().isEmpty) noSupervisor++;
                 }
 
+                int totalStudents = students.length;
+                int assignedStudents = totalStudents - noSupervisor;
+                double assignedPercentage = totalStudents > 0 ? (assignedStudents / totalStudents) : 0.0;
+
                 return SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "نظرة عامة", 
-                              style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontSize: 28, fontWeight: FontWeight.bold, fontFamily: 'Cairo')
-                            ),
-                            Text(
-                              "إليك ملخص أداء المعهد لهذه الدورة", 
-                              style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 15, fontFamily: 'Cairo')
-                            ),
-                          ],
-                        ),
+                      // 🚀 1. الهيدر الترحيبي العائم
+                      _buildHeaderSection(isDarkMode),
+
+                      const SizedBox(height: 15),
+
+                      // 📈 2. بطاقة الإنجاز ونسبة توزيع الطلاب
+                      _buildProgressSummaryCard(
+                        totalStudents: totalStudents,
+                        assignedStudents: assignedStudents,
+                        percentage: assignedPercentage,
+                        isDarkMode: isDarkMode,
                       ),
-                      const SizedBox(height: 10),
 
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Column(
-                          children: [
-                            GridView.count(
-                              crossAxisCount: 2,
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              crossAxisSpacing: 15,
-                              mainAxisSpacing: 15,
-                              childAspectRatio: 1.1,
-                              children: [
-                                _buildGlassCard(title: "الطلاب", value: students.length.toString(), icon: Icons.people_alt_rounded, color: isDarkMode ? Colors.lightBlueAccent : Colors.blue, isDarkMode: isDarkMode),
-                                
-                                InkWell(
-                                  borderRadius: BorderRadius.circular(25),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => const SupervisorsStudentsCountPage(),
-                                      ),
-                                    );
-                                  },
-                                  child: _buildGlassCard(title: "المشرفين", value: supervisors.length.toString(), icon: Icons.admin_panel_settings_rounded, color: isDarkMode ? accentGold : Colors.amber.shade700, isDarkMode: isDarkMode),
-                                ),
+                      const SizedBox(height: 20),
 
-                                _buildGlassCard(title: "إجمالي الجلسات", value: sessions.length.toString(), icon: Icons.menu_book_rounded, color: Colors.greenAccent.shade400, isDarkMode: isDarkMode),
-                                
-                                InkWell(
-                                  borderRadius: BorderRadius.circular(25),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => const AllAbsentStudentsSummaryPage(),
-                                      ),
-                                    );
-                                  },
-                                  child: _buildGlassCard(title: "طلاب غائبون", value: absentCount.toString(), icon: Icons.person_off_rounded, color: Colors.redAccent, isDarkMode: isDarkMode),
-                                ),
-                              ],
+                      // 💎 3. شبكة الكروت الإحصائية الأربعة
+                      GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisSpacing: 15,
+                        mainAxisSpacing: 15,
+                        childAspectRatio: 1.05,
+                        children: [
+                          _buildGlassStatCard(
+                            title: "إجمالي الطلاب",
+                            value: totalStudents.toString(),
+                            subtitle: "نشطون في الدورة",
+                            icon: Icons.people_alt_rounded,
+                            color: isDarkMode ? Colors.lightBlueAccent : Colors.blue.shade600,
+                            isDarkMode: isDarkMode,
+                          ),
+                          
+                          InkWell(
+                            borderRadius: BorderRadius.circular(25),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const SupervisorsStudentsCountPage()),
+                              );
+                            },
+                            child: _buildGlassStatCard(
+                              title: "المشرفين",
+                              value: supervisors.length.toString(),
+                              subtitle: "اضغط للتوزيع 👥",
+                              icon: Icons.admin_panel_settings_rounded,
+                              color: isDarkMode ? accentGold : Colors.amber.shade700,
+                              isDarkMode: isDarkMode,
                             ),
-                            
-                            const SizedBox(height: 20),
-                            
-                            InkWell(
-                              borderRadius: BorderRadius.circular(25),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const UnassignedStudentsPage(),
-                                  ),
-                                );
-                              },
-                              child: _buildGlassContainer(
-                                isDarkMode: isDarkMode,
-                                padding: const EdgeInsets.all(20),
-                                customColor: isDarkMode ? Colors.orange.withOpacity(0.15) : Colors.orange.withOpacity(0.2),
-                                customBorderColor: Colors.orange.withOpacity(0.5),
-                                child: Row(
+                          ),
+
+                          _buildGlassStatCard(
+                            title: "إجمالي الجلسات",
+                            value: sessions.length.toString(),
+                            subtitle: "جلسة موثقة 📖",
+                            icon: Icons.auto_stories_rounded,
+                            color: Colors.greenAccent.shade700,
+                            isDarkMode: isDarkMode,
+                          ),
+                          
+                          InkWell(
+                            borderRadius: BorderRadius.circular(25),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const AllAbsentStudentsSummaryPage()),
+                              );
+                            },
+                            child: _buildGlassStatCard(
+                              title: "طلاب غائبون",
+                              value: absentCount.toString(),
+                              subtitle: "عرض السجل 🚨",
+                              icon: Icons.person_off_rounded,
+                              color: Colors.redAccent.shade200,
+                              isDarkMode: isDarkMode,
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // ⚠️ 4. تنبيه الطلاب غير الموزعين
+                      InkWell(
+                        borderRadius: BorderRadius.circular(25),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const UnassignedStudentsPage()),
+                          );
+                        },
+                        child: _buildGlassContainer(
+                          isDarkMode: isDarkMode,
+                          padding: const EdgeInsets.all(18),
+                          customColor: isDarkMode ? Colors.orange.withOpacity(0.12) : Colors.orange.withOpacity(0.18),
+                          customBorderColor: Colors.orange.withOpacity(0.5),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 30),
+                              ),
+                              const SizedBox(width: 15),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 38),
-                                    const SizedBox(width: 15),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text("طلاب بدون مشرف", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
-                                          Text("هناك $noSupervisor طالباً لم يتم توزيعهم بعد", style: TextStyle(fontSize: 13, color: isDarkMode ? Colors.white70 : Colors.black54, fontFamily: 'Cairo')),
-                                        ],
+                                    Text(
+                                      "طلاب يحتاجون مشرف",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color: isDarkMode ? Colors.white : primaryColor,
+                                        fontFamily: 'Cairo',
                                       ),
                                     ),
-                                    Text(noSupervisor.toString(), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.orange, fontFamily: 'Cairo')),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      noSupervisor > 0 
+                                          ? "هناك $noSupervisor طالباً ينتظرون التوزيع"
+                                          : "تم توزيع جميع الطلاب بنجاح 🎉",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDarkMode ? Colors.white70 : Colors.black54,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
-                            ),
-
-                            const SizedBox(height: 20),
-                            _buildNotesSection(isDarkMode),
-                            const SizedBox(height: 30),
-                          ],
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange,
+                                  borderRadius: BorderRadius.circular(15),
+                                  boxShadow: [
+                                    BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 8)
+                                  ],
+                                ),
+                                child: Text(
+                                  noSupervisor.toString(),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+
+                      const SizedBox(height: 20),
+
+                      // 💡 5. توصيات ونصائح المعهد
+                      _buildNotesSection(isDarkMode),
+
+                      const SizedBox(height: 30),
                     ],
                   ),
                 );
@@ -209,26 +290,128 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildGlassCard({required String title, required String value, required IconData icon, required Color color, required bool isDarkMode}) {
+  // 👑 هيدر الواجهة
+  Widget _buildHeaderSection(bool isDarkMode) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "نظرة عامة 👑", 
+          style: TextStyle(
+            color: isDarkMode ? Colors.white : primaryColor,
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'Cairo',
+          ),
+        ),
+        Text(
+          "إليك أحدث الإحصائيات والأداء العام للمعهد لهذه الدورة", 
+          style: TextStyle(
+            color: isDarkMode ? Colors.white60 : Colors.grey[700],
+            fontSize: 13,
+            fontFamily: 'Cairo',
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 📊 بطاقة ملخص النسبة المئوية للتوزيع
+  Widget _buildProgressSummaryCard({
+    required int totalStudents,
+    required int assignedStudents,
+    required double percentage,
+    required bool isDarkMode,
+  }) {
     return _buildGlassContainer(
       isDarkMode: isDarkMode,
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.pie_chart_rounded, color: isDarkMode ? accentGold : primaryColor, size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    "مؤشر توزيع الطلاب",
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isDarkMode ? Colors.white : primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                "${(percentage * 100).toStringAsFixed(0)}%",
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: isDarkMode ? accentGold : primaryColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: percentage,
+              minHeight: 10,
+              backgroundColor: isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                percentage == 1.0 ? Colors.greenAccent.shade700 : accentGold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            "تم توزيع $assignedStudents طالب من أصل $totalStudents على المشرفين.",
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11,
+              color: isDarkMode ? Colors.white60 : Colors.grey[700],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 💎 بطاقة الإحصائية الزجاجية الموحدة
+  Widget _buildGlassStatCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required bool isDarkMode,
+  }) {
+    return _buildGlassContainer(
+      isDarkMode: isDarkMode,
+      padding: const EdgeInsets.all(16),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withOpacity(0.18),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: color, size: 28),
+            child: Icon(icon, color: color, size: 26),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
-              fontSize: 26,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : primaryColor,
               fontFamily: 'Cairo',
@@ -238,9 +421,19 @@ class DashboardPage extends StatelessWidget {
             title,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: isDarkMode ? Colors.white60 : Colors.grey[700],
-              fontSize: 13,
+              color: isDarkMode ? Colors.white70 : Colors.black87,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
+              fontFamily: 'Cairo',
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isDarkMode ? Colors.white38 : Colors.grey[600],
+              fontSize: 10,
               fontFamily: 'Cairo',
             ),
           ),
@@ -249,43 +442,73 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
+  // 💡 قسم توصيات الإدارة المطور
   Widget _buildNotesSection(bool isDarkMode) {
     return _buildGlassContainer(
       isDarkMode: isDarkMode,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.tips_and_updates, color: isDarkMode ? accentGold : primaryColor, size: 24),
-              const SizedBox(width: 10),
-              Text("توصيات الإدارة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+              Icon(Icons.tips_and_updates_rounded, color: isDarkMode ? accentGold : primaryColor, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                "توصيات الإدارة اليومية",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : primaryColor,
+                  fontFamily: 'Cairo',
+                ),
+              ),
             ],
           ),
-          Divider(height: 30, color: isDarkMode ? Colors.white24 : Colors.black12),
-          _noteItem("تأكد من توزيع الطلاب الجدد فور تسجيلهم.", isDarkMode),
-          _noteItem("راجع تقارير الغياب بشكل أسبوعي.", isDarkMode),
-          _noteItem("كرم المشرفين المتميزين في لوحة الشرف.", isDarkMode),
+          Divider(height: 24, color: isDarkMode ? Colors.white12 : Colors.black12),
+          _noteItem("تأكد من توزيع الطلاب الجدد فور تسجيلهم بالدورة.", Icons.person_add_alt_1_rounded, Colors.blueAccent, isDarkMode),
+          _noteItem("متابعة تقارير غياب الطلاب وتفعيل الاتصال بأولياء الأمور.", Icons.phone_callback_rounded, Colors.greenAccent.shade700, isDarkMode),
+          _noteItem("تكريم المشرفين والطلاب المتميزين نهاية كل أسبوع.", Icons.military_tech_rounded, accentGold, isDarkMode),
         ],
       ),
     );
   }
 
-  Widget _noteItem(String text, bool isDarkMode) {
+  Widget _noteItem(String text, IconData icon, Color color, bool isDarkMode) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("• ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDarkMode ? accentGold : primaryColor, fontFamily: 'Cairo')),
-          Expanded(child: Text(text, style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 14, fontWeight: FontWeight.w600, fontFamily: 'Cairo'))),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: color.withOpacity(0.15), shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: isDarkMode ? Colors.white70 : Colors.black87,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {
+  // 🧊 الأداة الزجاجية الحاكمة
+  Widget _buildGlassContainer({
+    required Widget child,
+    required bool isDarkMode,
+    EdgeInsetsGeometry padding = EdgeInsets.zero,
+    Color? customColor,
+    Color? customBorderColor,
+  }) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),
       child: BackdropFilter(
@@ -293,7 +516,7 @@ class DashboardPage extends StatelessWidget {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: customColor ?? (isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4)),
+            color: customColor ?? (isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.45)),
             borderRadius: BorderRadius.circular(25),
             border: Border.all(
               color: customBorderColor ?? (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6)),
@@ -301,7 +524,7 @@ class DashboardPage extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.02),
+                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.03),
                 blurRadius: 15,
                 offset: const Offset(0, 8),
               ),
@@ -330,7 +553,7 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true,
-        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        backgroundColor: isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.transparent,
@@ -362,7 +585,7 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
 
                   if (supervisors.isEmpty) {
                     return Center(
-                      child: Text("لا يوجد مشرفين مسجلين بالنظام حالياً 📭", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
+                      child: Text("لا يوجد مشرفون مسجلون بالنظام حالياً 📭", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
                     );
                   }
 
@@ -406,13 +629,13 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
                           final int studentCount = item['count'];
 
                           return Container(
-                            margin: const EdgeInsets.only(bottom: 14),
+                            margin: const EdgeInsets.only(bottom: 12),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(22),
                               child: BackdropFilter(
                                 filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                                 child: Container(
-                                  padding: const EdgeInsets.all(16),
+                                  padding: const EdgeInsets.all(14),
                                   decoration: BoxDecoration(
                                     color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
                                     borderRadius: BorderRadius.circular(22),
@@ -432,14 +655,14 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
                                         alignment: Alignment.bottomRight,
                                         children: [
                                           Container(
-                                            width: 52,
-                                            height: 52,
+                                            width: 50,
+                                            height: 50,
                                             decoration: BoxDecoration(
                                               shape: BoxShape.circle,
                                               border: Border.all(color: index == 0 ? accentGold : primaryColor.withOpacity(0.3), width: 2),
                                             ),
                                             child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(26),
+                                              borderRadius: BorderRadius.circular(25),
                                               child: imageUrl.isNotEmpty
                                                   ? Image.network(
                                                       imageUrl,
@@ -457,7 +680,7 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
                                             const CircleAvatar(radius: 10, backgroundColor: Colors.brown, child: Icon(Icons.star_rounded, size: 12, color: Colors.white)),
                                         ],
                                       ),
-                                      const SizedBox(width: 15),
+                                      const SizedBox(width: 14),
 
                                       Expanded(
                                         child: Column(
@@ -467,12 +690,12 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
                                               supName,
                                               style: TextStyle(
                                                 fontWeight: FontWeight.bold,
-                                                fontSize: 15,
+                                                fontSize: 14,
                                                 fontFamily: 'Cairo',
                                                 color: isDarkMode ? Colors.white : primaryColor,
                                               ),
                                             ),
-                                            const SizedBox(height: 3),
+                                            const SizedBox(height: 2),
                                             Text(
                                               "الترتيب: #${index + 1}",
                                               style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDarkMode ? Colors.white54 : Colors.black54),
@@ -482,12 +705,12 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
                                       ),
 
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                         decoration: BoxDecoration(
                                           color: studentCount > 0 
                                               ? (isDarkMode ? accentGold.withOpacity(0.2) : primaryColor.withOpacity(0.12)) 
                                               : Colors.grey.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(14),
                                           border: Border.all(
                                             color: studentCount > 0 ? (isDarkMode ? accentGold : primaryColor) : Colors.grey, 
                                             width: 1,
@@ -496,7 +719,7 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
                                         child: Text(
                                           "$studentCount طلاب",
                                           style: TextStyle(
-                                            fontSize: 13,
+                                            fontSize: 12,
                                             fontWeight: FontWeight.bold,
                                             fontFamily: 'Cairo',
                                             color: studentCount > 0 ? (isDarkMode ? accentGold : primaryColor) : Colors.grey,
@@ -560,11 +783,11 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true,
-        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        backgroundColor: isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.transparent,
-          title: Text("سجل غيابات الطلاب", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)),
+          title: Text("سجل غيابات الطلاب 🚨", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)),
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
         ),
@@ -640,8 +863,8 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                           }
 
                           return Container(
-                            margin: const EdgeInsets.only(bottom: 15),
-                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(15),
                             decoration: BoxDecoration(
                               color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
                               borderRadius: BorderRadius.circular(20),
@@ -658,14 +881,14 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                                       children: [
                                         const Icon(Icons.person_off_rounded, color: Colors.redAccent, size: 22),
                                         const SizedBox(width: 8),
-                                        Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor)),
+                                        Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor)),
                                       ],
                                     ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
                                         color: Colors.red.shade400,
-                                        borderRadius: BorderRadius.circular(15),
+                                        borderRadius: BorderRadius.circular(12),
                                         boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 6)],
                                       ),
                                       child: Text(
@@ -675,17 +898,17 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 8),
-                                Text("المشرف: $supervisorName", style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black54)),
+                                const SizedBox(height: 6),
+                                Text("المشرف: $supervisorName", style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black54)),
                                 if (parentPhone.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
+                                  const SizedBox(height: 8),
                                   Align(
                                     alignment: Alignment.centerLeft,
                                     child: TextButton.icon(
                                       style: TextButton.styleFrom(backgroundColor: Colors.green.withOpacity(0.15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                                       onPressed: () => _makePhoneCall(parentPhone),
-                                      icon: const Icon(Icons.phone, size: 16, color: Colors.green),
-                                      label: const Text("اتصال بولي الأمر", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 12)),
+                                      icon: const Icon(Icons.phone, size: 15, color: Colors.green),
+                                      label: const Text("اتصال بولي الأمر", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 11)),
                                     ),
                                   ),
                                 ]
@@ -731,11 +954,11 @@ class UnassignedStudentsPage extends StatelessWidget {
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true,
-        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        backgroundColor: isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.transparent,
-          title: Text("الطلاب غير الموزعين", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)),
+          title: Text("الطلاب غير الموزعين ⚠️", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)),
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
         ),
@@ -783,8 +1006,8 @@ class UnassignedStudentsPage extends StatelessWidget {
                       final String parentPhone = data['parentPhone'] ?? data['phone'] ?? '';
 
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 15),
-                        padding: const EdgeInsets.all(16),
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.all(15),
                         decoration: BoxDecoration(
                           color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
                           borderRadius: BorderRadius.circular(20),
@@ -799,9 +1022,9 @@ class UnassignedStudentsPage extends StatelessWidget {
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.person_search_rounded, color: Colors.orange, size: 24),
+                                    const Icon(Icons.person_search_rounded, color: Colors.orange, size: 22),
                                     const SizedBox(width: 8),
-                                    Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor)),
+                                    Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor)),
                                   ],
                                 ),
                                 Container(
@@ -815,7 +1038,7 @@ class UnassignedStudentsPage extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -823,16 +1046,16 @@ class UnassignedStudentsPage extends StatelessWidget {
                                   TextButton.icon(
                                     style: TextButton.styleFrom(backgroundColor: Colors.green.withOpacity(0.15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                                     onPressed: () => _makePhoneCall(parentPhone),
-                                    icon: const Icon(Icons.phone, size: 16, color: Colors.green),
-                                    label: const Text("اتصال بولي الأمر", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 12)),
+                                    icon: const Icon(Icons.phone, size: 15, color: Colors.green),
+                                    label: const Text("اتصال بولي الأمر", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 11)),
                                   ),
                                 TextButton.icon(
                                   style: TextButton.styleFrom(backgroundColor: (isDarkMode ? accentGold : primaryColor).withOpacity(0.15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                                   onPressed: () {
                                     Navigator.push(context, MaterialPageRoute(builder: (_) => EditStudentPage(student: doc)));
                                   },
-                                  icon: Icon(Icons.edit_note_rounded, size: 18, color: isDarkMode ? accentGold : primaryColor),
-                                  label: Text("تعيين مشرف", style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 12)),
+                                  icon: Icon(Icons.edit_note_rounded, size: 16, color: isDarkMode ? accentGold : primaryColor),
+                                  label: Text("تعيين مشرف", style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 11)),
                                 ),
                               ],
                             ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart'; 
 import '../services/theme_provider.dart'; 
+import '../services/notification_service.dart'; // 🚀 استيراد خدمة الإشعارات
 
 class ManageHonorBoardPage extends StatefulWidget {
   const ManageHonorBoardPage({super.key});
@@ -29,6 +30,10 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
       var data = doc.data()!;
       setState(() {
         knightsList = List<Map<String, dynamic>>.from(data['knights']);
+        // ضمان ألا يتجاوز العدد المخزن سابقاً 8 نجوم
+        if (knightsList.length > 8) {
+          knightsList = knightsList.sublist(0, 8);
+        }
       });
     } else if (doc.exists && doc.data()!.containsKey('first')) {
       var data = doc.data()!;
@@ -54,18 +59,59 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
     loadCategoryData(selectedCategory);
   }
 
+  // 🚀 دالة الحفظ مع البث الفوري للإشعارات لجميع الأهالي
   void saveHonorBoard() async {
     setState(() => isSaving = true);
     
-    await FirebaseFirestore.instance.collection('honor_board').doc(selectedCategory).set({
-      'knights': knightsList.isEmpty ? [{'name': 'لم يحدد', 'serial': '---'}] : knightsList,
-    });
+    try {
+      // 1. حفظ القائمة في Firestore
+      await FirebaseFirestore.instance.collection('honor_board').doc(selectedCategory).set({
+        'knights': knightsList.isEmpty ? [{'name': 'لم يحدد', 'serial': '---'}] : knightsList,
+      });
 
-    setState(() => isSaving = false);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث لوحة الشرف بنجاح! 🏆", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
-    );
+      // 2. تحديد اسم الفئة بالإشعار
+      String categoryName = "الطلاب الجدد";
+      if (selectedCategory == "old_students") categoryName = "الطلاب القدماء";
+      if (selectedCategory == "completed_students") categoryName = "الطلاب الخاتمين";
+
+      // 3. 📣 جلب جميع الطلاب النشطين وإرسال إشعار لأولياء أمورهم
+      var studentsSnapshot = await FirebaseFirestore.instance
+          .collection('students')
+          .where('archived', isEqualTo: false)
+          .get();
+
+      for (var studentDoc in studentsSnapshot.docs) {
+        NotificationService.sendAndSaveNotification(
+          studentId: studentDoc.id,
+          title: "🏆 إعلان فرسان ولوحة الشرف!",
+          body: "تم تحديث نجوم فرسان الحلقة لفئة ($categoryName). افتح التطبيق لمشاهدة المتميزين! 🌟",
+          type: "honor_board_update",
+          context: context,
+        ).catchError((_) {});
+      }
+
+      setState(() => isSaving = false);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.green,
+          content: Text(
+            "تم تحديث لوحة الشرف وإرسال الإشعارات لجميع الأهالي بنجاح! 🏆🚀",
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+    } catch (e) {
+      setState(() => isSaving = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text("حدث خطأ أثناء الحفظ: $e", style: const TextStyle(fontFamily: 'Cairo')),
+        ),
+      );
+    }
   }
 
   // 🚀 دالة تصفير اللوحة وحذف النجوم مع رسالة تأكيد
@@ -101,7 +147,6 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
 
     setState(() => isClearing = true);
 
-    // إعادة الفايربيز للوضع الافتراضي الفارغ
     await FirebaseFirestore.instance.collection('honor_board').doc(selectedCategory).set({
       'knights': [],
     });
@@ -235,6 +280,23 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                         padding: const EdgeInsets.all(22),
                         child: Column(
                           children: [
+                            // 🌟 عداد الفرسان الحاليين والحد الأقصى
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "النجوم المحددة: (${knightsList.length}/8)",
+                                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: isDarkMode ? accentGold : primaryColor),
+                                ),
+                                if (knightsList.length >= 8)
+                                  const Text(
+                                    "وصلت للحد الأقصى ✋",
+                                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orangeAccent),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 15),
+
                             ListView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
@@ -265,16 +327,38 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
+                                // ➕ زر إضافة نجم (مقيّد بـ 8)
                                 TextButton.icon(
-                                  style: TextButton.styleFrom(backgroundColor: Colors.green.withOpacity(0.15)),
-                                  onPressed: () {
-                                    setState(() {
-                                      knightsList.add({'name': 'لم يحدد', 'serial': '---'});
-                                    });
-                                  },
-                                  icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.green),
-                                  label: const Text("إضافة نجم ➕", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+                                  style: TextButton.styleFrom(
+                                    backgroundColor: knightsList.length < 8 ? Colors.green.withOpacity(0.15) : Colors.grey.withOpacity(0.15),
+                                  ),
+                                  onPressed: knightsList.length < 8
+                                      ? () {
+                                          setState(() {
+                                            knightsList.add({'name': 'لم يحدد', 'serial': '---'});
+                                          });
+                                        }
+                                      : () {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text("الحد الأقصى للوحة الشرف هو 8 نجوم فقط ⭐️", style: TextStyle(fontFamily: 'Cairo')),
+                                              duration: Duration(seconds: 2),
+                                            ),
+                                          );
+                                        },
+                                  icon: Icon(Icons.add_circle_outline_rounded, color: knightsList.length < 8 ? Colors.green : Colors.grey),
+                                  label: Text(
+                                    "إضافة نجم ➕",
+                                    style: TextStyle(
+                                      color: knightsList.length < 8 ? Colors.green : Colors.grey,
+                                      fontWeight: FontWeight.bold,
+                                      fontFamily: 'Cairo',
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ),
+
+                                // ➖ زر حذف الأخير
                                 if (knightsList.length > 1)
                                   TextButton.icon(
                                     style: TextButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.15)),
@@ -294,7 +378,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                       
                       const SizedBox(height: 35),
                       
-                      // 🚀 زر الحفظ الإيجابي
+                      // 🚀 زر الحفظ الإيجابي مع الإشعارات
                       SizedBox(
                         width: double.infinity,
                         height: 55,
@@ -308,12 +392,12 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                           onPressed: isSaving ? null : saveHonorBoard,
                           child: isSaving 
                               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)) 
-                              : const Text("حفظ اللوحة بالكامل", style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Cairo', letterSpacing: 0.5)),
+                              : const Text("حفظ اللوحة وبث الإشعار للأهالي 🚀", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo', letterSpacing: 0.5)),
                         ),
                       ),
                       const SizedBox(height: 15),
 
-                      // 🚀 الزر الجديد: تصفير اللوحة وحذف النجوم
+                      // 🚀 زر تصفير اللوحة
                       SizedBox(
                         width: double.infinity,
                         height: 50,
