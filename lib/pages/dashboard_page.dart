@@ -37,7 +37,6 @@ class DashboardPage extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          // 🎨 الخلفية المتدرجة مع الدوائر العائمة
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -115,12 +114,10 @@ class DashboardPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 🚀 1. الهيدر الترحيبي العائم
                       _buildHeaderSection(isDarkMode),
 
                       const SizedBox(height: 15),
 
-                      // 📈 2. بطاقة الإنجاز ونسبة توزيع الطلاب
                       _buildProgressSummaryCard(
                         totalStudents: totalStudents,
                         assignedStudents: assignedStudents,
@@ -130,7 +127,6 @@ class DashboardPage extends StatelessWidget {
 
                       const SizedBox(height: 20),
 
-                      // 💎 3. شبكة الكروت الإحصائية الأربعة
                       GridView.count(
                         crossAxisCount: 2,
                         shrinkWrap: true,
@@ -196,8 +192,65 @@ class DashboardPage extends StatelessWidget {
                       ),
                       
                       const SizedBox(height: 20),
-                      
-                      // ⚠️ 4. تنبيه الطلاب غير الموزعين
+
+                      // 🏅 زر الانتقال لإحصائية أكثر المشرفين تسجيلاً للجلسات
+                      InkWell(
+                        borderRadius: BorderRadius.circular(25),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const TopSessionSupervisorsPage()),
+                          );
+                        },
+                        child: _buildGlassContainer(
+                          isDarkMode: isDarkMode,
+                          padding: const EdgeInsets.all(18),
+                          customColor: isDarkMode ? Colors.amber.withOpacity(0.12) : Colors.amber.withOpacity(0.18),
+                          customBorderColor: accentGold.withOpacity(0.6),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: accentGold.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(Icons.workspace_premium_rounded, color: isDarkMode ? accentGold : Colors.amber.shade900, size: 30),
+                              ),
+                              const SizedBox(width: 15),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "أكثر المشرفين تسميعاً 🏆",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color: isDarkMode ? Colors.white : primaryColor,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      "ترتيب المشرفين بحسب إجمالي الجلسات المسجلة",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDarkMode ? Colors.white70 : Colors.black54,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.arrow_forward_ios_rounded, color: isDarkMode ? accentGold : primaryColor, size: 16),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
                       InkWell(
                         borderRadius: BorderRadius.circular(25),
                         onTap: () {
@@ -275,7 +328,6 @@ class DashboardPage extends StatelessWidget {
 
                       const SizedBox(height: 20),
 
-                      // 💡 5. توصيات ونصائح المعهد
                       _buildNotesSection(isDarkMode),
 
                       const SizedBox(height: 30),
@@ -290,7 +342,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // 👑 هيدر الواجهة
   Widget _buildHeaderSection(bool isDarkMode) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,7 +367,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // 📊 بطاقة ملخص النسبة المئوية للتوزيع
   Widget _buildProgressSummaryCard({
     required int totalStudents,
     required int assignedStudents,
@@ -384,7 +434,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // 💎 بطاقة الإحصائية الزجاجية الموحدة
   Widget _buildGlassStatCard({
     required String title,
     required String value,
@@ -442,7 +491,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // 💡 قسم توصيات الإدارة المطور
   Widget _buildNotesSection(bool isDarkMode) {
     return _buildGlassContainer(
       isDarkMode: isDarkMode,
@@ -501,7 +549,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // 🧊 الأداة الزجاجية الحاكمة
   Widget _buildGlassContainer({
     required Widget child,
     required bool isDarkMode,
@@ -538,7 +585,245 @@ class DashboardPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🚀 1. صفحة تعداد طلاب كل مشرف
+// 🏆 1. صفحة ترتيب المشرفين الأكثر تسجيلاً للجلسات
+// =========================================================================
+class TopSessionSupervisorsPage extends StatelessWidget {
+  const TopSessionSupervisorsPage({super.key});
+
+  final Color primaryColor = const Color(0xff425c75);
+  final Color accentGold = const Color(0xffd4af37);
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text(
+            "أكثر المشرفين تسجيلاً للجلسات 🏆", 
+            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)
+          ),
+          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+        ),
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity, height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
+                builder: (context, supSnap) {
+                  if (!supSnap.hasData) return const Center(child: CircularProgressIndicator());
+
+                  final supervisors = supSnap.data!.docs;
+
+                  if (supervisors.isEmpty) {
+                    return Center(
+                      child: Text("لا يوجد مشرفون مسجلون بالنظام 📭", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
+                    );
+                  }
+
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection('sessions').where('absent', isEqualTo: false).snapshots(),
+                    builder: (context, sessionSnap) {
+                      if (!sessionSnap.hasData) return const Center(child: CircularProgressIndicator());
+
+                      final sessions = sessionSnap.data!.docs;
+
+                      Map<String, int> supervisorSessionCounts = {};
+
+                      for (var s in sessions) {
+                        var data = s.data() as Map<String, dynamic>;
+                        
+                        // فحص قائمة المشرفين للجلسة (إذا كان أكثر من مشرف)
+                        List<dynamic>? supNamesList = data['supervisorNames'];
+                        if (supNamesList != null && supNamesList.isNotEmpty) {
+                          for (var supName in supNamesList) {
+                            String nameStr = supName.toString().trim();
+                            if (nameStr.isNotEmpty) {
+                              supervisorSessionCounts[nameStr] = (supervisorSessionCounts[nameStr] ?? 0) + 1;
+                            }
+                          }
+                        } else {
+                          // المشرف المفرد للجلسة
+                          String singleSup = data['supervisorName']?.toString().trim() ?? '';
+                          if (singleSup.isNotEmpty) {
+                            supervisorSessionCounts[singleSup] = (supervisorSessionCounts[singleSup] ?? 0) + 1;
+                          }
+                        }
+                      }
+
+                      List<Map<String, dynamic>> supervisorsList = supervisors.map((sup) {
+                        var supData = sup.data() as Map<String, dynamic>;
+                        String supName = supData['name']?.toString().trim() ?? 'مشرف';
+                        String imageUrl = supData['imageUrl'] ?? '';
+                        
+                        return {
+                          'id': sup.id,
+                          'name': supName,
+                          'imageUrl': imageUrl,
+                          'count': supervisorSessionCounts[supName] ?? 0,
+                        };
+                      }).toList();
+
+                      // الترتيب من الأكبر إلى الأصغر
+                      supervisorsList.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+
+                      return ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.all(20),
+                        itemCount: supervisorsList.length,
+                        itemBuilder: (context, index) {
+                          final item = supervisorsList[index];
+                          final String supName = item['name'];
+                          final String imageUrl = item['imageUrl'];
+                          final int sessionCount = item['count'];
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(22),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+                                    borderRadius: BorderRadius.circular(22),
+                                    border: Border.all(
+                                      color: index == 0
+                                          ? accentGold.withOpacity(0.8)
+                                          : (isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.7)),
+                                      width: index == 0 ? 1.8 : 1.2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Stack(
+                                        alignment: Alignment.bottomRight,
+                                        children: [
+                                          Container(
+                                            width: 50,
+                                            height: 50,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: index == 0 ? accentGold : primaryColor.withOpacity(0.3), width: 2),
+                                            ),
+                                            child: ClipRRect(
+                                              borderRadius: BorderRadius.circular(25),
+                                              child: imageUrl.isNotEmpty
+                                                  ? Image.network(
+                                                      imageUrl,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (c, e, s) => _buildAvatarFallback(supName, isDarkMode, primaryColor),
+                                                    )
+                                                  : _buildAvatarFallback(supName, isDarkMode, primaryColor),
+                                            ),
+                                          ),
+                                          if (index == 0)
+                                            const CircleAvatar(radius: 10, backgroundColor: Colors.amber, child: Icon(Icons.star_rounded, size: 12, color: Colors.white))
+                                          else if (index == 1)
+                                            const CircleAvatar(radius: 10, backgroundColor: Colors.grey, child: Icon(Icons.star_rounded, size: 12, color: Colors.white))
+                                          else if (index == 2)
+                                            const CircleAvatar(radius: 10, backgroundColor: Colors.brown, child: Icon(Icons.star_rounded, size: 12, color: Colors.white)),
+                                        ],
+                                      ),
+                                      const SizedBox(width: 14),
+
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              supName,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                                fontFamily: 'Cairo',
+                                                color: isDarkMode ? Colors.white : primaryColor,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              "الترتيب: #${index + 1}",
+                                              style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDarkMode ? Colors.white54 : Colors.black54),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: sessionCount > 0 
+                                              ? (isDarkMode ? accentGold.withOpacity(0.2) : Colors.green.withOpacity(0.12)) 
+                                              : Colors.grey.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(14),
+                                          border: Border.all(
+                                            color: sessionCount > 0 ? (isDarkMode ? accentGold : Colors.green) : Colors.grey, 
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          "$sessionCount جلسة",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            fontFamily: 'Cairo',
+                                            color: sessionCount > 0 ? (isDarkMode ? accentGold : Colors.green.shade800) : Colors.grey,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback(String name, bool isDarkMode, Color primaryColor) {
+    return Container(
+      color: isDarkMode ? primaryColor.withOpacity(0.5) : primaryColor.withOpacity(0.12),
+      child: Center(
+        child: Text(
+          name.isNotEmpty ? name.substring(0, 1) : 'م',
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontSize: 18),
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// 🚀 2. صفحة تعداد طلاب كل مشرف
 // =========================================================================
 class SupervisorsStudentsCountPage extends StatelessWidget {
   const SupervisorsStudentsCountPage({super.key});
@@ -759,7 +1044,7 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🚀 2. صفحة تقرير الغيابات التراكمية الشاملة لجميع الطلاب
+// 🚀 3. صفحة تقرير الغيابات التراكمية الشاملة لجميع الطلاب
 // =========================================================================
 class AllAbsentStudentsSummaryPage extends StatelessWidget {
   const AllAbsentStudentsSummaryPage({super.key});
@@ -930,7 +1215,7 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🚀 3. صفحة عرض الطلاب غير الموزعين على مشرفين
+// 🚀 4. صفحة عرض الطلاب غير الموزعين على مشرفين
 // =========================================================================
 class UnassignedStudentsPage extends StatelessWidget {
   const UnassignedStudentsPage({super.key});

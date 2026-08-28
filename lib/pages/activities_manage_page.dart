@@ -210,7 +210,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                       ),
                       const SizedBox(height: 8),
 
-                      // 📅 عرض يوم الأسبوع والموعد بالتفصيل
                       Row(
                         children: [
                           Icon(Icons.event_rounded, size: 16, color: isDark ? accentGold : primaryColor),
@@ -225,7 +224,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                       ),
                       const SizedBox(height: 4),
 
-                      // 🗺️ عرض الموقع وزر فتح الخريطة
                       if (location.isNotEmpty) ...[
                         InkWell(
                           onTap: () => _openLocationInMaps(location),
@@ -265,7 +263,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                               backgroundColor: primaryColor,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            onPressed: () => _showResponsesSummarySheet(id, title, isDark),
+                            onPressed: () => _showResponsesSummarySheet(id, title, data, isDark),
                             icon: const Icon(Icons.assignment_turned_in_rounded, size: 15, color: Colors.white),
                             label: const Text("موافقات الأهالي 📋", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 11)),
                           ),
@@ -555,7 +553,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
 
     final titleCtrl = TextEditingController(text: isEditing ? existingData['title'] : '');
     final detailsCtrl = TextEditingController(text: isEditing ? existingData['details'] : '');
-    final locationCtrl = TextEditingController(text: isEditing ? existingData['location'] : ''); // 📍 حقل إدخال الموقع
+    final locationCtrl = TextEditingController(text: isEditing ? existingData['location'] : '');
 
     DateTime? selectedDate = isEditing && existingData['eventTimestamp'] != null ? (existingData['eventTimestamp'] as Timestamp).toDate() : null;
     TimeOfDay? selectedTime = selectedDate != null ? TimeOfDay.fromDateTime(selectedDate) : null;
@@ -644,7 +642,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                       ),
                       const SizedBox(height: 12),
 
-                      // 📍 حقل إدخال عنوان / اسم الموقع
                       TextField(
                         controller: locationCtrl,
                         style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87),
@@ -846,7 +843,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                     final Map<String, dynamic> updatePayload = {
                                       'title': titleCtrl.text.trim(),
                                       'details': detailsCtrl.text.trim(),
-                                      'location': locationCtrl.text.trim(), // 📍 حفظ الموقع
+                                      'location': locationCtrl.text.trim(),
                                       'imageUrl': uploadedImageUrl ?? '',
                                       'eventDateTime': eventDtStr,
                                       'eventTimestamp': Timestamp.fromDate(eventDt),
@@ -911,112 +908,259 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     );
   }
 
-  void _showResponsesSummarySheet(String activityId, String activityTitle, bool isDark) {
+  // 📊 ✨ نافذة سجل الردود المفلترة (مع أزرار التصفية المنفصلة التامة)
+  void _showResponsesSummarySheet(String activityId, String activityTitle, Map<String, dynamic> activityData, bool isDark) {
+    String selectedFilter = 'pending'; // 'pending', 'approved', 'rejected'
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.75,
-            padding: const EdgeInsets.all(20),
-            color: isDark ? const Color(0xff1e293b) : Colors.white,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(10)))),
-                const SizedBox(height: 15),
-                Text("سجل ردود الأهالي: $activityTitle", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: isDark ? Colors.white : primaryColor)),
-                const SizedBox(height: 15),
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.85,
+                padding: const EdgeInsets.all(20),
+                color: isDark ? const Color(0xff1e293b) : Colors.white,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(10)))),
+                    const SizedBox(height: 15),
+                    Text("سجل ردود الأهالي: $activityTitle", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: isDark ? Colors.white : primaryColor)),
+                    const SizedBox(height: 15),
 
-                Expanded(
-                  child: StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection('activities').doc(activityId).collection('responses').snapshots(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                    Expanded(
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('activities').doc(activityId).collection('responses').snapshots(),
+                        builder: (context, responsesSnap) {
+                          if (!responsesSnap.hasData) return const Center(child: CircularProgressIndicator());
 
-                      final responses = snapshot.data!.docs;
+                          final responsesDocs = responsesSnap.data!.docs;
 
-                      if (responses.isEmpty) {
-                        return const Center(child: Text("لم يقم أي من أولياء الأمور بالرد حتى الآن 📭", style: TextStyle(fontFamily: 'Cairo')));
-                      }
+                          Map<String, String> studentResponses = {};
+                          for (var doc in responsesDocs) {
+                            var resData = doc.data() as Map<String, dynamic>;
+                            studentResponses[doc.id] = resData['status'] ?? 'pending';
+                          }
 
-                      int approvedCount = responses.where((r) => (r.data() as Map)['status'] == 'approved').length;
-                      int rejectedCount = responses.where((r) => (r.data() as Map)['status'] == 'rejected').length;
+                          String targetType = activityData['targetType'] ?? 'all';
+                          List<dynamic> targetStudentIds = activityData['targetStudentIds'] ?? [];
 
-                      return Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.green)),
-                                  child: Column(
+                          Query studentsQuery = FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false);
+
+                          return StreamBuilder<QuerySnapshot>(
+                            stream: studentsQuery.snapshots(),
+                            builder: (context, studentsSnap) {
+                              if (!studentsSnap.hasData) return const Center(child: CircularProgressIndicator());
+
+                              List<QueryDocumentSnapshot> allTargetStudents = studentsSnap.data!.docs;
+                              if (targetType == 'selected') {
+                                allTargetStudents = allTargetStudents.where((doc) => targetStudentIds.contains(doc.id)).toList();
+                              }
+
+                              int totalTargetCount = allTargetStudents.length;
+                              int approvedCount = 0;
+                              int rejectedCount = 0;
+
+                              List<Map<String, dynamic>> allStudentsProcessed = [];
+
+                              for (var stdDoc in allTargetStudents) {
+                                String stdId = stdDoc.id;
+                                var stdData = stdDoc.data() as Map<String, dynamic>;
+                                String stdName = stdData['name'] ?? 'طالب';
+
+                                String currentStatus = studentResponses[stdId] ?? 'pending';
+
+                                if (currentStatus == 'approved') {
+                                  approvedCount++;
+                                } else if (currentStatus == 'rejected') {
+                                  rejectedCount++;
+                                }
+
+                                allStudentsProcessed.add({
+                                  'id': stdId,
+                                  'name': stdName,
+                                  'status': currentStatus,
+                                });
+                              }
+
+                              int pendingCount = totalTargetCount - (approvedCount + rejectedCount);
+                              if (pendingCount < 0) pendingCount = 0;
+
+                              // 🎯 تصفية الطلاب بحسب الزر المكتوب محدد حالياً
+                              List<Map<String, dynamic>> filteredList = allStudentsProcessed.where((item) => item['status'] == selectedFilter).toList();
+
+                              return Column(
+                                children: [
+                                  // 🔘 أزرار التصفية التفاعلية
+                                  Row(
                                     children: [
-                                      const Text("الموافقون ✅", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green)),
-                                      Text("$approvedCount", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.redAccent)),
-                                  child: Column(
-                                    children: [
-                                      const Text("الرافضون ❌", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12, color: Colors.redAccent)),
-                                      Text("$rejectedCount", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 15),
-                          Expanded(
-                            child: ListView.builder(
-                              itemCount: responses.length,
-                              itemBuilder: (context, index) {
-                                var res = responses[index].data() as Map<String, dynamic>;
-                                String studentName = res['studentName'] ?? 'طالب';
-                                String status = res['status'] ?? 'pending';
-                                bool isApproved = status == 'approved';
-
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? Colors.black26 : Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: isApproved ? Colors.green.withOpacity(0.5) : Colors.redAccent.withOpacity(0.5)),
-                                  ),
-                                  child: ListTile(
-                                    title: Text(studentName, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                                    trailing: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: isApproved ? Colors.green : Colors.redAccent,
-                                        borderRadius: BorderRadius.circular(10),
+                                      // 1. ⏳ بانتظار الرد (محدد افتراضياً)
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () => setSheetState(() => selectedFilter = 'pending'),
+                                          borderRadius: BorderRadius.circular(14),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(milliseconds: 200),
+                                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                                            decoration: BoxDecoration(
+                                              color: selectedFilter == 'pending' ? Colors.orange : Colors.orange.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(color: Colors.orange, width: selectedFilter == 'pending' ? 2 : 1),
+                                              boxShadow: selectedFilter == 'pending' ? [BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 6)] : [],
+                                            ),
+                                            child: Column(
+                                              children: [
+                                                Text("بانتظار الرد ⏳", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 11, color: selectedFilter == 'pending' ? Colors.white : Colors.orange)),
+                                                const SizedBox(height: 2),
+                                                Text("$pendingCount", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: selectedFilter == 'pending' ? Colors.white : Colors.orange, fontFamily: 'Cairo')),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                      child: Text(isApproved ? "تمت الموافقة ✅" : "مرفوض ❌", style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
-                                    ),
+                                      const SizedBox(width: 8),
+
+                                      // 2. ✅ الموافقون
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () => setSheetState(() => selectedFilter = 'approved'),
+                                          borderRadius: BorderRadius.circular(14),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(milliseconds: 200),
+                                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                                            decoration: BoxDecoration(
+                                              color: selectedFilter == 'approved' ? Colors.green : Colors.green.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(color: Colors.green, width: selectedFilter == 'approved' ? 2 : 1),
+                                              boxShadow: selectedFilter == 'approved' ? [BoxShadow(color: Colors.green.withOpacity(0.3), blurRadius: 6)] : [],
+                                            ),
+                                            child: Column(
+                                              children: [
+                                                Text("الموافقون ✅", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 11, color: selectedFilter == 'approved' ? Colors.white : Colors.green)),
+                                                const SizedBox(height: 2),
+                                                Text("$approvedCount", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: selectedFilter == 'approved' ? Colors.white : Colors.green, fontFamily: 'Cairo')),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+
+                                      // 3. ❌ الرافضون
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () => setSheetState(() => selectedFilter = 'rejected'),
+                                          borderRadius: BorderRadius.circular(14),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(milliseconds: 200),
+                                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                                            decoration: BoxDecoration(
+                                              color: selectedFilter == 'rejected' ? Colors.redAccent : Colors.redAccent.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(color: Colors.redAccent, width: selectedFilter == 'rejected' ? 2 : 1),
+                                              boxShadow: selectedFilter == 'rejected' ? [BoxShadow(color: Colors.redAccent.withOpacity(0.3), blurRadius: 6)] : [],
+                                            ),
+                                            child: Column(
+                                              children: [
+                                                Text("الرافضون ❌", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 11, color: selectedFilter == 'rejected' ? Colors.white : Colors.redAccent)),
+                                                const SizedBox(height: 2),
+                                                Text("$rejectedCount", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: selectedFilter == 'rejected' ? Colors.white : Colors.redAccent, fontFamily: 'Cairo')),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                                  const SizedBox(height: 15),
+
+                                  // 📋 عرض قائمة الفئة المختارة فقط
+                                  Expanded(
+                                    child: filteredList.isEmpty
+                                        ? Center(
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  selectedFilter == 'pending' ? Icons.hourglass_empty_rounded : (selectedFilter == 'approved' ? Icons.check_circle_outline_rounded : Icons.cancel_outlined),
+                                                  size: 50,
+                                                  color: Colors.grey.withOpacity(0.5),
+                                                ),
+                                                const SizedBox(height: 10),
+                                                Text(
+                                                  selectedFilter == 'pending'
+                                                      ? "لا يوجد طلاب بانتظار الرد 🎉"
+                                                      : (selectedFilter == 'approved' ? "لا يوجد موافقات حتى الآن 📭" : "لا يوجد أهالي رافضين لهذا النشاط 👍"),
+                                                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : Colors.black54),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        : ListView.builder(
+                                            physics: const BouncingScrollPhysics(),
+                                            itemCount: filteredList.length,
+                                            itemBuilder: (context, index) {
+                                              var item = filteredList[index];
+                                              String studentName = item['name'];
+                                              String status = item['status'];
+
+                                              Color badgeColor;
+                                              String statusText;
+
+                                              if (status == 'approved') {
+                                                badgeColor = Colors.green;
+                                                statusText = "تمت الموافقة ✅";
+                                              } else if (status == 'rejected') {
+                                                badgeColor = Colors.redAccent;
+                                                statusText = "مرفوض ❌";
+                                              } else {
+                                                badgeColor = Colors.orange;
+                                                statusText = "بانتظار الرد ⏳";
+                                              }
+
+                                              return Container(
+                                                margin: const EdgeInsets.only(bottom: 10),
+                                                decoration: BoxDecoration(
+                                                  color: isDark ? Colors.black26 : Colors.grey.shade50,
+                                                  borderRadius: BorderRadius.circular(14),
+                                                  border: Border.all(color: badgeColor.withOpacity(0.5)),
+                                                ),
+                                                child: ListTile(
+                                                  title: Text(studentName, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                                                  trailing: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: badgeColor.withOpacity(0.18),
+                                                      borderRadius: BorderRadius.circular(10),
+                                                      border: Border.all(color: badgeColor, width: 0.8),
+                                                    ),
+                                                    child: Text(
+                                                      statusText,
+                                                      style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: badgeColor, fontWeight: FontWeight.bold),
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

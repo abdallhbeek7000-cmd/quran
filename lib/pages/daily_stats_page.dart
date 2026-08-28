@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -79,7 +80,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
       ),
       body: Stack(
         children: [
-          // 🎨 الخلفية الانسيابية مع الدوائر العائمة
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -118,7 +118,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 🗓️ 1. كرت اختيار التاريخ الملكي الفاخر
                   _buildGlassContainer(
                     isDarkMode: isDarkMode,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -189,12 +188,10 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 
                   const SizedBox(height: 18),
 
-                  // 🟢 2. كرت الحضور المبدئي
                   _buildExpectedSessionsCard(formattedDate, isDarkMode),
 
                   const SizedBox(height: 14),
 
-                  // 📝 3. كرت الجلسات المسجلة
                   InkWell(
                     borderRadius: BorderRadius.circular(25),
                     onTap: () {
@@ -221,7 +218,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 
                   const SizedBox(height: 14),
 
-                  // ⚖️ 4. كرت ميزان الإنجاز السائل الزجاجي
                   InkWell(
                     borderRadius: BorderRadius.circular(25),
                     onTap: () {
@@ -237,7 +233,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 
                   const SizedBox(height: 14),
 
-                  // 🔴 5. كرت الغائبين اليوم
                   InkWell(
                     borderRadius: BorderRadius.circular(25),
                     onTap: () {
@@ -264,7 +259,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 
                   const SizedBox(height: 14),
 
-                  // 📈 6. كرت نسبة الحضور
                   _buildPercentageCard(formattedDate, isDarkMode),
 
                   const SizedBox(height: 25),
@@ -554,14 +548,45 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 }
 
 // =========================================================================
-// 🚀 1. واجهة الطلاب الحاضرين الذين لم تُسجل جلساتهم بعد (Liquid Glass ✨)
+// 🚀 1. واجهة الطلاب الحاضرين الذين لم تُسجل جلساتهم بعد + زر التصدير HD 📸
 // =========================================================================
-class PendingSessionsPage extends StatelessWidget {
+class PendingSessionsPage extends StatefulWidget {
   final String targetDate;
   const PendingSessionsPage({super.key, required this.targetDate});
 
+  @override
+  State<PendingSessionsPage> createState() => _PendingSessionsPageState();
+}
+
+class _PendingSessionsPageState extends State<PendingSessionsPage> {
+  final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
+  bool isExporting = false;
+
+  Future<void> _sharePendingListAsImage(List<Map<String, dynamic>> pendingStudentsList) async {
+    if (pendingStudentsList.isEmpty) return;
+    setState(() => isExporting = true);
+    try {
+      final bytes = await controller.capture();
+      if (bytes != null) {
+        final tempDir = await getTemporaryDirectory();
+        final file = await File('${tempDir.path}/متبقين_تسميع_${widget.targetDate}.png').create();
+        await file.writeAsBytes(bytes);
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: '⏳ تذكير بالطلاب المتبقين للتسميع اليوم (${widget.targetDate})\nنرجو من الإخوة المشرفين تسجيل التسميعات 🌸\nمعهد الشيخ سعيد العبدالله 🕌',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("حدث خطأ أثناء إنشاء الصورة: $e", style: const TextStyle(fontFamily: 'Cairo'))));
+      }
+    } finally {
+      if (mounted) setState(() => isExporting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -575,7 +600,7 @@ class PendingSessionsPage extends StatelessWidget {
           elevation: 0,
           backgroundColor: Colors.transparent,
           title: Text(
-            "الطلاب المتبقين للتسميع ($targetDate)",
+            "الطلاب المتبقين للتسميع (${widget.targetDate})",
             style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16),
           ),
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
@@ -583,7 +608,6 @@ class PendingSessionsPage extends StatelessWidget {
         ),
         body: Stack(
           children: [
-            // 🎨 خلفية الجرادينت السائلة
             Container(
               width: double.infinity,
               height: double.infinity,
@@ -611,7 +635,7 @@ class PendingSessionsPage extends StatelessWidget {
             ),
             SafeArea(
               child: StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance.collection('daily_attendance').doc(targetDate).snapshots(),
+                stream: FirebaseFirestore.instance.collection('daily_attendance').doc(widget.targetDate).snapshots(),
                 builder: (context, attendanceSnap) {
                   if (attendanceSnap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -641,7 +665,7 @@ class PendingSessionsPage extends StatelessWidget {
                   return StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('sessions')
-                        .where('date', isEqualTo: targetDate)
+                        .where('date', isEqualTo: widget.targetDate)
                         .snapshots(),
                     builder: (context, sessionsSnap) {
                       if (sessionsSnap.connectionState == ConnectionState.waiting) {
@@ -669,7 +693,6 @@ class PendingSessionsPage extends StatelessWidget {
                         );
                       }
 
-                      // 🚀 جلب تفاصيل جميع الطلاب دفعة واحدة وبدون Rebuilds عشوائية
                       return StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('students')
@@ -702,123 +725,161 @@ class PendingSessionsPage extends StatelessWidget {
                             }
                           }
 
-                          // 🔢 الترتيب التسلسلي الفوري من الأصغر للأكبر
                           pendingStudentsList.sort((a, b) => (a['serial'] as int).compareTo(b['serial'] as int));
 
-                          return ListView.builder(
-                            physics: const BouncingScrollPhysics(),
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-                            itemCount: pendingStudentsList.length,
-                            itemBuilder: (context, index) {
-                              var student = pendingStudentsList[index];
-                              String studentName = student['name'];
-                              String supervisorName = student['supervisorName'];
-                              String imageUrl = student['imageUrl'];
-                              String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
+                          return Stack(
+                            children: [
+                              Positioned(
+                                left: -9999,
+                                top: -9999,
+                                child: WidgetsToImage(
+                                  controller: controller,
+                                  child: SizedBox(
+                                    width: 600,
+                                    child: _buildExportablePoster(pendingStudentsList),
+                                  ),
+                                ),
+                              ),
 
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 14),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(22),
-                                  child: BackdropFilter(
-                                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                      decoration: BoxDecoration(
-                                        color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
-                                        borderRadius: BorderRadius.circular(22),
-                                        border: Border.all(
-                                          color: Colors.orange.withOpacity(isDarkMode ? 0.35 : 0.5),
-                                          width: 1.2,
+                              Column(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 18, right: 18, top: 10),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      height: 48,
+                                      child: ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.orange.shade800,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          elevation: 3,
                                         ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(isDarkMode ? 0.25 : 0.03),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 4),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          // ⏳ شارة بانتظار التسميع جهة اليمين
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                            decoration: BoxDecoration(
-                                              color: Colors.orange.withOpacity(0.15),
-                                              borderRadius: BorderRadius.circular(14),
-                                              border: Border.all(color: Colors.orange.withOpacity(0.6), width: 1),
-                                            ),
-                                            child: const Row(
-                                              children: [
-                                                Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 14),
-                                                SizedBox(width: 5),
-                                                Text(
-                                                  "بانتظار التسميع",
-                                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.orange),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-
-                                          // 📝 الاسم واسم المشرف بالمحاذاة التامة
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.end,
-                                              children: [
-                                                Text(
-                                                  studentName,
-                                                  textAlign: TextAlign.right,
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontFamily: 'Cairo',
-                                                    fontSize: 15,
-                                                    color: isDarkMode ? Colors.white : primaryColor,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 3),
-                                                Text(
-                                                  "المشرف: $supervisorName",
-                                                  textAlign: TextAlign.right,
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontFamily: 'Cairo',
-                                                    color: isDarkMode ? Colors.white60 : Colors.black54,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-
-                                          // 🖼️ صورة الطالب زجاجية بإطار برتقالي
-                                          Container(
-                                            width: 46,
-                                            height: 46,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: Colors.orange.withOpacity(0.6), width: 1.5),
-                                            ),
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(23),
-                                              child: imageUrl.isNotEmpty
-                                                  ? Image.network(
-                                                      imageUrl,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (c, e, s) => Center(child: Text(firstLetter, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor))),
-                                                    )
-                                                  : Center(child: Text(firstLetter, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor))),
-                                            ),
-                                          ),
-                                        ],
+                                        onPressed: isExporting ? null : () => _sharePendingListAsImage(pendingStudentsList),
+                                        icon: isExporting
+                                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                            : const Icon(Icons.share_rounded, color: Colors.white, size: 20),
+                                        label: Text(
+                                          isExporting ? "جاري الإنشاء..." : "مشاركة الصورة لتذكير المشرفين 📸",
+                                          style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              );
-                            },
+                                  Expanded(
+                                    child: ListView.builder(
+                                      physics: const BouncingScrollPhysics(),
+                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+                                      itemCount: pendingStudentsList.length,
+                                      itemBuilder: (context, index) {
+                                        var student = pendingStudentsList[index];
+                                        String studentName = student['name'];
+                                        String supervisorName = student['supervisorName'];
+                                        String imageUrl = student['imageUrl'];
+                                        String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
+
+                                        return Container(
+                                          margin: const EdgeInsets.only(bottom: 14),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(22),
+                                            child: BackdropFilter(
+                                              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                                decoration: BoxDecoration(
+                                                  color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+                                                  borderRadius: BorderRadius.circular(22),
+                                                  border: Border.all(
+                                                    color: Colors.orange.withOpacity(isDarkMode ? 0.35 : 0.5),
+                                                    width: 1.2,
+                                                  ),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black.withOpacity(isDarkMode ? 0.25 : 0.03),
+                                                      blurRadius: 10,
+                                                      offset: const Offset(0, 4),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.orange.withOpacity(0.15),
+                                                        borderRadius: BorderRadius.circular(14),
+                                                        border: Border.all(color: Colors.orange.withOpacity(0.6), width: 1),
+                                                      ),
+                                                      child: const Row(
+                                                        children: [
+                                                          Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 14),
+                                                          SizedBox(width: 5),
+                                                          Text(
+                                                            "بانتظار التسميع",
+                                                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.orange),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                                        children: [
+                                                          Text(
+                                                            studentName,
+                                                            textAlign: TextAlign.right,
+                                                            style: TextStyle(
+                                                              fontWeight: FontWeight.bold,
+                                                              fontFamily: 'Cairo',
+                                                              fontSize: 15,
+                                                              color: isDarkMode ? Colors.white : primaryColor,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(height: 3),
+                                                          Text(
+                                                            "المشرف: $supervisorName",
+                                                            textAlign: TextAlign.right,
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              fontFamily: 'Cairo',
+                                                              color: isDarkMode ? Colors.white60 : Colors.black54,
+                                                              fontWeight: FontWeight.w600,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    Container(
+                                                      width: 46,
+                                                      height: 46,
+                                                      decoration: BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(color: Colors.orange.withOpacity(0.6), width: 1.5),
+                                                      ),
+                                                      child: ClipRRect(
+                                                        borderRadius: BorderRadius.circular(23),
+                                                        child: imageUrl.isNotEmpty
+                                                            ? Image.network(
+                                                                imageUrl,
+                                                                fit: BoxFit.cover,
+                                                                errorBuilder: (c, e, s) => Center(child: Text(firstLetter, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor))),
+                                                              )
+                                                            : Center(child: Text(firstLetter, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor))),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           );
                         },
                       );
@@ -829,6 +890,86 @@ class PendingSessionsPage extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildExportablePoster(List<Map<String, dynamic>> students) {
+    return Container(
+      padding: const EdgeInsets.all(30),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xff0f172a), Color(0xff1e293b), Color(0xff0f172a)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.mosque, color: accentGold, size: 32),
+              const SizedBox(width: 12),
+              const Text("معهد الشيخ سعيد العبدالله", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.18), borderRadius: BorderRadius.circular(25), border: Border.all(color: Colors.orange, width: 1)),
+            child: Text("⏳ الطلاب المتبقون للتسميع يوم: ${widget.targetDate}", style: const TextStyle(fontSize: 14, color: Colors.orange, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          ),
+          const SizedBox(height: 25),
+          Container(
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white24, width: 1.2)),
+            child: Table(
+              columnWidths: const {0: FlexColumnWidth(2.2), 1: FlexColumnWidth(2), 2: FlexColumnWidth(1.4)},
+              children: [
+                TableRow(
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.12)),
+                  children: [
+                    _tableHeader("اسم الطالب"),
+                    _tableHeader("المشرف المسؤول"),
+                    _tableHeader("الحالة"),
+                  ],
+                ),
+                ...students.map((s) {
+                  String name = s['name'] ?? 'طالب';
+                  String sup = s['supervisorName'] ?? 'غير محدد';
+                  return TableRow(
+                    children: [
+                      _tableCell(name, isBold: true),
+                      _tableCell(sup),
+                      _tableCell("بانتظار التسميع ⏳", color: Colors.orange, isBold: true),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 25),
+          const Text("يرجى من الإخوة المشرفين الأفاضل متابعة وتوثيق التسميعات 🌸", style: TextStyle(fontSize: 13, color: Colors.white60, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _tableHeader(String txt) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      child: Text(txt, textAlign: TextAlign.center, style: TextStyle(color: accentGold, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
+    );
+  }
+
+  Widget _tableCell(String txt, {bool isBold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: Text(
+        txt,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: color ?? Colors.white, fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontFamily: 'Cairo'),
       ),
     );
   }
