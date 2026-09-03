@@ -9,21 +9,22 @@ rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+
+// 🚀 إسناد الـ namespace للمكاتب القديمة مباشرة دون إحداث تعارض في دورة حياة Gradle
+subprojects { subproject ->
+    subproject.plugins.whenPluginAdded { plugin ->
+        if (plugin.class.name.startsWith("com.android.build.gradle.")) {
+            if (subproject.android.hasProperty("namespace") && subproject.android.namespace == null) {
+                subproject.android.namespace = subproject.group
+            }
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(':app')
 }
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
-}
-
-// 🚀 الحل: إضافة namespace تلقائياً لجميع المكاتب الخارجية القديمة
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            if (project.android.namespace == null) {
-                project.android.namespace project.group
-            }
-        }
-    }
 }
