@@ -31,7 +31,9 @@ import '../widgets/offline_wrapper.dart';
 import 'points_bank_page.dart'; 
 import 'initial_attendance_page.dart'; 
 import '../services/notification_service.dart'; 
-import 'quran_completions_page.dart'; // 🚀 استيراد صفحة سجل الختمات الجديدة
+import 'quran_completions_page.dart';
+import 'qiblah_page.dart';
+import '../services/prayer_service.dart'; // 🕌 استدعاء خدمة أوقات الصلاة
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -49,8 +51,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> { 
   final cycleService = CycleService();
-  String currentCycle = "لا يوجد دورة";
+  String currentCycle = "جاري التحميل...";
   CycleModel? currentCycleModel;
+  bool isLoadingCycle = true;
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37); 
@@ -61,10 +64,55 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    loadCycle(); 
+    loadCycleFast(); 
     _setupNotifications(); 
     _checkIfManager(); 
     _checkPendingNotifications(); 
+  }
+
+  // 🚀 دالة جلب الدورة الفورية باستخدام التخزين المحلي بدون تعارض في المعاملات
+  Future<void> loadCycleFast() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 1️⃣ قراءة اسم الدورة المحفوظ محلياً للتحميل الفوري
+    String? cachedCycleName = prefs.getString('cached_cycle_name');
+
+    if (cachedCycleName != null) {
+      if (mounted) {
+        setState(() {
+          currentCycle = cachedCycleName;
+          isLoadingCycle = false;
+        });
+      }
+    }
+
+    // 2️⃣ جلب نموذج الدورة بالكامل من السيرفر بالخلفية
+    try {
+      final cycle = await cycleService.getCurrentCycle();
+      if (cycle != null && mounted) {
+        String cycleDisplayName = "${cycle.name} (${cycle.cycleNumber})";
+        setState(() {
+          currentCycleModel = cycle;
+          currentCycle = cycleDisplayName;
+          isLoadingCycle = false;
+        });
+
+        // حفظ الاسم في الكاش للمرة القادمة
+        await prefs.setString('cached_cycle_name', cycleDisplayName);
+      } else if (mounted && cachedCycleName == null) {
+        setState(() {
+          currentCycle = "لا يوجد دورة";
+          isLoadingCycle = false;
+        });
+      }
+    } catch (e) {
+      if (mounted && cachedCycleName == null) {
+        setState(() {
+          currentCycle = "لا يوجد دورة";
+          isLoadingCycle = false;
+        });
+      }
+    }
   }
 
   void _checkPendingNotifications() async {
@@ -213,16 +261,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  loadCycle() async {
-    final cycle = await cycleService.getCurrentCycle();
-    if (cycle != null) {
-      setState(() {
-        currentCycleModel = cycle;
-        currentCycle = "${cycle.name} (${cycle.cycleNumber})";
-      });
-    }
-  }
-
   logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear(); 
@@ -298,7 +336,7 @@ class _HomePageState extends State<HomePage> {
                             NotificationService.sendAndSaveNotification(
                               studentId: supervisorId,
                               title: "تحديث جديد متاح 🚀",
-                              body: "تم إطلاق نسخة جديدة من نظام حلقات وعوالم القرآن. يرجى التحديث الآن للحصول على أحدث الميزات الزجاجية الفخمة والمستقرة.",
+                              body: "تم إطلاق نسخة جديدة من نظام الحلقات القرآني. يرجى التحديث الآن للحصول على أحدث الميزات والاستقرار.",
                               type: "app_update_alert",
                               context: context,
                             ).catchError((e) => print("فشل الإرسال عبر الخدمة للمشرف $supervisorId: $e"));
@@ -320,7 +358,7 @@ class _HomePageState extends State<HomePage> {
                         if (!mounted) return;
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(backgroundColor: Colors.green, content: Text("تم بث إشعار التحديث لجميع أجهزة المشرفين لايف بنجاح! 🚀", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
+                          const SnackBar(backgroundColor: Colors.green, content: Text("تم بث إشعار التحديث لجميع أجهزة المشرفين بنجاح! 🚀", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
                         );
                       } catch (e) {
                         setStateDialog(() => isSending = false);
@@ -407,6 +445,11 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   
+                  // 🕌 كارت أوقات الصلاة بالنمط الزجاجي
+                  SliverToBoxAdapter(
+                    child: _buildPrayerGlassCard(isDark),
+                  ),
+
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
                     sliver: SliverGrid(
@@ -419,38 +462,39 @@ class _HomePageState extends State<HomePage> {
                       delegate: SliverChildListDelegate([
                         // 👑 أزرار وخدمات المدير فقط
                         if (widget.role == "manager") ...[
-                          if (currentCycleModel != null)
-                            _buildPerformanceMenuCard(Icons.fact_check_rounded, "تسجيل حضور مبدئي 📋", () => _nav(InitialAttendancePage(cycle: currentCycleModel!)), isDark),
+                          _buildPerformanceMenuCard(Icons.fact_check_rounded, "تسجيل حضور مبدئي 📋", () {
+                            if (currentCycleModel != null) _nav(InitialAttendancePage(cycle: currentCycleModel!));
+                          }, isDark),
 
-                          // 📖 الزر الجديد المضاف: سجل الختمات
                           _buildPerformanceMenuCard(Icons.menu_book_rounded, "سجل الختمات 📖", () => _nav(const QuranCompletionsPage()), isDark),
-
                           _buildPerformanceMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
-                          
                           _buildPerformanceMenuCard(Icons.directions_bus_rounded, "الأنشطة والرحلات 🚌⚽", () => _nav(const ActivitiesManagePage()), isDark),
-
                           _buildPerformanceMenuCard(Icons.update_rounded, "إشعار تحديث", () => _showUpdateNotificationDialog(isDark), isDark),
-                          
                           _buildPerformanceMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
                           _buildPerformanceMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), isDark),
                           _buildPerformanceMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), isDark),
                           _buildPerformanceMenuCard(Icons.wb_sunny_rounded, "إدارة الإشراقات", () => _nav(const InspirationsManagePage()), isDark),
-                          if (currentCycleModel != null)
-                            _buildPerformanceMenuCard(Icons.person_add_alt_1, "إضافة طالب", () => _nav(AddStudentPage(cycle: currentCycleModel!)), isDark),
+                          
+                          _buildPerformanceMenuCard(Icons.person_add_alt_1, "إضافة طالب", () {
+                            if (currentCycleModel != null) _nav(AddStudentPage(cycle: currentCycleModel!));
+                          }, isDark),
+                          
                           _buildPerformanceMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage()), isDark),
-                          if (currentCycleModel != null)
-                            _buildPerformanceMenuCard(Icons.shuffle, "توزيع الطلاب", () => _nav(AssignStudentsPage(cycle: currentCycleModel!)), isDark),
+                          
+                          _buildPerformanceMenuCard(Icons.shuffle, "توزيع الطلاب", () {
+                            if (currentCycleModel != null) _nav(AssignStudentsPage(cycle: currentCycleModel!));
+                          }, isDark),
                           
                           _buildPerformanceMenuCard(Icons.diamond_rounded, "بنك النقاط 💎", () => _nav(const PointsBankPage()), isDark),
-                          
                           _buildPerformanceMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                         ],
 
                         // 👥 الخيارات المشتركة بين المدير والمشرف
-                        if (currentCycleModel != null) ...[
-                          _buildPerformanceMenuCard(Icons.groups, "عرض الطلاب", () => _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
-                          _buildPerformanceMenuCard(Icons.archive_rounded, "الطلاب المتوقفين", () => _nav(ArchivedStudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid)), isDark),
-                        ],
+                        _buildPerformanceMenuCard(Icons.groups, "عرض الطلاب", () {
+                          if (currentCycleModel != null) _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid));
+                        }, isDark),
+
+                        _buildPerformanceMenuCard(Icons.compass_calibration_rounded, "اتجاه القبلة 🧭", () => _nav(const QiblahPage()), isDark),
                         _buildPerformanceMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
                         _buildPerformanceMenuCard(Icons.pie_chart_rounded, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
                         _buildPerformanceMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
@@ -464,6 +508,54 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+    );
+  }
+
+  // 🕌 ودجت كارت أوقات الصلاة بالنمط الزجاجي
+  Widget _buildPrayerGlassCard(bool isDark) {
+    try {
+      final prayerTimes = PrayerService.getSyriaPrayerTimes();
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6), width: 1.2),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildPrayerItem("المغرب 🕌", prayerTimes.maghrib, isDark),
+                Container(height: 30, width: 1, color: isDark ? Colors.white24 : Colors.black12),
+                _buildPrayerItem("العشاء 🌙", prayerTimes.isha, isDark),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildPrayerItem(String name, DateTime time, bool isDark) {
+    String formattedTime = "${time.hour > 12 ? time.hour - 12 : time.hour}:${time.minute.toString().padLeft(2, '0')}";
+    return Row(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(name, style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[700])),
+            Text(formattedTime, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? accentGold : primaryColor)),
+          ],
+        ),
+      ],
     );
   }
 
@@ -537,7 +629,9 @@ class _HomePageState extends State<HomePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text("الدورة الحالية", style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[700], fontFamily: 'Cairo')),
-                          Text(currentCycle, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                          isLoadingCycle 
+                              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : Text(currentCycle, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
                         ],
                       ),
                     ),
@@ -559,7 +653,7 @@ class _HomePageState extends State<HomePage> {
         decoration: BoxDecoration(
           color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.45),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: isDark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.75), width: 1.5),
+          border: Border.all(color: isDark ? Colors.white12 : Colors.white.withOpacity(0.75), width: 1.5),
           boxShadow: [
             BoxShadow(color: Colors.black.withOpacity(isDark ? 0.25 : 0.04), blurRadius: 10, offset: const Offset(0, 4)),
           ],

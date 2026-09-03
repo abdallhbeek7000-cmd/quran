@@ -15,9 +15,10 @@ import 'package:flutter/foundation.dart';
 import 'firebase_options.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
-import 'pages/splash_screen.dart'; // 👈 استدعاء شاشة التمهيد المتحركة الجديدة
+import 'pages/splash_screen.dart'; 
 import 'pages/update_checker.dart'; 
 import 'services/theme_provider.dart'; 
+import 'services/prayer_service.dart'; // 🕌 خدمة أوقات الصلاة
 import 'package:shared_preferences/shared_preferences.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -26,7 +27,7 @@ const String syncTaskName = "sync_sessions_data_forced";
 // 💬 إنشاء كائن الإشعارات المحلية لتجميع الرسائل
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
-// 🚀 محرك الخلفية القاطع: يستيقظ فوراً عند توفر الإنترنت والتطبيق مغلق لرفع الكاش أوتوماتيكياً
+// 🚀 محرك الخلفية: يستيقظ فوراً عند توفر الإنترنت والتطبيق مغلق لرفع الكاش أوتوماتيكياً
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
@@ -62,23 +63,20 @@ Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
   String studentId = data['studentId'] ?? 'default_group';
   String groupKey = 'com.quran_habal.MESSAGES_$studentId';
 
-  // 🎯 معرف فريد لكل رسالة ومعرف ثابت للملخص
   int messageId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
   int summaryId = studentId.hashCode.abs();
 
-  // 1️⃣ تفاصيل إشعار الرسالة الفردية ضمن المجموعة
   AndroidNotificationDetails androidIndividualDetails = AndroidNotificationDetails(
     'high_importance_channel',
     'إشعارات المحادثات والرسائل',
     channelDescription: 'قناة تجميع إشعارات المحادثات اليومية',
     importance: Importance.max,
     priority: Priority.high,
-    groupKey: groupKey, // 🔑 الرمز الموحد لربط إشعارات هذا المرسل ببعضها
+    groupKey: groupKey,
   );
 
   NotificationDetails platformIndividualDetails = NotificationDetails(android: androidIndividualDetails);
 
-  // إظهار الرسالة الجديدة
   await flutterLocalNotificationsPlugin.show(
     messageId,
     notification.title ?? '',
@@ -87,7 +85,6 @@ Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
     payload: jsonEncode(data),
   );
 
-  // 2️⃣ إنشاء إشعار "الملخص" الذي يدمج الرسائل في كارت واحد (Group Summary)
   AndroidNotificationDetails androidSummaryDetails = AndroidNotificationDetails(
     'high_importance_channel',
     'إشعارات المحادثات والرسائل',
@@ -95,12 +92,11 @@ Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
     importance: Importance.max,
     priority: Priority.high,
     groupKey: groupKey,
-    setAsGroupSummary: true, // ⚡ يدمج الكروت المستقلة في كارت واحد مطوي
+    setAsGroupSummary: true,
   );
 
   NotificationDetails platformSummaryDetails = NotificationDetails(android: androidSummaryDetails);
 
-  // إظهار ملخص المجموعة لمنع التشتت
   await flutterLocalNotificationsPlugin.show(
     summaryId,
     notification.title ?? '',
@@ -124,20 +120,30 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // 💬 تهيئة الإشعارات المحلية
+  // ⚡ إعداد الكاش المحلي لـ Firestore
+  FirebaseFirestore.instance.settings = Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
+  // 🚀 تهيئة التخزين المحلي المبكر
+  await SharedPreferences.getInstance();
+
+  // 💬 تهيئة الإشعارات المحلية وإشعارات أوقات الصلاة
   if (!kIsWeb) {
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     const InitializationSettings initSettings = InitializationSettings(
       android: initializationSettingsAndroid,
     );
     await flutterLocalNotificationsPlugin.initialize(initSettings);
+
+    // 🕌 جدولة تنبيهات أوقات الصلاة لـ (المغرب والعشاء) قبل 10 و5 دقائق
+    try {
+      await PrayerService.schedulePrayerAlerts(flutterLocalNotificationsPlugin);
+    } catch (e) {
+      print("❌ خطأ في جدولة إشعارات الصلاة: $e");
+    }
   }
-  
-  // ⚡ تفعيل الكاش المحلي اللامحدود لفايرستور
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
 
   // 🚀 تهيئة محرك الخلفية الفوري
   if (!kIsWeb) {
@@ -146,7 +152,6 @@ void main() async {
       isInDebugMode: false, 
     );
 
-    // تسجيل مهمة فورية ودورية تعمل عند الاتصال بالشبكة
     await Workmanager().registerPeriodicTask(
       "periodic_sync_id_01",
       syncTaskName,
@@ -182,7 +187,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _setupInteractedMessage();
     
-    // 💬 الاستماع المباشر للإشعارات القادمة أثناء عمل التطبيق
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _showGroupedLocalNotification(message);
     });
@@ -306,7 +310,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
       ),
 
-      // 🚀 فتح شاشة التمهيد المتحركة أولاً لتعرض الشعار بانسيابية ثم توجه المستخدم تلقائياً
       home: const SplashScreen(),
         
       onGenerateRoute: (settings) {

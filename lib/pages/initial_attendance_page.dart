@@ -440,41 +440,36 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
           if (studentDoc.exists) {
             var sData = studentDoc.data()!;
 
+            // 🔑 معرف ثابت وموحد للجلسة يمنع التكرار نهائياً
             String customSessionId = "${studentId}_$todayDate";
 
-            var existingSession = await FirebaseFirestore.instance
-                .collection('sessions')
-                .doc(customSessionId)
-                .get();
+            // 🚀 استخدام set مع merge لتحديث الجلسة نفسها سواء كانت جديدة أم موجودة مسبقاً
+            await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).set({
+              'studentId': studentId,
+              'studentName': sData['name'] ?? 'طالب',
+              'supervisorId': sData['supervisorId'] ?? '',
+              'supervisorName': sData['supervisorName'] ?? 'المشرف',
+              'date': todayDate,
+              'absent': true,
+              'absenceType': absenceType,
+              'absenceReason': reason,
+              'isExam': false,
+              'didNotRecite': false,
+              'newMemorization': '',
+              'nearReview': '',
+              'farReview': '',
+              'homework': '',
+              'notes': 'تم توثيق الغياب تلقائياً من التفتيش المبدئي ($absenceType: $reason).',
+              'timestamp': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
 
-            if (!existingSession.exists) {
-              await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).set({
-                'studentId': studentId,
-                'studentName': sData['name'] ?? 'طالب',
-                'supervisorId': sData['supervisorId'] ?? '',
-                'supervisorName': sData['supervisorName'] ?? 'المشرف',
-                'date': todayDate,
-                'absent': true,
-                'absenceType': absenceType,
-                'absenceReason': reason,
-                'isExam': false,
-                'didNotRecite': false,
-                'newMemorization': '',
-                'nearReview': '',
-                'farReview': '',
-                'homework': '',
-                'notes': 'تم تسجيل الغياب تلقائياً من التفتيش المبدئي للمدير ($absenceType: $reason).',
-                'timestamp': FieldValue.serverTimestamp(),
-              }, SetOptions(merge: true));
-
-              NotificationService.sendAndSaveNotification(
-                studentId: studentId,
-                title: "تنبيه غياب 🔴",
-                body: "تم تسجيل غياب ولدكم (${sData['name']}) اليوم ($todayDate) - الحالة: $absenceType ($reason).",
-                type: "absence_alert",
-                context: context,
-              ).catchError((e) => print("فشل إرسال إشعار الغياب لأهل الطالب $studentId: $e"));
-            }
+            NotificationService.sendAndSaveNotification(
+              studentId: studentId,
+              title: "تنبيه غياب 🔴",
+              body: "تم تسجيل غياب ولدكم (${sData['name']}) اليوم ($todayDate) - الحالة: $absenceType ($reason).",
+              type: "absence_alert",
+              context: context,
+            ).catchError((e) => print("فشل إرسال إشعار الغياب لأهل الطالب $studentId: $e"));
           }
         }
       }
