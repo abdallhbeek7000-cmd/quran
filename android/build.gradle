@@ -9,6 +9,33 @@ rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+
+// 🚀 حل مشكلة Namespace وتوحيد إعدادات Java & Kotlin لكافة المكتبات
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                // إسناد namespace تلقائي في حال عدم وجوده
+                if (namespace == null) {
+                    namespace project.group
+                }
+                // توحيد توافق Java إلى 1.8 للمكتبة
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_1_8
+                    targetCompatibility JavaVersion.VERSION_1_8
+                }
+            }
+        }
+        
+        // توحيد الهدف لـ Kotlin إلى 1.8 لتجنب التعارض
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions {
+                jvmTarget = "1.8"
+            }
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(':app')
 }
