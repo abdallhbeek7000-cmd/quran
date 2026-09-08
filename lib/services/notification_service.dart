@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart'; 
 import 'package:flutter/material.dart'; 
 import 'package:googleapis_auth/auth_io.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 class NotificationService {
   
@@ -23,6 +25,49 @@ class NotificationService {
     } catch (e) {
       print("Error reading secure service account asset: $e");
       return '';
+    }
+  }
+
+  // 🕌 🔑 دالة جدولة تنبيهات أوقات الصلاة الدقيقة محلياً على الجهاز
+  static Future<void> schedulePrayerReminder({
+    required FlutterLocalNotificationsPlugin notificationsPlugin,
+    required int id,
+    required String title,
+    required String body,
+    required DateTime prayerTime,
+    required int minutesBefore,
+  }) async {
+    try {
+      // حساب الوقت قبل الصلاة بالدقائق المحددة
+      DateTime scheduledTime = prayerTime.subtract(Duration(minutes: minutesBefore));
+
+      // إذا كان الوقت قد مضى لليوم، يجدول ليوم الغد بنفس التوقيت
+      if (scheduledTime.isBefore(DateTime.now())) {
+        scheduledTime = scheduledTime.add(const Duration(days: 1));
+      }
+
+      await notificationsPlugin.zonedSchedule(
+        id,
+        title,
+        body,
+        tz.TZDateTime.from(scheduledTime, tz.local),
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'prayer_reminders_channel',
+            'تنبيهات أوقات الصلاة',
+            channelDescription: 'تنبيهات تذكيرية قبل أوقات الصلاة المحددة',
+            importance: Importance.max,
+            priority: Priority.high,
+            playSound: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      print("✅ تم جدولة إشعار الصلاة (ID: $id) بنجاح لوقت: $scheduledTime");
+    } catch (e) {
+      print("❌ خطأ أثناء جدولة إشعار الصلاة المحلي: $e");
     }
   }
 
@@ -141,15 +186,12 @@ class NotificationService {
                 .doc(studentId)
                 .update({'fcmToken': FieldValue.delete()});
           }
-          
-          // 🛑 تم إلغاء الـ SnackBar الأحمر الذي كان يظهر للمستخدم ليظل الشات سلس وبدون أخطاء ظاهرة
         }
       } else {
         print("FCM Token is empty for this user ($targetCollection). لم يتم تسجيل الدخول لتلقي الإشعارات.");
       }
     } catch (e) {
       print("Error inside V1 Notification Service: $e");
-      // عدم إظهار أي SnackBar للمستخدم نهائياً في حالات إرسال الرسائل لضمان تجربة شات ممتازة
     }
   }
 }

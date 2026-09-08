@@ -24,7 +24,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
   bool isLoading = true;
   bool isSaving = false;
 
-  // 🔍 حقل التحكم بالبحث
   final TextEditingController _searchController = TextEditingController();
   String searchQuery = '';
 
@@ -403,6 +402,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
     );
   }
 
+  // 🚀 دالة الحفظ الذكية المعالجة للتكرار كلياً
   Future<void> _saveAttendance(bool isDark) async {
     setState(() => isSaving = true);
     try {
@@ -436,14 +436,28 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
           String absenceType = record['absenceType'] ?? 'بدون عذر';
           String reason = record['reason'] ?? 'غياب عن الدوام المبدئي';
 
+          // 🔑 معرف الجلسة الموحد لنفس اليوم
+          String customSessionId = "${studentId}_$todayDate";
+
+          // 🛡️ فحص حقيقي ومباشر لقواعد البيانات قبل كتابة الجلسة
+          var existingSessionDoc = await FirebaseFirestore.instance
+              .collection('sessions')
+              .doc(customSessionId)
+              .get();
+
+          // إذا كانت الجلسة موجودة مسبقاً وبحالة "بعذر" (بسبب قبول طلب استئذان سابق)، نتجاوز إنشاء جلسة جديدة نهائياً!
+          if (existingSessionDoc.exists) {
+            var existingData = existingSessionDoc.data() ?? {};
+            if (existingData['absenceType'] == 'بعذر' || existingData['notes']?.toString().contains('استئذان') == true) {
+              print("⚠️ الطالب $studentId يمتلك جلسة استئذان معتمدة مسبقاً، تم تجاوز إعادة الكتابة.");
+              continue; 
+            }
+          }
+
           var studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
           if (studentDoc.exists) {
             var sData = studentDoc.data()!;
 
-            // 🔑 معرف ثابت وموحد للجلسة يمنع التكرار نهائياً
-            String customSessionId = "${studentId}_$todayDate";
-
-            // 🚀 استخدام set مع merge لتحديث الجلسة نفسها سواء كانت جديدة أم موجودة مسبقاً
             await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).set({
               'studentId': studentId,
               'studentName': sData['name'] ?? 'طالب',
@@ -526,37 +540,11 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
             ),
           ),
 
-          Positioned(
-            top: -40,
-            left: -40,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDark ? primaryColor.withOpacity(0.18) : primaryColor.withOpacity(0.25),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 100,
-            right: -60,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDark ? accentGold.withOpacity(0.12) : accentGold.withOpacity(0.2),
-              ),
-            ),
-          ),
-
           SafeArea(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : Column(
                     children: [
-                      // 1️⃣ كارت تفاصيل اليوم مع شريط البحث التفاعلي
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                         child: Column(
@@ -597,7 +585,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
                             const SizedBox(height: 12),
 
-                            // 🔍 شريط البحث المصمم بزجاجية أنيقة
                             ClipRRect(
                               borderRadius: BorderRadius.circular(20),
                               child: BackdropFilter(
@@ -645,7 +632,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                         ),
                       ),
 
-                      // 📡 1. الاستماع الحي لجدول الجلسات وطلبات الاستئذان المعتمدة
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance.collection('sessions').snapshots(),
@@ -698,7 +684,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
                                     var docs = snapshot.data!.docs;
 
-                                    // 🛑 تصفية الطلاب النشطين واستبعاد المتوقفين والمؤرشفين
                                     List<DocumentSnapshot> activeDocs = docs.where((doc) {
                                       var data = doc.data() as Map<String, dynamic>;
                                       bool isArchived = data['archived'] == true || data['isArchived'] == true;
@@ -713,7 +698,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                       );
                                     }
 
-                                    // 🔢 فرز الطلاب النشطين بحسب الرقم التسلسلي (serial) المعتمد
                                     activeDocs.sort((a, b) {
                                       var dataA = a.data() as Map<String, dynamic>;
                                       var dataB = b.data() as Map<String, dynamic>;
@@ -724,7 +708,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                       return serialA.compareTo(serialB);
                                     });
 
-                                    // 🔍 تطبيق الفلترة والتصفية بالبحث الحقيقي
                                     if (searchQuery.isNotEmpty) {
                                       activeDocs = activeDocs.where((doc) {
                                         var data = doc.data() as Map<String, dynamic>;
@@ -788,7 +771,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                                 ),
                                                 child: Row(
                                                   children: [
-                                                    // 🔢 شارة الرقم التسلسلي
                                                     if (student['serial'] != null)
                                                       Container(
                                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -937,7 +919,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                         ),
                       ),
 
-                      // 💾 زر حفظ الحضور المبدئي
                       Padding(
                         padding: const EdgeInsets.all(20),
                         child: SizedBox(

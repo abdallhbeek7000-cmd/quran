@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart'; 
@@ -6,7 +7,6 @@ import 'package:quran_habal/pages/leave_requests_page.dart';
 import 'package:shared_preferences/shared_preferences.dart'; 
 import 'package:quran_habal/services/cloudinary_helper.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
-import 'dart:ui'; 
 
 import 'login_page.dart';
 import 'create_cycle_page.dart';
@@ -33,7 +33,7 @@ import 'initial_attendance_page.dart';
 import '../services/notification_service.dart'; 
 import 'quran_completions_page.dart';
 import 'qiblah_page.dart';
-import '../services/prayer_service.dart'; // 🕌 استدعاء خدمة أوقات الصلاة
+import '../services/prayer_service.dart'; // 🕌 خدمة أوقات الصلاة
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -70,11 +70,10 @@ class _HomePageState extends State<HomePage> {
     _checkPendingNotifications(); 
   }
 
-  // 🚀 دالة جلب الدورة الفورية باستخدام التخزين المحلي بدون تعارض في المعاملات
+  // 🚀 دالة جلب الدورة الفورية باستخدام التخزين المحلي
   Future<void> loadCycleFast() async {
     final prefs = await SharedPreferences.getInstance();
     
-    // 1️⃣ قراءة اسم الدورة المحفوظ محلياً للتحميل الفوري
     String? cachedCycleName = prefs.getString('cached_cycle_name');
 
     if (cachedCycleName != null) {
@@ -86,7 +85,6 @@ class _HomePageState extends State<HomePage> {
       }
     }
 
-    // 2️⃣ جلب نموذج الدورة بالكامل من السيرفر بالخلفية
     try {
       final cycle = await cycleService.getCurrentCycle();
       if (cycle != null && mounted) {
@@ -97,7 +95,6 @@ class _HomePageState extends State<HomePage> {
           isLoadingCycle = false;
         });
 
-        // حفظ الاسم في الكاش للمرة القادمة
         await prefs.setString('cached_cycle_name', cycleDisplayName);
       } else if (mounted && cachedCycleName == null) {
         setState(() {
@@ -130,6 +127,28 @@ class _HomePageState extends State<HomePage> {
       if (mounted) setState(() => isAlsoManager = true);
     } else {
       if (mounted) setState(() => isAlsoManager = false);
+    }
+  }
+
+  // 🔑 🔔 دالة إعداد الإشعارات وتحديث توكن FCM للمدراء والمشرفين
+  Future<void> _setupNotifications() async {
+    try {
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      String? token = await messaging.getToken();
+
+      if (token != null && widget.uid.isNotEmpty) {
+        // تحديث التوكن في المجموعة المخصصة للدور الحالي
+        String collection = widget.role == "manager" ? "users" : "supervisors";
+        
+        await FirebaseFirestore.instance.collection(collection).doc(widget.uid).set(
+          {'fcmToken': token}, SetOptions(merge: true)
+        );
+
+        print("✅ تم تحديث FCM Token بنجاح للحساب ($collection -> ${widget.uid})");
+      }
+    } catch (e) {
+      print("❌ خطأ في إعداد الإشعارات بـ HomePage: $e");
     }
   }
 
@@ -242,23 +261,6 @@ class _HomePageState extends State<HomePage> {
     await prefs.setString('userId', realUid);
     if (!mounted) return;
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(uid: realUid, role: 'manager')));
-  }
-
-  Future<void> _setupNotifications() async {
-    try {
-      String realUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-      if (widget.uid != realUid && widget.role == 'supervisor') return;
-      FirebaseMessaging messaging = FirebaseMessaging.instance;
-      await messaging.requestPermission(alert: true, badge: true, sound: true);
-      String? token = await messaging.getToken();
-      if (token != null) {
-        await FirebaseFirestore.instance.collection(widget.role == "manager" ? "users" : "supervisors").doc(widget.uid).set(
-          {'fcmToken': token}, SetOptions(merge: true) 
-        );
-      }
-    } catch (e) {
-      print("❌ خطأ في إعداد الإشعارات: $e");
-    }
   }
 
   logout() async {
@@ -445,7 +447,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   
-                  // 🕌 كارت أوقات الصلاة بالنمط الزجاجي
+                  // 🕌 كارت أوقات الصلاة
                   SliverToBoxAdapter(
                     child: _buildPrayerGlassCard(isDark),
                   ),
@@ -460,7 +462,7 @@ class _HomePageState extends State<HomePage> {
                         childAspectRatio: 1.1,
                       ),
                       delegate: SliverChildListDelegate([
-                        // 👑 أزرار وخدمات المدير فقط
+                        // 👑 أزرار وخدمات المدير
                         if (widget.role == "manager") ...[
                           _buildPerformanceMenuCard(Icons.fact_check_rounded, "تسجيل حضور مبدئي 📋", () {
                             if (currentCycleModel != null) _nav(InitialAttendancePage(cycle: currentCycleModel!));
@@ -511,7 +513,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🕌 ودجت كارت أوقات الصلاة بالنمط الزجاجي
   Widget _buildPrayerGlassCard(bool isDark) {
     try {
       final prayerTimes = PrayerService.getSyriaPrayerTimes();

@@ -12,6 +12,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:quran_habal/widgets/offline_wrapper.dart'; 
 import 'package:workmanager/workmanager.dart';
 import 'package:flutter/foundation.dart'; 
+
+// 🔑 مكاتب التوقيت والمنطقة الزمنية للإشعارات المجدولة
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
+
 import 'firebase_options.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
@@ -24,7 +30,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 const String syncTaskName = "sync_sessions_data_forced";
 
-// 💬 إنشاء كائن الإشعارات المحلية لتجميع الرسائل
+// 💬 إنشاء كائن الإشعارات المحلية لتجميع الرسائل والتنبيهات
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 // 🚀 محرك الخلفية: يستيقظ فوراً عند توفر الإنترنت والتطبيق مغلق لرفع الكاش أوتوماتيكياً
@@ -129,6 +135,15 @@ void main() async {
   // 🚀 تهيئة التخزين المحلي المبكر
   await SharedPreferences.getInstance();
 
+  // 🌍 🔑 تهيئة التوقيت والمنطقة الزمنية المحلية لحساب الجدولة الدقيقة للإشعارات
+  try {
+    tz.initializeTimeZones();
+    final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(currentTimeZone));
+  } catch (e) {
+    print("⚠️ فشل تحديد المنطقة الزمنية تلقائياً، سيتم استخدام UTC: $e");
+  }
+
   // 💬 تهيئة الإشعارات المحلية وإشعارات أوقات الصلاة
   if (!kIsWeb) {
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -136,6 +151,14 @@ void main() async {
       android: initializationSettingsAndroid,
     );
     await flutterLocalNotificationsPlugin.initialize(initSettings);
+
+    // 🔑 طلب صلاحية الإشعارات لأندرويد 13+
+    final androidImplementation = flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImplementation != null) {
+      await androidImplementation.requestNotificationsPermission();
+      await androidImplementation.requestExactAlarmsPermission();
+    }
 
     // 🕌 جدولة تنبيهات أوقات الصلاة لـ (المغرب والعشاء) قبل 10 و5 دقائق
     try {

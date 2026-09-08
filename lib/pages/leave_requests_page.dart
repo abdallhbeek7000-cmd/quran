@@ -1,5 +1,4 @@
 import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -15,7 +14,33 @@ class LeaveRequestsPage extends StatelessWidget {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
-  // 🔮 🚀 إشعار التنبيه الزجاجي الفخم المنزلق
+  // 🔔 🚀 دالة إرسال الإشعار للمدراء فقط (Users مع Role = manager)
+  static Future<void> notifyManagersOnly({
+    required String studentName,
+    required String reason,
+    required String date,
+  }) async {
+    try {
+      // 🔑 البحث فقط في مجموعة users عن الحسابات التي دورها مدير
+      var managersSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'manager')
+          .get();
+
+      for (var doc in managersSnapshot.docs) {
+        await NotificationService.sendAndSaveNotification(
+          studentId: doc.id,
+          title: "طلب استئذان جديد 📝",
+          body: "قدم الطالب ($studentName) طلب استئذان ليوم ($date) - السبب: $reason",
+          type: "leave_request",
+        );
+      }
+    } catch (e) {
+      print("❌ خطأ أثناء إرسال إشعارات الاستئذان للمدراء: $e");
+    }
+  }
+
+  // 🔮 🚀 إشعار التنبيه الزجاجي المنزلق
   void _showTopPremiumToast(BuildContext context, {required String message, required IconData icon, required Color statusColor, required bool isDark}) {
     final overlay = Overlay.of(context);
     late OverlayEntry overlayEntry;
@@ -185,7 +210,6 @@ class LeaveRequestsPage extends StatelessWidget {
         ),
         body: Stack(
           children: [
-            // 🌈 خلفية تدرج خرافية مع دوائر خلفية مضيئة (Glow Effect)
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -226,7 +250,6 @@ class LeaveRequestsPage extends StatelessWidget {
               child: Column(
                 children: [
                   const SizedBox(height: 10),
-                  // 🌟 TabBar زجاجي معلق وأنيق
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: ClipRRect(
@@ -285,7 +308,6 @@ class LeaveRequestsPage extends StatelessWidget {
 
                   const SizedBox(height: 15),
 
-                  // 📜 قائمة الطلبات بحسب التبويب المختار
                   Expanded(
                     child: TabBarView(
                       physics: const BouncingScrollPhysics(),
@@ -374,7 +396,6 @@ class LeaveRequestsPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Header: اسم الطالب والشارة
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -403,7 +424,6 @@ class LeaveRequestsPage extends StatelessWidget {
 
                         const SizedBox(height: 14),
 
-                        // معلومات الإذن بطريقة أنيقة ومقسمة
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -449,7 +469,6 @@ class LeaveRequestsPage extends StatelessWidget {
 
                         const SizedBox(height: 10),
 
-                        // وقت الإرسال
                         Row(
                           children: [
                             Icon(Icons.access_time_rounded, size: 14, color: isDarkMode ? Colors.white54 : Colors.black45),
@@ -461,7 +480,6 @@ class LeaveRequestsPage extends StatelessWidget {
                           ],
                         ),
 
-                        // أزرار اتخاذ القرار (تظهر فقط في الطلبات المعلقة)
                         if (!isHistory) ...[
                           const SizedBox(height: 16),
                           Row(
