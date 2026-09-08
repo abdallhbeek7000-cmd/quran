@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -33,7 +34,7 @@ import 'initial_attendance_page.dart';
 import '../services/notification_service.dart'; 
 import 'quran_completions_page.dart';
 import 'qiblah_page.dart';
-import '../services/prayer_service.dart'; // 🕌 خدمة أوقات الصلاة
+import '../services/prayer_service.dart';
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -60,6 +61,7 @@ class _HomePageState extends State<HomePage> {
   bool _isUploadingManagerImage = false; 
 
   bool isAlsoManager = false;
+  Timer? _prayerTimer;
 
   @override
   void initState() {
@@ -68,21 +70,28 @@ class _HomePageState extends State<HomePage> {
     _setupNotifications(); 
     _checkIfManager(); 
     _checkPendingNotifications(); 
+    
+    // ⏱️ تحديث كل دقيقة لإبقاء حاسبة أوقات الصلاة دقيقة
+    _prayerTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      if (mounted) setState(() {});
+    });
   }
 
-  // 🚀 دالة جلب الدورة الفورية باستخدام التخزين المحلي
+  @override
+  void dispose() {
+    _prayerTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> loadCycleFast() async {
     final prefs = await SharedPreferences.getInstance();
-    
     String? cachedCycleName = prefs.getString('cached_cycle_name');
 
-    if (cachedCycleName != null) {
-      if (mounted) {
-        setState(() {
-          currentCycle = cachedCycleName;
-          isLoadingCycle = false;
-        });
-      }
+    if (cachedCycleName != null && mounted) {
+      setState(() {
+        currentCycle = cachedCycleName;
+        isLoadingCycle = false;
+      });
     }
 
     try {
@@ -94,7 +103,6 @@ class _HomePageState extends State<HomePage> {
           currentCycle = cycleDisplayName;
           isLoadingCycle = false;
         });
-
         await prefs.setString('cached_cycle_name', cycleDisplayName);
       } else if (mounted && cachedCycleName == null) {
         setState(() {
@@ -130,7 +138,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 🔑 🔔 دالة إعداد الإشعارات وتحديث توكن FCM للمدراء والمشرفين
   Future<void> _setupNotifications() async {
     try {
       FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -138,17 +145,13 @@ class _HomePageState extends State<HomePage> {
       String? token = await messaging.getToken();
 
       if (token != null && widget.uid.isNotEmpty) {
-        // تحديث التوكن في المجموعة المخصصة للدور الحالي
         String collection = widget.role == "manager" ? "users" : "supervisors";
-        
         await FirebaseFirestore.instance.collection(collection).doc(widget.uid).set(
           {'fcmToken': token}, SetOptions(merge: true)
         );
-
-        print("✅ تم تحديث FCM Token بنجاح للحساب ($collection -> ${widget.uid})");
       }
     } catch (e) {
-      print("❌ خطأ في إعداد الإشعارات بـ HomePage: $e");
+      print("❌ خطأ في إعداد الإشعارات: $e");
     }
   }
 
@@ -341,7 +344,7 @@ class _HomePageState extends State<HomePage> {
                               body: "تم إطلاق نسخة جديدة من نظام الحلقات القرآني. يرجى التحديث الآن للحصول على أحدث الميزات والاستقرار.",
                               type: "app_update_alert",
                               context: context,
-                            ).catchError((e) => print("فشل الإرسال عبر الخدمة للمشرف $supervisorId: $e"));
+                            ).catchError((e) => print("فشل الإرسال: $e"));
 
                             await FirebaseFirestore.instance.collection('notifications').add({
                               'recipientId': supervisorId,
@@ -351,7 +354,7 @@ class _HomePageState extends State<HomePage> {
                               'type': "app_update_alert",
                               'timestamp': FieldValue.serverTimestamp(),
                               'read': false,
-                            }).catchError((e) => print("خطأ في توثيق إشعار الفايرستور: $e"));
+                            });
                           }
                         }
 
@@ -389,7 +392,7 @@ class _HomePageState extends State<HomePage> {
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true, 
-        backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        backgroundColor: isDark ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.transparent, 
@@ -417,7 +420,9 @@ class _HomePageState extends State<HomePage> {
               width: double.infinity, height: double.infinity,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: isDark ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
+                  colors: isDark 
+                      ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
+                      : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
               ),
@@ -447,13 +452,16 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   
-                  // 🕌 كارت أوقات الصلاة
+                  // 🕌 💎 كارت أوقات الصلاة الفاخر للغاية (Ultra Premium Prayer Glass Card)
                   SliverToBoxAdapter(
-                    child: _buildPrayerGlassCard(isDark),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+                      child: _buildUltraPrayerGlassCard(isDark),
+                    ),
                   ),
 
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+                    padding: const EdgeInsets.fromLTRB(20, 15, 20, 30),
                     sliver: SliverGrid(
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
@@ -462,7 +470,6 @@ class _HomePageState extends State<HomePage> {
                         childAspectRatio: 1.1,
                       ),
                       delegate: SliverChildListDelegate([
-                        // 👑 أزرار وخدمات المدير
                         if (widget.role == "manager") ...[
                           _buildPerformanceMenuCard(Icons.fact_check_rounded, "تسجيل حضور مبدئي 📋", () {
                             if (currentCycleModel != null) _nav(InitialAttendancePage(cycle: currentCycleModel!));
@@ -491,7 +498,6 @@ class _HomePageState extends State<HomePage> {
                           _buildPerformanceMenuCard(Icons.query_stats, "الإحصائيات اليومية", () => _nav(const DailyStatsPage()), isDark),
                         ],
 
-                        // 👥 الخيارات المشتركة بين المدير والمشرف
                         _buildPerformanceMenuCard(Icons.groups, "عرض الطلاب", () {
                           if (currentCycleModel != null) _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid));
                         }, isDark),
@@ -513,51 +519,230 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildPrayerGlassCard(bool isDark) {
+  // 🕌 💎 كارت أوقات الصلاة الفاخر للغاية بالتأثير الزجاجي التفاعلي
+  Widget _buildUltraPrayerGlassCard(bool isDark) {
     try {
-      final prayerTimes = PrayerService.getSyriaPrayerTimes();
+      final times = PrayerService.getSyriaPrayerTimes();
+      final now = DateTime.now();
+
+      // قائمة الأوقات والأسماء
+      final List<Map<String, dynamic>> list = [
+        {"name": "الفجر", "time": times.fajr, "icon": Icons.wb_twilight_rounded},
+        {"name": "الشروق", "time": times.sunrise, "icon": Icons.wb_sunny_outlined},
+        {"name": "الظهر", "time": times.dhuhr, "icon": Icons.wb_sunny_rounded},
+        {"name": "العصر", "time": times.asr, "icon": Icons.filter_drama_rounded},
+        {"name": "المغرب", "time": times.maghrib, "icon": Icons.nights_stay_outlined},
+        {"name": "العشاء", "time": times.isha, "icon": Icons.nights_stay_rounded},
+      ];
+
+      // حساب الصلاة القادمة والوقت المتبقي
+      Map<String, dynamic>? nextPrayer;
+      for (var item in list) {
+        if ((item["time"] as DateTime).isAfter(now)) {
+          nextPrayer = item;
+          break;
+        }
+      }
+
+      // إذا مرت كل صلوات اليوم، فالصلاة القادمة الفجر
+      nextPrayer ??= list.first;
+
+      DateTime nextTime = nextPrayer["time"] as DateTime;
+      if (nextTime.isBefore(now)) {
+        nextTime = nextTime.add(const Duration(days: 1));
+      }
+
+      final diff = nextTime.difference(now);
+      final hoursLeft = diff.inHours;
+      final minutesLeft = diff.inMinutes.remainder(60);
+
+      String countdownStr = "";
+      if (hoursLeft > 0) {
+        countdownStr = "باقي $hoursLeft س و $minutesLeft د";
+      } else {
+        countdownStr = "باقي $minutesLeft دقيقة";
+      }
 
       return ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(28),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6), width: 1.2),
+              color: isDark ? const Color(0xff1e293b).withOpacity(0.5) : Colors.white.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: isDark ? accentGold.withOpacity(0.3) : primaryColor.withOpacity(0.25),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark ? Colors.black.withOpacity(0.3) : primaryColor.withOpacity(0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                )
+              ],
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            child: Column(
               children: [
-                _buildPrayerItem("المغرب 🕌", prayerTimes.maghrib, isDark),
-                Container(height: 30, width: 1, color: isDark ? Colors.white24 : Colors.black12),
-                _buildPrayerItem("العشاء 🌙", prayerTimes.isha, isDark),
+                // 🌟 الشريط العلوي الخاص بالصلاة القادمة
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? accentGold.withOpacity(0.12) : primaryColor.withOpacity(0.08),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                    border: Border(bottom: BorderSide(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05))),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: isDark ? accentGold.withOpacity(0.2) : primaryColor.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(nextPrayer["icon"], color: isDark ? accentGold : primaryColor, size: 18),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "الصلاة القادمة: ${nextPrayer['name']}",
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: isDark ? Colors.white : primaryColor,
+                                ),
+                              ),
+                              Text(
+                                _formatTime12(nextPrayer['time'] as DateTime),
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 11,
+                                  color: isDark ? accentGold : primaryColor.withOpacity(0.8),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+
+                      // عداد تنازلي بلوري
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.black38 : Colors.white.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: isDark ? accentGold.withOpacity(0.4) : primaryColor.withOpacity(0.3)),
+                        ),
+                        child: Text(
+                          countdownStr,
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? accentGold : primaryColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 🕌 شبكة الصلوات السِت الأنيقة
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: list.map((item) {
+                      bool isNext = item["name"] == nextPrayer!["name"];
+                      return _buildPrayerItemTile(
+                        name: item["name"],
+                        time: item["time"],
+                        icon: item["icon"],
+                        isNext: isNext,
+                        isDark: isDark,
+                      );
+                    }).toList(),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       );
-    } catch (_) {
+    } catch (e) {
       return const SizedBox.shrink();
     }
   }
 
-  Widget _buildPrayerItem(String name, DateTime time, bool isDark) {
-    String formattedTime = "${time.hour > 12 ? time.hour - 12 : time.hour}:${time.minute.toString().padLeft(2, '0')}";
-    return Row(
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(name, style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[700])),
-            Text(formattedTime, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? accentGold : primaryColor)),
-          ],
+  // ودجت الخلية الفردية للتوقيت
+  Widget _buildPrayerItemTile({
+    required String name,
+    required DateTime time,
+    required IconData icon,
+    required bool isNext,
+    required bool isDark,
+  }) {
+    Color activeColor = isDark ? accentGold : primaryColor;
+    String formatted = _formatTime12(time);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: isNext 
+            ? (isDark ? accentGold.withOpacity(0.2) : primaryColor.withOpacity(0.15))
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isNext ? activeColor.withOpacity(0.6) : Colors.transparent,
+          width: 1.2,
         ),
-      ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: isNext ? 18 : 15,
+            color: isNext ? activeColor : (isDark ? Colors.white54 : Colors.black45),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            name,
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 10,
+              fontWeight: isNext ? FontWeight.bold : FontWeight.normal,
+              color: isNext ? (isDark ? Colors.white : primaryColor) : (isDark ? Colors.grey[400] : Colors.black54),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            formatted,
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: isNext ? activeColor : (isDark ? Colors.white70 : Colors.black87),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  String _formatTime12(DateTime time) {
+    int hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+    String minute = time.minute.toString().padLeft(2, '0');
+    return "$hour:$minute";
   }
 
   Widget _buildRealGlassHeader(bool isDark, String currentCollection) {
