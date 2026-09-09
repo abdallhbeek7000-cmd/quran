@@ -139,3 +139,6 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages 
+dependency_overrides:
+  record_platform_interface: 1.1.0
+  record_linux: 0.7.2
