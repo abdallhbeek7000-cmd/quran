@@ -8,6 +8,9 @@ import 'package:quran_habal/pages/leave_requests_page.dart';
 import 'package:shared_preferences/shared_preferences.dart'; 
 import 'package:quran_habal/services/cloudinary_helper.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
 import 'login_page.dart';
 import 'create_cycle_page.dart';
@@ -35,6 +38,7 @@ import '../services/notification_service.dart';
 import 'quran_completions_page.dart';
 import 'qiblah_page.dart';
 import '../services/prayer_service.dart';
+import 'institute_expenses_page.dart'; // 👈 استيراد صفحة المعاملات المالية
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -63,6 +67,8 @@ class _HomePageState extends State<HomePage> {
   bool isAlsoManager = false;
   Timer? _prayerTimer;
 
+  static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+
   @override
   void initState() {
     super.initState();
@@ -71,7 +77,8 @@ class _HomePageState extends State<HomePage> {
     _checkIfManager(); 
     _checkPendingNotifications(); 
     
-    // ⏱️ تحديث كل دقيقة لإبقاء حاسبة أوقات الصلاة دقيقة
+    _initAndSchedulePrayerNotifications();
+
     _prayerTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) setState(() {});
     });
@@ -81,6 +88,73 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _prayerTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _initAndSchedulePrayerNotifications() async {
+    try {
+      tz.initializeTimeZones();
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings();
+      const initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+
+      await _localNotifications.initialize(initSettings);
+      await _localNotifications.cancelAll();
+
+      final times = PrayerService.getSyriaPrayerTimes();
+      final now = DateTime.now();
+
+      final List<Map<String, dynamic>> list = [
+        {"name": "الفجر", "time": times.fajr, "id": 101},
+        {"name": "الظهر", "time": times.dhuhr, "id": 102},
+        {"name": "العصر", "time": times.asr, "id": 103},
+        {"name": "المغرب", "time": times.maghrib, "id": 104},
+        {"name": "العشاء", "time": times.isha, "id": 105},
+      ];
+
+      for (var item in list) {
+        DateTime prayerTime = item["time"] as DateTime;
+        DateTime notificationTime = prayerTime.subtract(const Duration(minutes: 5));
+
+        if (notificationTime.isBefore(now)) {
+          notificationTime = notificationTime.add(const Duration(days: 1));
+        }
+
+        await _scheduleNotification(
+          id: item["id"],
+          title: "اقتربت صلاة ${item['name']} 🕌",
+          body: "باقي 5 دقائق على أذان صلاة ${item['name']}. استعد للصلاة!",
+          scheduledDate: notificationTime,
+        );
+      }
+    } catch (e) {
+      print("❌ خطأ في جدولة إشعارات الصلاة: $e");
+    }
+  }
+
+  Future<void> _scheduleNotification({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime scheduledDate,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'prayer_channel_id',
+      'إشعارات أوقات الصلاة',
+      channelDescription: 'تنبيهات اقتراب موعد الصلاة قبل 5 دقائق',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    const notificationDetails = NotificationDetails(android: androidDetails, iOS: DarwinNotificationDetails());
+
+    await _localNotifications.zonedSchedule(
+      id,
+      title,
+      body,
+      tz.TZDateTime.from(scheduledDate, tz.local),
+      notificationDetails,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    );
   }
 
   Future<void> loadCycleFast() async {
@@ -452,7 +526,6 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   
-                  // 🕌 💎 كارت أوقات الصلاة الفاخر للغاية (Ultra Premium Prayer Glass Card)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
@@ -474,6 +547,9 @@ class _HomePageState extends State<HomePage> {
                           _buildPerformanceMenuCard(Icons.fact_check_rounded, "تسجيل حضور مبدئي 📋", () {
                             if (currentCycleModel != null) _nav(InitialAttendancePage(cycle: currentCycleModel!));
                           }, isDark),
+
+                          // 💳 زر خيار مصروفات المعهد المنفصل
+                          _buildPerformanceMenuCard(Icons.account_balance_wallet_rounded, "مصروفات المعهد 💳", () => _nav(const InstituteExpensesPage()), isDark),
 
                           _buildPerformanceMenuCard(Icons.menu_book_rounded, "سجل الختمات 📖", () => _nav(const QuranCompletionsPage()), isDark),
                           _buildPerformanceMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
@@ -519,13 +595,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🕌 💎 كارت أوقات الصلاة الفاخر للغاية بالتأثير الزجاجي التفاعلي
   Widget _buildUltraPrayerGlassCard(bool isDark) {
     try {
       final times = PrayerService.getSyriaPrayerTimes();
       final now = DateTime.now();
 
-      // قائمة الأوقات والأسماء
       final List<Map<String, dynamic>> list = [
         {"name": "الفجر", "time": times.fajr, "icon": Icons.wb_twilight_rounded},
         {"name": "الشروق", "time": times.sunrise, "icon": Icons.wb_sunny_outlined},
@@ -535,7 +609,6 @@ class _HomePageState extends State<HomePage> {
         {"name": "العشاء", "time": times.isha, "icon": Icons.nights_stay_rounded},
       ];
 
-      // حساب الصلاة القادمة والوقت المتبقي
       Map<String, dynamic>? nextPrayer;
       for (var item in list) {
         if ((item["time"] as DateTime).isAfter(now)) {
@@ -544,7 +617,6 @@ class _HomePageState extends State<HomePage> {
         }
       }
 
-      // إذا مرت كل صلوات اليوم، فالصلاة القادمة الفجر
       nextPrayer ??= list.first;
 
       DateTime nextTime = nextPrayer["time"] as DateTime;
@@ -585,7 +657,6 @@ class _HomePageState extends State<HomePage> {
             ),
             child: Column(
               children: [
-                // 🌟 الشريط العلوي الخاص بالصلاة القادمة
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                   decoration: BoxDecoration(
@@ -633,7 +704,6 @@ class _HomePageState extends State<HomePage> {
                         ],
                       ),
 
-                      // عداد تنازلي بلوري
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
@@ -655,7 +725,6 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
 
-                // 🕌 شبكة الصلوات السِت الأنيقة
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   child: Row(
@@ -682,7 +751,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // ودجت الخلية الفردية للتوقيت
   Widget _buildPrayerItemTile({
     required String name,
     required DateTime time,

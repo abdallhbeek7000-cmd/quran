@@ -381,6 +381,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                       'status': 'absent',
                                       'absenceType': selectedType,
                                       'reason': selectedType == 'بعذر' ? selectedReason : 'غياب بدون عذر',
+                                      'isManual': true,
                                     };
                                   });
                                   Navigator.pop(ctx);
@@ -402,7 +403,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
     );
   }
 
-  // 🚀 دالة الحفظ الذكية المعالجة للتكرار كلياً
+  // 🚀 دالة الحفظ الذكية المحصنة تماماً ضد تكرار الجلسات والطلبات المعتمدة
   Future<void> _saveAttendance(bool isDark) async {
     setState(() => isSaving = true);
     try {
@@ -412,6 +413,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
           .collection('daily_attendance')
           .doc(todayDate);
 
+      // 1️⃣ حفظ سجل التفقد المبدئي اليومي
       batch.set(attendanceDoc, {
         'date': todayDate,
         'cycleId': widget.cycle.id,
@@ -428,32 +430,46 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
         String studentId = entry.key;
         var record = entry.value;
         String status = record['status'] ?? 'none';
+        bool isPreApproved = record['isPreApproved'] == true;
+
+        String customSessionId = "${studentId}_$todayDate";
 
         if (status == 'present') {
           presentCount++;
+
+          // إذا تم تحويله لحاضر وكان لديه غياب عادي غير الاستئذان المعتمد، نحذف جلسة الغياب
+          var existingDoc = await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).get();
+          if (existingDoc.exists) {
+            var exData = existingDoc.data() ?? {};
+            if (exData['absenceType'] != 'بعذر' || !exData['notes'].toString().contains('استئذان')) {
+              await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).delete().catchError((_) {});
+            }
+          }
+
         } else if (status == 'absent') {
           absentCount++;
           String absenceType = record['absenceType'] ?? 'بدون عذر';
           String reason = record['reason'] ?? 'غياب عن الدوام المبدئي';
 
-          // 🔑 معرف الجلسة الموحد لنفس اليوم
-          String customSessionId = "${studentId}_$todayDate";
-
-          // 🛡️ فحص حقيقي ومباشر لقواعد البيانات قبل كتابة الجلسة
+          // 🛡️ فحص الجلسات المعتمدة لمنع تكرار الغياب
           var existingSessionDoc = await FirebaseFirestore.instance
               .collection('sessions')
               .doc(customSessionId)
               .get();
 
-          // إذا كانت الجلسة موجودة مسبقاً وبحالة "بعذر" (بسبب قبول طلب استئذان سابق)، نتجاوز إنشاء جلسة جديدة نهائياً!
           if (existingSessionDoc.exists) {
             var existingData = existingSessionDoc.data() ?? {};
-            if (existingData['absenceType'] == 'بعذر' || existingData['notes']?.toString().contains('استئذان') == true) {
-              print("⚠️ الطالب $studentId يمتلك جلسة استئذان معتمدة مسبقاً، تم تجاوز إعادة الكتابة.");
-              continue; 
+            bool isAlreadyApprovedLeave = existingData['absenceType'] == 'بعذر' || 
+                                          existingData['notes']?.toString().contains('استئذان') == true ||
+                                          existingData['absenceReason']?.toString().contains('استئذان') == true;
+
+            if (isAlreadyApprovedLeave || isPreApproved) {
+              print("⚠️ الطالب $studentId يمتلك بالفعل جلسة غياب رسمية معتمدة مسبقاً (استئذان)، تم تجنب التكرار.");
+              continue; // 👈 التجاوز فوراً وعدم إنشاء جلسة ثانية فوقها
             }
           }
 
+          // 🟢 إنشاء جلسة غياب للطلاب الذين ليس لديهم جلسة استئذان سابقة
           var studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
           if (studentDoc.exists) {
             var sData = studentDoc.data()!;
@@ -491,7 +507,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
       if (!mounted) return;
       _showTopGlassNotification(
         "تم حفظ التفقد المبدئي بنجاح 🎉",
-        "حاضر: $presentCount | غائب كجلسة رسمية: $absentCount",
+        "حاضر: $presentCount | غائب: $absentCount",
         isDark,
       );
       Navigator.pop(context);
@@ -634,282 +650,261 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('sessions').snapshots(),
-                          builder: (context, sessionsSnap) {
-                            Map<String, String> approvedAbsentStudentsMap = {};
+                          stream: FirebaseFirestore.instance.collection('leave_requests').where('status', isEqualTo: 'approved').snapshots(),
+                          builder: (context, leaveSnap) {
+                            Map<String, String> approvedLeaveMap = {};
 
-                            if (sessionsSnap.hasData) {
-                              for (var doc in sessionsSnap.data!.docs) {
-                                var sData = doc.data() as Map<String, dynamic>;
-                                String sId = sData['studentId'] ?? '';
-                                String rawDate = sData['date'] ?? '';
-                                bool isAbsent = sData['absent'] ?? false;
-                                String absenceReason = sData['absenceReason'] ?? sData['notes'] ?? 'استئذان مقبول';
-
-                                if (sId.isNotEmpty && isAbsent && _normalizeDate(rawDate) == _normalizeDate(todayDate)) {
-                                  approvedAbsentStudentsMap[sId] = absenceReason.isNotEmpty ? absenceReason : 'طلب استئذان مقبول';
+                            if (leaveSnap.hasData) {
+                              for (var doc in leaveSnap.data!.docs) {
+                                var lData = doc.data() as Map<String, dynamic>;
+                                String sId = lData['studentId'] ?? '';
+                                String rawDate = lData['date'] ?? '';
+                                if (sId.isNotEmpty && _normalizeDate(rawDate) == _normalizeDate(todayDate)) {
+                                  approvedLeaveMap[sId] = lData['reason'] ?? 'طلب استئذان مقبول';
                                 }
                               }
                             }
 
                             return StreamBuilder<QuerySnapshot>(
                               stream: FirebaseFirestore.instance
-                                  .collection('leave_requests')
-                                  .where('status', isEqualTo: 'approved')
+                                  .collection('students')
+                                  .where('cycleId', isEqualTo: widget.cycle.id)
                                   .snapshots(),
-                              builder: (context, leaveSnap) {
-                                if (leaveSnap.hasData) {
-                                  for (var doc in leaveSnap.data!.docs) {
-                                    var lData = doc.data() as Map<String, dynamic>;
-                                    String sId = lData['studentId'] ?? '';
-                                    String rawDate = lData['date'] ?? '';
-                                    if (sId.isNotEmpty && _normalizeDate(rawDate) == _normalizeDate(todayDate)) {
-                                      approvedAbsentStudentsMap[sId] = lData['reason'] ?? 'طلب استئذان مقبول';
-                                    }
-                                  }
+                              builder: (context, snapshot) {
+                                if (snapshot.hasError) {
+                                  return Center(child: Text("خطأ: ${snapshot.error}", style: const TextStyle(fontFamily: 'Cairo')));
+                                }
+                                if (!snapshot.hasData) {
+                                  return const Center(child: CircularProgressIndicator());
                                 }
 
-                                return StreamBuilder<QuerySnapshot>(
-                                  stream: FirebaseFirestore.instance
-                                      .collection('students')
-                                      .where('cycleId', isEqualTo: widget.cycle.id)
-                                      .snapshots(),
-                                  builder: (context, snapshot) {
-                                    if (snapshot.hasError) {
-                                      return Center(child: Text("خطأ: ${snapshot.error}", style: const TextStyle(fontFamily: 'Cairo')));
+                                var docs = snapshot.data!.docs;
+
+                                List<DocumentSnapshot> activeDocs = docs.where((doc) {
+                                  var data = doc.data() as Map<String, dynamic>;
+                                  bool isArchived = data['archived'] == true || data['isArchived'] == true;
+                                  bool isStopped = data['isStopped'] == true;
+                                  String status = data['status']?.toString().toLowerCase() ?? '';
+                                  return !isArchived && !isStopped && status != 'stopped' && status != 'archived';
+                                }).toList();
+
+                                if (activeDocs.isEmpty) {
+                                  return const Center(
+                                    child: Text("لا يوجد طلاب نشطون مسجلون بالدورة الحالية.", style: TextStyle(fontFamily: 'Cairo')),
+                                  );
+                                }
+
+                                activeDocs.sort((a, b) {
+                                  var dataA = a.data() as Map<String, dynamic>;
+                                  var dataB = b.data() as Map<String, dynamic>;
+
+                                  int serialA = int.tryParse(dataA['serial']?.toString() ?? '') ?? 99999999;
+                                  int serialB = int.tryParse(dataB['serial']?.toString() ?? '') ?? 99999999;
+
+                                  return serialA.compareTo(serialB);
+                                });
+
+                                if (searchQuery.isNotEmpty) {
+                                  activeDocs = activeDocs.where((doc) {
+                                    var data = doc.data() as Map<String, dynamic>;
+                                    String name = (data['name'] ?? '').toString().toLowerCase();
+                                    String serial = (data['serial'] ?? '').toString().toLowerCase();
+                                    return name.contains(searchQuery) || serial.contains(searchQuery);
+                                  }).toList();
+                                }
+
+                                if (activeDocs.isEmpty) {
+                                  return const Center(
+                                    child: Text("لا يطابق بحثك أي طالب مسجل 🔍", style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
+                                  );
+                                }
+
+                                return ListView.builder(
+                                  physics: const BouncingScrollPhysics(),
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                  itemCount: activeDocs.length,
+                                  itemBuilder: (context, index) {
+                                    var studentDoc = activeDocs[index];
+                                    var student = studentDoc.data() as Map<String, dynamic>;
+                                    String studentId = studentDoc.id;
+
+                                    bool isPreApproved = approvedLeaveMap.containsKey(studentId);
+                                    String leaveReason = approvedLeaveMap[studentId] ?? 'طلب استئذان مقبول';
+
+                                    if (isPreApproved && !attendanceData.containsKey(studentId)) {
+                                      attendanceData[studentId] = {
+                                        'status': 'absent',
+                                        'absenceType': 'بعذر',
+                                        'reason': leaveReason,
+                                        'isPreApproved': true,
+                                      };
                                     }
-                                    if (!snapshot.hasData) {
-                                      return const Center(child: CircularProgressIndicator());
-                                    }
 
-                                    var docs = snapshot.data!.docs;
+                                    var currentRecord = attendanceData[studentId] ?? {};
+                                    String currentStatus = currentRecord['status'] ?? 'none';
+                                    String absenceType = currentRecord['absenceType'] ?? '';
+                                    String reason = currentRecord['reason'] ?? '';
 
-                                    List<DocumentSnapshot> activeDocs = docs.where((doc) {
-                                      var data = doc.data() as Map<String, dynamic>;
-                                      bool isArchived = data['archived'] == true || data['isArchived'] == true;
-                                      bool isStopped = data['isStopped'] == true;
-                                      String status = data['status']?.toString().toLowerCase() ?? '';
-                                      return !isArchived && !isStopped && status != 'stopped' && status != 'archived';
-                                    }).toList();
-
-                                    if (activeDocs.isEmpty) {
-                                      return const Center(
-                                        child: Text("لا يوجد طلاب نشطون مسجلون بالدورة الحالية.", style: TextStyle(fontFamily: 'Cairo')),
-                                      );
-                                    }
-
-                                    activeDocs.sort((a, b) {
-                                      var dataA = a.data() as Map<String, dynamic>;
-                                      var dataB = b.data() as Map<String, dynamic>;
-
-                                      int serialA = int.tryParse(dataA['serial']?.toString() ?? '') ?? 99999999;
-                                      int serialB = int.tryParse(dataB['serial']?.toString() ?? '') ?? 99999999;
-
-                                      return serialA.compareTo(serialB);
-                                    });
-
-                                    if (searchQuery.isNotEmpty) {
-                                      activeDocs = activeDocs.where((doc) {
-                                        var data = doc.data() as Map<String, dynamic>;
-                                        String name = (data['name'] ?? '').toString().toLowerCase();
-                                        String serial = (data['serial'] ?? '').toString().toLowerCase();
-                                        return name.contains(searchQuery) || serial.contains(searchQuery);
-                                      }).toList();
-                                    }
-
-                                    if (activeDocs.isEmpty) {
-                                      return const Center(
-                                        child: Text("لا يطابق بحثك أي طالب مسجل 🔍", style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
-                                      );
-                                    }
-
-                                    return ListView.builder(
-                                      physics: const BouncingScrollPhysics(),
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                      itemCount: activeDocs.length,
-                                      itemBuilder: (context, index) {
-                                        var studentDoc = activeDocs[index];
-                                        var student = studentDoc.data() as Map<String, dynamic>;
-                                        String studentId = studentDoc.id;
-
-                                        bool isPreApproved = approvedAbsentStudentsMap.containsKey(studentId);
-                                        String leaveReason = approvedAbsentStudentsMap[studentId] ?? 'طلب استئذان مقبول';
-
-                                        if (isPreApproved) {
-                                          attendanceData[studentId] = {
-                                            'status': 'absent',
-                                            'absenceType': 'بعذر',
-                                            'reason': leaveReason,
-                                            'isPreApproved': true,
-                                          };
-                                        }
-
-                                        var currentRecord = attendanceData[studentId] ?? {};
-                                        String currentStatus = currentRecord['status'] ?? 'none';
-                                        String absenceType = currentRecord['absenceType'] ?? '';
-                                        String reason = currentRecord['reason'] ?? '';
-
-                                        return Container(
-                                          margin: const EdgeInsets.only(bottom: 12),
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(20),
-                                            child: BackdropFilter(
-                                              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                                                decoration: BoxDecoration(
-                                                  color: isPreApproved
-                                                      ? Colors.orange.withOpacity(0.14)
-                                                      : (isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.5)),
-                                                  borderRadius: BorderRadius.circular(20),
-                                                  border: Border.all(
-                                                    color: isPreApproved
-                                                        ? Colors.orange.withOpacity(0.6)
-                                                        : (isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6)),
-                                                    width: isPreApproved ? 1.5 : 1.2,
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    if (student['serial'] != null)
-                                                      Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                        margin: const EdgeInsets.only(left: 8),
-                                                        decoration: BoxDecoration(
-                                                          color: primaryColor.withOpacity(0.15),
-                                                          borderRadius: BorderRadius.circular(8),
-                                                        ),
-                                                        child: Text(
-                                                          "#${student['serial']}",
-                                                          style: TextStyle(
-                                                            fontFamily: 'Cairo',
-                                                            fontSize: 11,
-                                                            fontWeight: FontWeight.bold,
-                                                            color: isDark ? accentGold : primaryColor,
-                                                          ),
-                                                        ),
-                                                      ),
-
-                                                    CircleAvatar(
-                                                      radius: 20,
-                                                      backgroundColor: primaryColor.withOpacity(0.15),
-                                                      backgroundImage: student['imageUrl'] != null && student['imageUrl'].toString().isNotEmpty
-                                                          ? NetworkImage(student['imageUrl'])
-                                                          : null,
-                                                      child: (student['imageUrl'] == null || student['imageUrl'].toString().isEmpty)
-                                                          ? Icon(Icons.person, color: isDark ? Colors.white : primaryColor)
-                                                          : null,
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(20),
+                                        child: BackdropFilter(
+                                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                                            decoration: BoxDecoration(
+                                              color: isPreApproved
+                                                  ? Colors.orange.withOpacity(0.14)
+                                                  : (isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.5)),
+                                              borderRadius: BorderRadius.circular(20),
+                                              border: Border.all(
+                                                color: isPreApproved
+                                                    ? Colors.orange.withOpacity(0.6)
+                                                    : (isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6)),
+                                                width: isPreApproved ? 1.5 : 1.2,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                if (student['serial'] != null)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    margin: const EdgeInsets.only(left: 8),
+                                                    decoration: BoxDecoration(
+                                                      color: primaryColor.withOpacity(0.15),
+                                                      borderRadius: BorderRadius.circular(8),
                                                     ),
-                                                    const SizedBox(width: 10),
-                                                    Expanded(
-                                                      child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                    child: Text(
+                                                      "#${student['serial']}",
+                                                      style: TextStyle(
+                                                        fontFamily: 'Cairo',
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: isDark ? accentGold : primaryColor,
+                                                      ),
+                                                    ),
+                                                  ),
+
+                                                CircleAvatar(
+                                                  radius: 20,
+                                                  backgroundColor: primaryColor.withOpacity(0.15),
+                                                  backgroundImage: student['imageUrl'] != null && student['imageUrl'].toString().isNotEmpty
+                                                      ? NetworkImage(student['imageUrl'])
+                                                      : null,
+                                                  child: (student['imageUrl'] == null || student['imageUrl'].toString().isEmpty)
+                                                      ? Icon(Icons.person, color: isDark ? Colors.white : primaryColor)
+                                                      : null,
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Row(
                                                         children: [
-                                                          Row(
-                                                            children: [
-                                                              Expanded(
-                                                                child: Text(
-                                                                  student['name'] ?? 'طالب',
-                                                                  style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : primaryColor),
-                                                                  overflow: TextOverflow.ellipsis,
-                                                                ),
-                                                              ),
-                                                              if (isPreApproved) ...[
-                                                                const SizedBox(width: 4),
-                                                                const Icon(Icons.verified_user_rounded, color: Colors.orange, size: 14),
-                                                              ]
-                                                            ],
-                                                          ),
-                                                          if (isPreApproved)
-                                                            Text(
-                                                              "مستأذن مسبقاً 📄: $leaveReason",
-                                                              style: const TextStyle(
-                                                                fontSize: 11,
-                                                                fontFamily: 'Cairo',
-                                                                color: Colors.orange,
-                                                                fontWeight: FontWeight.bold,
-                                                              ),
-                                                              maxLines: 1,
+                                                          Expanded(
+                                                            child: Text(
+                                                              student['name'] ?? 'طالب',
+                                                              style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : primaryColor),
                                                               overflow: TextOverflow.ellipsis,
-                                                            )
-                                                          else if (currentStatus == 'absent' && absenceType.isNotEmpty)
-                                                            Text(
-                                                              "$absenceType: $reason",
-                                                              style: TextStyle(
-                                                                fontSize: 11,
-                                                                fontFamily: 'Cairo',
-                                                                color: absenceType == 'بعذر' ? Colors.orange : Colors.redAccent,
-                                                                fontWeight: FontWeight.bold,
-                                                              ),
-                                                              maxLines: 1,
-                                                              overflow: TextOverflow.ellipsis,
-                                                            )
-                                                          else
-                                                            Text(
-                                                              "المشرف: ${student['supervisorName'] ?? 'غير محدد'}",
-                                                              style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54),
                                                             ),
+                                                          ),
+                                                          if (isPreApproved) ...[
+                                                            const SizedBox(width: 4),
+                                                            const Icon(Icons.verified_user_rounded, color: Colors.orange, size: 14),
+                                                          ]
                                                         ],
                                                       ),
+                                                      if (isPreApproved)
+                                                        Text(
+                                                          "مستأذن مسبقاً 📄: $leaveReason",
+                                                          style: const TextStyle(
+                                                            fontSize: 11,
+                                                            fontFamily: 'Cairo',
+                                                            color: Colors.orange,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        )
+                                                      else if (currentStatus == 'absent' && absenceType.isNotEmpty)
+                                                        Text(
+                                                          "$absenceType: $reason",
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontFamily: 'Cairo',
+                                                            color: absenceType == 'بعذر' ? Colors.orange : Colors.redAccent,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        )
+                                                      else
+                                                        Text(
+                                                          "المشرف: ${student['supervisorName'] ?? 'غير محدد'}",
+                                                          style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+
+                                                Row(
+                                                  children: [
+                                                    // زر الحضور (صح)
+                                                    InkWell(
+                                                      onTap: () {
+                                                        setState(() {
+                                                          if (currentStatus == 'present') {
+                                                            attendanceData.remove(studentId);
+                                                          } else {
+                                                            attendanceData[studentId] = {
+                                                              'status': 'present',
+                                                              'isManual': true,
+                                                            };
+                                                          }
+                                                        });
+                                                      },
+                                                      borderRadius: BorderRadius.circular(12),
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                        decoration: BoxDecoration(
+                                                          color: currentStatus == 'present' ? Colors.green : Colors.transparent,
+                                                          borderRadius: BorderRadius.circular(12),
+                                                          border: Border.all(color: currentStatus == 'present' ? Colors.green : (isDark ? Colors.white24 : Colors.black26)),
+                                                        ),
+                                                        child: Icon(Icons.check_circle_rounded, size: 18, color: currentStatus == 'present' ? Colors.white : Colors.green),
+                                                      ),
                                                     ),
+                                                    const SizedBox(width: 8),
 
-                                                    Row(
-                                                      children: [
-                                                        InkWell(
-                                                          onTap: isPreApproved
-                                                              ? null
-                                                              : () {
-                                                                  setState(() {
-                                                                    if (currentStatus == 'present') {
-                                                                      attendanceData.remove(studentId);
-                                                                    } else {
-                                                                      attendanceData[studentId] = {'status': 'present'};
-                                                                    }
-                                                                  });
-                                                                },
+                                                    // زر الغياب (خطأ)
+                                                    InkWell(
+                                                      onTap: () {
+                                                        if (currentStatus == 'absent') {
+                                                          setState(() => attendanceData.remove(studentId));
+                                                        } else {
+                                                          _showAbsenceDialog(studentId, student['name'] ?? 'طالب', isDark);
+                                                        }
+                                                      },
+                                                      borderRadius: BorderRadius.circular(12),
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                        decoration: BoxDecoration(
+                                                          color: currentStatus == 'absent' ? (absenceType == 'بعذر' ? Colors.orange : Colors.redAccent) : Colors.transparent,
                                                           borderRadius: BorderRadius.circular(12),
-                                                          child: Container(
-                                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                                            decoration: BoxDecoration(
-                                                              color: currentStatus == 'present' ? Colors.green : Colors.transparent,
-                                                              borderRadius: BorderRadius.circular(12),
-                                                              border: Border.all(color: currentStatus == 'present' ? Colors.green : (isDark ? Colors.white24 : Colors.black26)),
-                                                            ),
-                                                            child: Icon(Icons.check_circle_rounded, size: 18, color: currentStatus == 'present' ? Colors.white : Colors.green),
-                                                          ),
+                                                          border: Border.all(color: currentStatus == 'absent' ? (absenceType == 'بعذر' ? Colors.orange : Colors.redAccent) : (isDark ? Colors.white24 : Colors.black26)),
                                                         ),
-                                                        const SizedBox(width: 8),
-
-                                                        InkWell(
-                                                          onTap: isPreApproved
-                                                              ? null
-                                                              : () {
-                                                                  if (currentStatus == 'absent') {
-                                                                    setState(() => attendanceData.remove(studentId));
-                                                                  } else {
-                                                                    _showAbsenceDialog(studentId, student['name'] ?? 'طالب', isDark);
-                                                                  }
-                                                                },
-                                                          borderRadius: BorderRadius.circular(12),
-                                                          child: Container(
-                                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                                            decoration: BoxDecoration(
-                                                              color: currentStatus == 'absent' ? (isPreApproved ? Colors.orange : Colors.redAccent) : Colors.transparent,
-                                                              borderRadius: BorderRadius.circular(12),
-                                                              border: Border.all(color: currentStatus == 'absent' ? (isPreApproved ? Colors.orange : Colors.redAccent) : (isDark ? Colors.white24 : Colors.black26)),
-                                                            ),
-                                                            child: Icon(Icons.cancel_rounded, size: 18, color: currentStatus == 'absent' ? Colors.white : Colors.redAccent),
-                                                          ),
-                                                        ),
-                                                      ],
+                                                        child: Icon(Icons.cancel_rounded, size: 18, color: currentStatus == 'absent' ? Colors.white : Colors.redAccent),
+                                                      ),
                                                     ),
                                                   ],
                                                 ),
-                                              ),
+                                              ],
                                             ),
                                           ),
-                                        );
-                                      },
+                                        ),
+                                      ),
                                     );
                                   },
                                 );

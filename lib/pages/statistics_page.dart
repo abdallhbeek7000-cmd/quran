@@ -145,6 +145,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
         bool isArchived = sData['archived'] ?? false;
         if (isArchived) continue;
 
+        // 🚫 استبعاد طلاب (جزء عمَّ) المسجلين في بيانات الطالب
+        bool studentIsJuzAmma = sData['isJuzAmma'] ?? false;
+        if (studentIsJuzAmma) continue;
+
         String sId = student.id;
         String sName = sData['name'];
         String imageUrl = sData.containsKey('imageUrl') ? sData['imageUrl'] ?? '' : '';
@@ -155,6 +159,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
         var sSessions = sessionsSnap.docs.where((doc) {
           var data = doc.data();
           if (data['studentId'] != sId) return false;
+          
+          // 🚫 استبعاد الجلسات المصنفة كـ (جزء عمَّ)
+          if (data['isJuzAmma'] == true) return false;
+
           if (filterMode == 2) return true;
           return _isDateInRange(data['date'] ?? '', targetStart, targetEnd);
         }).map((d) => d.data()).toList();
@@ -188,6 +196,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
             }
           }
         }
+
+        // 🚫 شرط الفلترة الرئيسي: عدم إظهار أي طالب حصيلته صفر في الحفظ والمراجعة
+        if (totalPages == 0 && reviewPages == 0) continue;
 
         if (!isCompleted) cycleTotalPages += totalPages;
         cycleTotalReview += reviewPages;
@@ -246,7 +257,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
       excel_lib.Sheet sheetObject = excel['الإحصائيات'];
       excel.delete('Sheet1');
 
-      // العناوين الفرعية بنفس بيانات الجدول المتاحة
       List<excel_lib.CellValue> headers = [
         excel_lib.TextCellValue('الفئة'),
         excel_lib.TextCellValue('اسم الطالب'),
@@ -441,7 +451,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                     child: isLoading 
                       ? const Center(child: CircularProgressIndicator())
                       : (!hasAnyData 
-                          ? Center(child: Text("لا توجد بيانات في هذه الفترة 📭", style: TextStyle(color: isDark ? Colors.white54 : primaryColor, fontFamily: 'Cairo', fontWeight: FontWeight.bold)))
+                          ? Center(child: Text("لا توجد إحصائيات مسجلة لهذه الفترة 📭", style: TextStyle(color: isDark ? Colors.white54 : primaryColor, fontFamily: 'Cairo', fontWeight: FontWeight.bold)))
                           : ListView(
                               physics: const BouncingScrollPhysics(),
                               padding: const EdgeInsets.only(bottom: 80),

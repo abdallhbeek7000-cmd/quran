@@ -648,7 +648,6 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                       for (var s in sessions) {
                         var data = s.data() as Map<String, dynamic>;
                         
-                        // فحص قائمة المشرفين للجلسة (إذا كان أكثر من مشرف)
                         List<dynamic>? supNamesList = data['supervisorNames'];
                         if (supNamesList != null && supNamesList.isNotEmpty) {
                           for (var supName in supNamesList) {
@@ -658,7 +657,6 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                             }
                           }
                         } else {
-                          // المشرف المفرد للجلسة
                           String singleSup = data['supervisorName']?.toString().trim() ?? '';
                           if (singleSup.isNotEmpty) {
                             supervisorSessionCounts[singleSup] = (supervisorSessionCounts[singleSup] ?? 0) + 1;
@@ -679,7 +677,6 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                         };
                       }).toList();
 
-                      // الترتيب من الأكبر إلى الأصغر
                       supervisorsList.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
                       return ListView.builder(
@@ -1044,7 +1041,7 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🚀 3. صفحة تقرير الغيابات التراكمية الشاملة لجميع الطلاب
+// 🚀 3. صفحة تقرير الغيابات التراكمية الشاملة لجميع الطلاب (المحدثة)
 // =========================================================================
 class AllAbsentStudentsSummaryPage extends StatelessWidget {
   const AllAbsentStudentsSummaryPage({super.key});
@@ -1059,6 +1056,163 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
     } catch (e) {
       print("Error sharing phone number: $e");
     }
+  }
+
+  void _shareAbsenceReport(String studentName, List<dynamic> sessions) {
+    String text = "إشعار غياب 🚨\n\n";
+    text += "الطالب: $studentName\n";
+    text += "إجمالي الغيابات: ${sessions.length}\n\n";
+    text += "تفاصيل الجلسات التي غاب عنها:\n";
+    
+    for (int i = 0; i < sessions.length; i++) {
+      String date = _extractDate(sessions[i]);
+      String supervisor = sessions[i]['supervisorName'] ?? 'غير محدد';
+      text += "${i + 1}- التاريخ: $date (المشرف: $supervisor)\n";
+    }
+    
+    text += "\nنرجو متابعة الطالب حرصاً على مستواه. شكراً لتعاونكم 🌸";
+    
+    Share.share(text);
+  }
+
+  String _extractDate(Map<String, dynamic> sessionData) {
+    dynamic dateVal = sessionData['date'] ?? sessionData['createdAt'] ?? sessionData['timestamp'];
+    if (dateVal is Timestamp) {
+      DateTime dt = dateVal.toDate();
+      return "${dt.year}/${dt.month}/${dt.day}";
+    }
+    return dateVal?.toString().split(' ').first ?? 'غير محدد';
+  }
+
+  void _showStudentAbsenceDetails(BuildContext context, String studentName, List<dynamic> sessions, bool isDarkMode) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.65,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xff1e293b) : const Color(0xfff8fafc),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 20, spreadRadius: 5)
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 50,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? Colors.white24 : Colors.black26,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Icon(Icons.person_off_rounded, color: Colors.redAccent, size: 28),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "سجل غيابات: $studentName",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Cairo',
+                        color: isDarkMode ? Colors.white : primaryColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                "إجمالي الغيابات: ${sessions.length} جلسة",
+                style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black54),
+              ),
+              const Divider(height: 30),
+              Expanded(
+                child: ListView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: sessions.length,
+                  itemBuilder: (context, index) {
+                    final session = sessions[index] as Map<String, dynamic>;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.event_busy_rounded, color: Colors.redAccent, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "تاريخ الجلسة: ${_extractDate(session)}",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo',
+                                    color: isDarkMode ? Colors.white : primaryColor,
+                                  ),
+                                ),
+                                Text(
+                                  "المشرف: ${session['supervisorName'] ?? 'غير محدد'}",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontFamily: 'Cairo',
+                                    color: isDarkMode ? Colors.white54 : Colors.black54,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 15),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _shareAbsenceReport(studentName, sessions),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade600,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  ),
+                  icon: const Icon(Icons.share_rounded, color: Colors.white),
+                  label: const Text(
+                    "مشاركة التقرير مع ولي الأمر",
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -1117,16 +1271,15 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                       studentAbsenceMap[studentId] = {
                         'studentId': studentId,
                         'studentName': studentName,
-                        'count': 1,
-                        'supervisorName': data['supervisorName'] ?? 'غير محدد',
+                        'sessions': [data],
                       };
                     } else {
-                      studentAbsenceMap[studentId]!['count'] = (studentAbsenceMap[studentId]!['count'] as int) + 1;
+                      (studentAbsenceMap[studentId]!['sessions'] as List).add(data);
                     }
                   }
 
                   List<Map<String, dynamic>> sortedAbsenceList = studentAbsenceMap.values.toList();
-                  sortedAbsenceList.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+                  sortedAbsenceList.sort((a, b) => (b['sessions'] as List).length.compareTo((a['sessions'] as List).length));
 
                   return ListView.builder(
                     physics: const BouncingScrollPhysics(),
@@ -1136,8 +1289,10 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                       final item = sortedAbsenceList[index];
                       final String studentId = item['studentId'];
                       final String studentName = item['studentName'];
-                      final int totalAbsences = item['count'];
-                      final String supervisorName = item['supervisorName'];
+                      final List<dynamic> studentSessions = item['sessions'];
+                      final int totalAbsences = studentSessions.length;
+                      
+                      final String lastSupervisorName = studentSessions.last['supervisorName'] ?? 'غير محدد';
 
                       return FutureBuilder<DocumentSnapshot>(
                         future: FirebaseFirestore.instance.collection('students').doc(studentId).get(),
@@ -1149,55 +1304,69 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 14),
-                            padding: const EdgeInsets.all(15),
-                            decoration: BoxDecoration(
-                              color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.redAccent.withOpacity(0.35), width: 1.2),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.person_off_rounded, color: Colors.redAccent, size: 22),
-                                        const SizedBox(width: 8),
-                                        Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor)),
-                                      ],
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red.shade400,
-                                        borderRadius: BorderRadius.circular(12),
-                                        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 6)],
-                                      ),
-                                      child: Text(
-                                        "$totalAbsences غيابات",
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text("المشرف: $supervisorName", style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black54)),
-                                if (parentPhone.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: TextButton.icon(
-                                      style: TextButton.styleFrom(backgroundColor: Colors.green.withOpacity(0.15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                                      onPressed: () => _makePhoneCall(parentPhone),
-                                      icon: const Icon(Icons.phone, size: 15, color: Colors.green),
-                                      label: const Text("اتصال بولي الأمر", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 11)),
-                                    ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: () => _showStudentAbsenceDetails(context, studentName, studentSessions, isDarkMode),
+                                child: Container(
+                                  padding: const EdgeInsets.all(15),
+                                  decoration: BoxDecoration(
+                                    color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.redAccent.withOpacity(0.35), width: 1.2),
+                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
                                   ),
-                                ]
-                              ],
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.person_off_rounded, color: Colors.redAccent, size: 22),
+                                              const SizedBox(width: 8),
+                                              Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor)),
+                                            ],
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.red.shade400,
+                                              borderRadius: BorderRadius.circular(12),
+                                              boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 6)],
+                                            ),
+                                            child: Text(
+                                              "$totalAbsences غيابات",
+                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text("المشرف (آخر جلسة): $lastSupervisorName", style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black54)),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          if (parentPhone.isNotEmpty)
+                                            TextButton.icon(
+                                              style: TextButton.styleFrom(backgroundColor: Colors.green.withOpacity(0.15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                                              onPressed: () => _makePhoneCall(parentPhone),
+                                              icon: const Icon(Icons.phone, size: 15, color: Colors.green),
+                                              label: const Text("اتصال بولي الأمر", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 11)),
+                                            ),
+                                          Text(
+                                            "اضغط للتفاصيل والمشاركة 👆",
+                                            style: TextStyle(fontSize: 10, color: isDarkMode ? Colors.amber : Colors.amber.shade700, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ),
                           );
                         },

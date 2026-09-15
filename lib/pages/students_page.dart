@@ -112,7 +112,7 @@ class _StudentsPageState extends State<StudentsPage> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
               onPressed: () async {
                 Navigator.pop(dialogContext); 
-                await FirebaseFirestore.instance.collection('students').doc(studentId).set({'archived': true}, SetOptions(merge: true));
+                await FirebaseFirestore.instance.collection('students').doc(studentId).set({'archived': true, 'isArchived': true}, SetOptions(merge: true));
                 if (context.mounted) {
                   GlassToast.show(
                     context, 
@@ -176,7 +176,6 @@ class _StudentsPageState extends State<StudentsPage> {
     );
   }
 
-  // 📊 دالة التصدير إلى إكسل المعدلة والمضمونة بدون أي خطأ برمجي
   Future<void> exportToExcel() async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -195,7 +194,6 @@ class _StudentsPageState extends State<StudentsPage> {
         return;
       }
 
-      // 🚀 1. ترتيب الطلاب تصاعدياً بحسب الرقم التسلسلي (serial)
       List<QueryDocumentSnapshot> docs = snapshot.docs.toList();
       docs.sort((a, b) {
         var aData = a.data() as Map<String, dynamic>;
@@ -210,7 +208,6 @@ class _StudentsPageState extends State<StudentsPage> {
       excel_lib.Sheet sheetObject = excel['جدول الطلاب'];
       excel.delete('Sheet1'); 
 
-      // 🚀 2. عناوين الأعمدة الشاملة وبدون تكرار (من اليمين لليسار)
       sheetObject.appendRow([
         excel_lib.TextCellValue('التسلسلي'),
         excel_lib.TextCellValue('اسم الطالب'),
@@ -224,7 +221,6 @@ class _StudentsPageState extends State<StudentsPage> {
         excel_lib.TextCellValue('المشرف'),
       ]);
 
-      // 🚀 3. تعبئة بيانات الطلاب بحسب الحقول الحقيقية في الفايربيز
       for (var doc in docs) {
         var data = doc.data() as Map<String, dynamic>;
 
@@ -235,7 +231,6 @@ class _StudentsPageState extends State<StudentsPage> {
         String fatherNameStr = data['fatherName']?.toString() ?? '---';
         String motherNameStr = data['motherName']?.toString() ?? '---';
 
-        // استخراج تاريخ المواليد الصافي YYYY-MM-DD
         String birthDateRaw = data['birthDate']?.toString() ?? '---';
         String birthDateClean = birthDateRaw.contains(' ') ? birthDateRaw.split(' ')[0] : birthDateRaw;
 
@@ -919,9 +914,20 @@ class ArchivedStudentsPage extends StatelessWidget {
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.transparent,
-          title: Text(
-            "الطلاب المتوقفين (الأرشيف)",
-            style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo'),
+          title: StreamBuilder<QuerySnapshot>(
+            stream: query.snapshots(),
+            builder: (context, snapshot) {
+              int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+              return Text(
+                "الطلاب المتوقفين (الأرشيف) ($count)",
+                style: TextStyle(
+                  color: isDarkMode ? Colors.white : primaryColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  fontFamily: 'Cairo',
+                ),
+              );
+            },
           ),
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
@@ -929,23 +935,43 @@ class ArchivedStudentsPage extends StatelessWidget {
         body: Stack(
           children: [
             Container(
-              width: double.infinity, height: double.infinity,
+              width: double.infinity,
+              height: double.infinity,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: isDarkMode 
+                      ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
+                      : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], 
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
               ),
             ),
             Stack(
               children: [
                 Positioned(
-                  top: -50, left: -50,
-                  child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                  top: -50,
+                  left: -50,
+                  child: Container(
+                    width: 300,
+                    height: 300,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2),
+                    ),
+                  ),
                 ),
                 Positioned(
-                  top: 200, right: -80,
-                  child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
+                  top: 200,
+                  right: -80,
+                  child: Container(
+                    width: 250,
+                    height: 250,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -962,7 +988,7 @@ class ArchivedStudentsPage extends StatelessWidget {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-        
+
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return Center(
                       child: Column(
@@ -970,14 +996,22 @@ class ArchivedStudentsPage extends StatelessWidget {
                         children: [
                           Icon(Icons.archive_outlined, size: 80, color: isDarkMode ? Colors.white24 : primaryColor.withOpacity(0.3)),
                           const SizedBox(height: 15),
-                          Text("لا يوجد طلاب متوقفين حالياً", style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white54 : Colors.black54)),
+                          Text(
+                            "لا يوجد طلاب متوقفين حالياً",
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.white54 : Colors.black54,
+                            ),
+                          ),
                         ],
                       ),
                     );
                   }
-        
+
                   final archivedStudents = snapshot.data!.docs;
-        
+
                   return ListView.builder(
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
@@ -985,64 +1019,82 @@ class ArchivedStudentsPage extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final student = archivedStudents[index];
                       final data = student.data() as Map<String, dynamic>;
-        
+                      final String studentName = data['name'] ?? 'بدون اسم';
+                      final String supervisorName = data['supervisorName'] ?? data['supervisor'] ?? '';
+                      final int studentNumber = index + 1; // 🔢 ترقيم الطلاب
+
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
                           color: isDarkMode ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.55),
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.8), width: 1.5),
                           boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 5))],
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.orangeAccent.withOpacity(0.2),
-                            child: const Icon(Icons.pause_circle_filled_rounded, color: Colors.orangeAccent),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          // زر الاسترجاع في أقصى اليسار
+                          leading: IconButton(
+                            icon: const Icon(Icons.settings_backup_restore_rounded, color: Colors.greenAccent),
+                            tooltip: "استرجاع الطالب",
+                            onPressed: () => _showRestoreDialog(context, student.id, studentName, isDarkMode, accentGold),
                           ),
-                          title: Text(data['name'] ?? 'بدون اسم', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : Colors.black87)),
-                          subtitle: Text("المشرف: ${data['supervisorName'] ?? 'غير محدد'}\n(ضغطة مطولة لاسترجاعه)", style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: isDarkMode ? Colors.white60 : Colors.black54)),
-                          trailing: const Icon(Icons.restore_page_rounded, color: Colors.green),
-                          onLongPress: () {
-                            showDialog(
-                              context: context,
-                              builder: (dialogContext) => AlertDialog(
-                                backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                title: Row(
-                                  children: [
-                                    const Icon(Icons.restore_rounded, color: Colors.green, size: 28),
-                                    const SizedBox(width: 10),
-                                    Text("استرجاع الطالب", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : Colors.black87)),
-                                  ],
+                          // اسم الطالب والمشرف في المنتصف/اليمين
+                          title: Text(
+                            studentName,
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: isDarkMode ? Colors.white : primaryColor,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (supervisorName.isNotEmpty)
+                                Text(
+                                  "المشرف: $supervisorName",
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDarkMode ? Colors.white60 : Colors.black54,
+                                    fontFamily: 'Cairo',
+                                  ),
                                 ),
-                                content: Text("هل تريد إرجاع الطالب (${data['name']}) إلى القائمة النشطة واستئناف دوامه؟", style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black87)),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(dialogContext),
-                                    child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                                  ),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                    onPressed: () async {
-                                      Navigator.pop(dialogContext);
-                                      await FirebaseFirestore.instance.collection('students').doc(student.id).set({'archived': false}, SetOptions(merge: true));
-                                      if (context.mounted) {
-                                        GlassToast.show(
-                                          context, 
-                                          title: "تم الاسترجاع", 
-                                          message: "عاد الطالب للقائمة النشطة بنجاح", 
-                                          icon: Icons.check_circle_outline_rounded, 
-                                          color: Colors.greenAccent,
-                                        );
-                                      }
-                                    },
-                                    child: const Text("استرجاع", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
-                                  ),
-                                ],
+                              Text(
+                                "(ضغط مطول للاسترجاع)",
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDarkMode ? Colors.white38 : Colors.black38,
+                                  fontFamily: 'Cairo',
+                                ),
                               ),
-                            );
-                          },
+                            ],
+                          ),
+                          // 🔢 إظهار رقم الطالب داخل دائرة على اليمين بدلاً من الأيقونة العادية
+                          trailing: Container(
+                            width: 36,
+                            height: 36,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.orangeAccent, width: 1.5),
+                            ),
+                            child: Text(
+                              "#$studentNumber",
+                              style: const TextStyle(
+                                color: Colors.orangeAccent,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                          ),
+                          onLongPress: () => _showRestoreDialog(context, student.id, studentName, isDarkMode, accentGold),
                         ),
                       );
                     },
@@ -1052,6 +1104,53 @@ class ArchivedStudentsPage extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showRestoreDialog(BuildContext context, String studentId, String studentName, bool isDarkMode, Color accentGold) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.restore_rounded, color: Colors.green, size: 28),
+            const SizedBox(width: 10),
+            Text(
+              "استرجاع الطالب",
+              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : Colors.black87),
+            ),
+          ],
+        ),
+        content: Text(
+          "هل تريد إرجاع الطالب ($studentName) إلى القائمة النشطة واستئناف دوامه؟",
+          style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await FirebaseFirestore.instance.collection('students').doc(studentId).set({'archived': false, 'isArchived': false}, SetOptions(merge: true));
+              if (context.mounted) {
+                GlassToast.show(
+                  context,
+                  title: "تم الاسترجاع",
+                  message: "عاد الطالب للقائمة النشطة بنجاح",
+                  icon: Icons.check_circle_outline_rounded,
+                  color: Colors.greenAccent,
+                );
+              }
+            },
+            child: const Text("استرجاع", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

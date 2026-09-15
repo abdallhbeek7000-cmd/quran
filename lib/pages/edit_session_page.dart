@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui'; 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,24 +38,133 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   TextEditingController? _activeController;
   String _initialText = '';
 
-  final newMemoFrom = TextEditingController();
-  final newMemoTo = TextEditingController();
+  // 📖 قائمة سور القرآن كاملة
+  final List<Map<String, dynamic>> quranSurahs = const [
+    {'id': 1, 'name': 'الفاتحة', 'startPage': 1, 'endPage': 1, 'verses': 7},
+    {'id': 2, 'name': 'البقرة', 'startPage': 2, 'endPage': 49, 'verses': 286},
+    {'id': 3, 'name': 'آل عمران', 'startPage': 50, 'endPage': 76, 'verses': 200},
+    {'id': 4, 'name': 'النساء', 'startPage': 77, 'endPage': 106, 'verses': 176},
+    {'id': 5, 'name': 'المائدة', 'startPage': 106, 'endPage': 127, 'verses': 120},
+    {'id': 6, 'name': 'الأنعام', 'startPage': 128, 'endPage': 150, 'verses': 165},
+    {'id': 7, 'name': 'الأعراف', 'startPage': 151, 'endPage': 176, 'verses': 206},
+    {'id': 8, 'name': 'الأنفال', 'startPage': 177, 'endPage': 186, 'verses': 75},
+    {'id': 9, 'name': 'التوبة', 'startPage': 187, 'endPage': 207, 'verses': 129},
+    {'id': 10, 'name': 'يونس', 'startPage': 208, 'endPage': 221, 'verses': 109},
+    {'id': 11, 'name': 'هود', 'startPage': 221, 'endPage': 235, 'verses': 123},
+    {'id': 12, 'name': 'يوسف', 'startPage': 235, 'endPage': 248, 'verses': 111},
+    {'id': 13, 'name': 'الرعد', 'startPage': 249, 'endPage': 255, 'verses': 43},
+    {'id': 14, 'name': 'إبراهيم', 'startPage': 255, 'endPage': 261, 'verses': 52},
+    {'id': 15, 'name': 'الحجر', 'startPage': 262, 'endPage': 267, 'verses': 99},
+    {'id': 16, 'name': 'النحل', 'startPage': 267, 'endPage': 281, 'verses': 128},
+    {'id': 17, 'name': 'الإسراء', 'startPage': 282, 'endPage': 293, 'verses': 111},
+    {'id': 18, 'name': 'الكهف', 'startPage': 293, 'endPage': 304, 'verses': 110},
+    {'id': 19, 'name': 'مريم', 'startPage': 305, 'endPage': 312, 'verses': 98},
+    {'id': 20, 'name': 'طه', 'startPage': 312, 'endPage': 321, 'verses': 135},
+    {'id': 21, 'name': 'الأنبياء', 'startPage': 322, 'endPage': 331, 'verses': 112},
+    {'id': 22, 'name': 'الحج', 'startPage': 332, 'endPage': 341, 'verses': 78},
+    {'id': 23, 'name': 'المؤمنون', 'startPage': 342, 'endPage': 349, 'verses': 118},
+    {'id': 24, 'name': 'النور', 'startPage': 350, 'endPage': 359, 'verses': 64},
+    {'id': 25, 'name': 'الفرقان', 'startPage': 359, 'endPage': 366, 'verses': 77},
+    {'id': 26, 'name': 'الشعراء', 'startPage': 367, 'endPage': 376, 'verses': 227},
+    {'id': 27, 'name': 'النمل', 'startPage': 377, 'endPage': 385, 'verses': 93},
+    {'id': 28, 'name': 'القصص', 'startPage': 385, 'endPage': 396, 'verses': 88},
+    {'id': 29, 'name': 'العنكبوت', 'startPage': 396, 'endPage': 404, 'verses': 69},
+    {'id': 30, 'name': 'الروم', 'startPage': 404, 'endPage': 410, 'verses': 60},
+    {'id': 31, 'name': 'لقمان', 'startPage': 411, 'endPage': 414, 'verses': 34},
+    {'id': 32, 'name': 'السجدة', 'startPage': 415, 'endPage': 417, 'verses': 30},
+    {'id': 33, 'name': 'الأحزاب', 'startPage': 418, 'endPage': 427, 'verses': 73},
+    {'id': 34, 'name': 'سبأ', 'startPage': 428, 'endPage': 434, 'verses': 54},
+    {'id': 35, 'name': 'فاطر', 'startPage': 434, 'endPage': 440, 'verses': 45},
+    {'id': 36, 'name': 'يس', 'startPage': 440, 'endPage': 445, 'verses': 83},
+    {'id': 37, 'name': 'الصافات', 'startPage': 445, 'endPage': 452, 'verses': 182},
+    {'id': 38, 'name': 'ص', 'startPage': 453, 'endPage': 458, 'verses': 88},
+    {'id': 39, 'name': 'الزمر', 'startPage': 458, 'endPage': 467, 'verses': 75},
+    {'id': 40, 'name': 'غافر', 'startPage': 467, 'endPage': 476, 'verses': 85},
+    {'id': 41, 'name': 'فصلت', 'startPage': 477, 'endPage': 482, 'verses': 54},
+    {'id': 42, 'name': 'الشورى', 'startPage': 483, 'endPage': 489, 'verses': 53},
+    {'id': 43, 'name': 'الزخرف', 'startPage': 489, 'endPage': 495, 'verses': 89},
+    {'id': 44, 'name': 'الدخان', 'startPage': 496, 'endPage': 498, 'verses': 59},
+    {'id': 45, 'name': 'الجاثية', 'startPage': 499, 'endPage': 502, 'verses': 37},
+    {'id': 46, 'name': 'الأحقاف', 'startPage': 502, 'endPage': 506, 'verses': 35},
+    {'id': 47, 'name': 'محمد', 'startPage': 507, 'endPage': 510, 'verses': 38},
+    {'id': 48, 'name': 'الفتح', 'startPage': 511, 'endPage': 515, 'verses': 29},
+    {'id': 49, 'name': 'الحجرات', 'startPage': 515, 'endPage': 517, 'verses': 18},
+    {'id': 50, 'name': 'ق', 'startPage': 518, 'endPage': 520, 'verses': 45},
+    {'id': 51, 'name': 'الذاريات', 'startPage': 520, 'endPage': 523, 'verses': 60},
+    {'id': 52, 'name': 'الطور', 'startPage': 523, 'endPage': 525, 'verses': 49},
+    {'id': 53, 'name': 'النجم', 'startPage': 526, 'endPage': 528, 'verses': 62},
+    {'id': 54, 'name': 'القمر', 'startPage': 528, 'endPage': 531, 'verses': 55},
+    {'id': 55, 'name': 'الرحمن', 'startPage': 531, 'endPage': 534, 'verses': 78},
+    {'id': 56, 'name': 'الواقعة', 'startPage': 534, 'endPage': 537, 'verses': 96},
+    {'id': 57, 'name': 'الحديد', 'startPage': 537, 'endPage': 541, 'verses': 29},
+    {'id': 58, 'name': 'المجادلة', 'startPage': 542, 'endPage': 545, 'verses': 22},
+    {'id': 59, 'name': 'الحشر', 'startPage': 545, 'endPage': 548, 'verses': 24},
+    {'id': 60, 'name': 'الممتحنة', 'startPage': 549, 'endPage': 551, 'verses': 13},
+    {'id': 61, 'name': 'الصف', 'startPage': 551, 'endPage': 553, 'verses': 14},
+    {'id': 62, 'name': 'الجمعة', 'startPage': 553, 'endPage': 554, 'verses': 11},
+    {'id': 63, 'name': 'المنافقون', 'startPage': 554, 'endPage': 555, 'verses': 11},
+    {'id': 64, 'name': 'التغابن', 'startPage': 556, 'endPage': 557, 'verses': 18},
+    {'id': 65, 'name': 'الطلاق', 'startPage': 558, 'endPage': 559, 'verses': 12},
+    {'id': 66, 'name': 'التحريم', 'startPage': 560, 'endPage': 561, 'verses': 12},
+    {'id': 67, 'name': 'الملك', 'startPage': 562, 'endPage': 564, 'verses': 30},
+    {'id': 68, 'name': 'القلم', 'startPage': 564, 'endPage': 566, 'verses': 52},
+    {'id': 69, 'name': 'الحاقة', 'startPage': 566, 'endPage': 568, 'verses': 52},
+    {'id': 70, 'name': 'المعارج', 'startPage': 568, 'endPage': 570, 'verses': 44},
+    {'id': 71, 'name': 'نوح', 'startPage': 570, 'endPage': 571, 'verses': 28},
+    {'id': 72, 'name': 'الجن', 'startPage': 572, 'endPage': 573, 'verses': 28},
+    {'id': 73, 'name': 'المزمل', 'startPage': 574, 'endPage': 575, 'verses': 20},
+    {'id': 74, 'name': 'المدثر', 'startPage': 575, 'endPage': 577, 'verses': 56},
+    {'id': 75, 'name': 'القيامة', 'startPage': 577, 'endPage': 578, 'verses': 40},
+    {'id': 76, 'name': 'الإنسان', 'startPage': 578, 'endPage': 580, 'verses': 31},
+    {'id': 77, 'name': 'المرسلات', 'startPage': 580, 'endPage': 581, 'verses': 50},
+    {'id': 78, 'name': 'النبأ', 'startPage': 582, 'endPage': 583, 'verses': 40},
+    {'id': 79, 'name': 'النازعات', 'startPage': 583, 'endPage': 584, 'verses': 46},
+    {'id': 80, 'name': 'عبس', 'startPage': 585, 'endPage': 585, 'verses': 42},
+    {'id': 81, 'name': 'التكوير', 'startPage': 586, 'endPage': 586, 'verses': 29},
+    {'id': 82, 'name': 'الانفطار', 'startPage': 587, 'endPage': 587, 'verses': 19},
+    {'id': 83, 'name': 'المطففين', 'startPage': 587, 'endPage': 589, 'verses': 36},
+    {'id': 84, 'name': 'الانشقاق', 'startPage': 589, 'endPage': 590, 'verses': 25},
+    {'id': 85, 'name': 'البروج', 'startPage': 590, 'endPage': 590, 'verses': 22},
+    {'id': 86, 'name': 'الطارق', 'startPage': 591, 'endPage': 591, 'verses': 17},
+    {'id': 87, 'name': 'الأعلى', 'startPage': 591, 'endPage': 592, 'verses': 19},
+    {'id': 88, 'name': 'الغاشية', 'startPage': 592, 'endPage': 592, 'verses': 26},
+    {'id': 89, 'name': 'الفجر', 'startPage': 593, 'endPage': 594, 'verses': 30},
+    {'id': 90, 'name': 'البلد', 'startPage': 594, 'endPage': 594, 'verses': 20},
+    {'id': 91, 'name': 'الشمس', 'startPage': 595, 'endPage': 595, 'verses': 15},
+    {'id': 92, 'name': 'الليل', 'startPage': 595, 'endPage': 596, 'verses': 21},
+    {'id': 93, 'name': 'الضحى', 'startPage': 596, 'endPage': 596, 'verses': 11},
+    {'id': 94, 'name': 'الشرح', 'startPage': 596, 'endPage': 596, 'verses': 8},
+    {'id': 95, 'name': 'التين', 'startPage': 597, 'endPage': 597, 'verses': 8},
+    {'id': 96, 'name': 'العلق', 'startPage': 597, 'endPage': 597, 'verses': 19},
+    {'id': 97, 'name': 'القدر', 'startPage': 598, 'endPage': 598, 'verses': 5},
+    {'id': 98, 'name': 'البينة', 'startPage': 598, 'endPage': 599, 'verses': 8},
+    {'id': 99, 'name': 'الزلزلة', 'startPage': 599, 'endPage': 599, 'verses': 8},
+    {'id': 100, 'name': 'العاديات', 'startPage': 599, 'endPage': 600, 'verses': 11},
+    {'id': 101, 'name': 'القارعة', 'startPage': 600, 'endPage': 600, 'verses': 11},
+    {'id': 102, 'name': 'التكاثر', 'startPage': 600, 'endPage': 600, 'verses': 8},
+    {'id': 103, 'name': 'العصر', 'startPage': 601, 'endPage': 601, 'verses': 3},
+    {'id': 104, 'name': 'الهمزة', 'startPage': 601, 'endPage': 601, 'verses': 9},
+    {'id': 105, 'name': 'الفيل', 'startPage': 601, 'endPage': 601, 'verses': 5},
+    {'id': 106, 'name': 'قريش', 'startPage': 602, 'endPage': 602, 'verses': 4},
+    {'id': 107, 'name': 'الماعون', 'startPage': 602, 'endPage': 602, 'verses': 7},
+    {'id': 108, 'name': 'الكوثر', 'startPage': 602, 'endPage': 602, 'verses': 3},
+    {'id': 109, 'name': 'الكافرون', 'startPage': 603, 'endPage': 603, 'verses': 6},
+    {'id': 110, 'name': 'النصر', 'startPage': 603, 'endPage': 603, 'verses': 3},
+    {'id': 111, 'name': 'المسد', 'startPage': 603, 'endPage': 603, 'verses': 5},
+    {'id': 112, 'name': 'الإخلاص', 'startPage': 604, 'endPage': 604, 'verses': 4},
+    {'id': 113, 'name': 'الفلق', 'startPage': 604, 'endPage': 604, 'verses': 5},
+    {'id': 114, 'name': 'الناس', 'startPage': 604, 'endPage': 604, 'verses': 6},
+  ];
 
-  final newRevFrom = TextEditingController();
-  final newRevTo = TextEditingController();
+  bool isJuzAmmaMode = false;
 
-  List<Map<String, TextEditingController>> oldReviewRanges = [];
-
-  final readingFrom = TextEditingController();
-  final readingTo = TextEditingController();
-
-  final newHwFrom = TextEditingController();
-  final newHwTo = TextEditingController();
-
-  final newRevHwFrom = TextEditingController();
-  final newRevHwTo = TextEditingController();
-
-  List<Map<String, TextEditingController>> oldRevHwRanges = [];
+  List<Map<String, dynamic>> newMemoRanges = [];
+  List<Map<String, dynamic>> newRevRanges = [];
+  List<Map<String, dynamic>> oldReviewRanges = [];
+  List<Map<String, dynamic>> readingRanges = [];
+  List<Map<String, dynamic>> newHwRanges = [];
+  List<Map<String, dynamic>> newRevHwRanges = [];
+  List<Map<String, dynamic>> oldRevHwRanges = [];
 
   late TextEditingController religiousActivities;
   late TextEditingController notes;
@@ -79,7 +189,9 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   bool isCompletedStudent = false;
   bool checkingStudentType = true;
 
-  List<Map<String, String>> selectedSupervisors = [];
+  // 👥 فصل قائمة المشرفين بين الحفظ والمراجعة
+  List<Map<String, String>> selectedNewMemoSupervisors = [];
+  List<Map<String, String>> selectedReviewSupervisors = [];
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37); 
@@ -96,6 +208,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
     absent = data['absent'] ?? false;
     didNotRecite = data['didNotRecite'] ?? false;
+    isJuzAmmaMode = data['isJuzAmma'] ?? false;
     
     hasNewMemorization = (data['newMemorization'] ?? '').toString().trim().isNotEmpty;
     hasReview = (data['nearReview'] ?? '').toString().trim().isNotEmpty || 
@@ -126,30 +239,69 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     notes = TextEditingController(text: data['notes']);
     
     var initialPages = data['total_memorized_pages']?.toString() ?? '';
-    totalMemorizedPagesController = TextEditingController(text: initialPages);
+    totalMemorizedPagesController = TextEditingController(text: isJuzAmmaMode ? "0" : initialPages);
 
+    // 👥 استخراج قائمة مشرفي الحفظ الجديد والمراجعة secara منفصل
+    _loadSupervisorsFromData(data);
+
+    _parseExistingData(data);
+    _checkIfStudentIsCompleted();
+  }
+
+  void _loadSupervisorsFromData(Map<String, dynamic> data) {
+    // 1. مشرفي الحفظ الجديد
+    if (data.containsKey('newMemoSupervisorIds') && data['newMemoSupervisorIds'] is List && (data['newMemoSupervisorIds'] as List).isNotEmpty) {
+      List ids = data['newMemoSupervisorIds'];
+      List names = data['newMemoSupervisorNames'] ?? [];
+      for (int i = 0; i < ids.length; i++) {
+        selectedNewMemoSupervisors.add({'id': ids[i].toString(), 'name': i < names.length ? names[i].toString() : 'مشرف'});
+      }
+    } else {
+      _loadFallbackSupervisors(data, selectedNewMemoSupervisors);
+    }
+
+    // 2. مشرفي المراجعة
+    if (data.containsKey('reviewSupervisorIds') && data['reviewSupervisorIds'] is List && (data['reviewSupervisorIds'] as List).isNotEmpty) {
+      List ids = data['reviewSupervisorIds'];
+      List names = data['reviewSupervisorNames'] ?? [];
+      for (int i = 0; i < ids.length; i++) {
+        selectedReviewSupervisors.add({'id': ids[i].toString(), 'name': i < names.length ? names[i].toString() : 'مشرف'});
+      }
+    } else {
+      _loadFallbackSupervisors(data, selectedReviewSupervisors);
+    }
+  }
+
+  void _loadFallbackSupervisors(Map<String, dynamic> data, List<Map<String, String>> targetList) {
     if (data.containsKey('supervisorIds') && data['supervisorIds'] is List && (data['supervisorIds'] as List).isNotEmpty) {
       List ids = data['supervisorIds'];
       List names = data['supervisorNames'] ?? [];
       for (int i = 0; i < ids.length; i++) {
-        selectedSupervisors.add({
-          'id': ids[i].toString(),
-          'name': i < names.length ? names[i].toString() : 'مشرف',
-        });
+        targetList.add({'id': ids[i].toString(), 'name': i < names.length ? names[i].toString() : 'مشرف'});
       }
     } else {
       String sId = data['supervisorId'] ?? '';
       String sName = data['supervisorName'] ?? 'مشرف غير معروف';
-      if (sId.isNotEmpty) {
-        selectedSupervisors.add({'id': sId, 'name': sName});
-      }
+      if (sId.isNotEmpty) targetList.add({'id': sId, 'name': sName});
     }
+  }
 
-    newMemoTo.addListener(_updateTotalPages);
-    newMemoFrom.addListener(_updateTotalPages);
+  String _getSurahNameByPage(String pageStr) {
+    int? page = int.tryParse(pageStr.trim());
+    if (page == null || page < 1 || page > 604) return "";
+    for (var surah in quranSurahs) {
+      int start = surah['startPage'];
+      int end = surah['endPage'];
+      if (page >= start && page <= end) return surah['name'];
+    }
+    return "";
+  }
 
-    _parseExistingData(data);
-    _checkIfStudentIsCompleted();
+  void _syncSurahFromPageController(TextEditingController ctrl, Map<String, dynamic> item) {
+    String foundSurah = _getSurahNameByPage(ctrl.text);
+    if (foundSurah.isNotEmpty && foundSurah != item['surah']) {
+      setState(() => item['surah'] = foundSurah);
+    }
   }
 
   DateTime _parseDate(String dateStr) {
@@ -195,7 +347,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   }
 
   void _parseExistingData(Map<String, dynamic> data) {
-    _parseRangeIntoControllers(data['newMemorization'] ?? '', newMemoFrom, newMemoTo);
+    _parseTextToRanges(data['newMemorization'] ?? '', newMemoRanges);
 
     String fullReview = data['review'] ?? '';
     String nearRev = data['nearReview'] ?? '';
@@ -209,10 +361,9 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       nearRev = fullReview;
     }
 
-    _parseRangeIntoControllers(nearRev, newRevFrom, newRevTo);
-    _parseMultiRangeIntoControllers(farRev, oldReviewRanges);
-
-    _parseRangeIntoControllers(data['readingBySight'] ?? '', readingFrom, readingTo);
+    _parseTextToRanges(nearRev, newRevRanges);
+    _parseTextToRanges(farRev, oldReviewRanges);
+    _parseTextToRanges(data['readingBySight'] ?? '', readingRanges);
 
     String oldHw = data['homework'] ?? '';
     String nHw = data['newHomework'] ?? '';
@@ -236,67 +387,101 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       }
     }
 
-    _parseRangeIntoControllers(nHw, newHwFrom, newHwTo);
-    _parseRangeIntoControllers(nRevHw, newRevHwFrom, newRevHwTo);
-    _parseMultiRangeIntoControllers(oRevHw, oldRevHwRanges);
-  }
+    _parseTextToRanges(nHw, newHwRanges);
+    _parseTextToRanges(nRevHw, newRevHwRanges);
+    _parseTextToRanges(oRevHw, oldRevHwRanges);
 
-  void _parseRangeIntoControllers(String text, TextEditingController fromCtrl, TextEditingController toCtrl) {
-    if (text.isEmpty) return;
-    RegExp exp = RegExp(r'\d+');
-    Iterable<Match> matches = exp.allMatches(text);
-    List<String> numbers = matches.map((m) => m.group(0)!).toList();
-
-    if (numbers.isNotEmpty) {
-      fromCtrl.text = numbers[0];
-      if (numbers.length > 1) {
-        toCtrl.text = numbers[1];
+    // إضافة شريحة افتراضية إذا كانت قائمة فارغة
+    for (var list in [newMemoRanges, newRevRanges, oldReviewRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+      if (list.isEmpty) {
+        list.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()});
       }
     }
   }
 
-  void _parseMultiRangeIntoControllers(String text, List<Map<String, TextEditingController>> ranges) {
-    ranges.clear();
-    if (text.isEmpty) {
-      ranges.add({'from': TextEditingController(), 'to': TextEditingController()});
-      return;
-    }
-    var parts = text.split('|');
-    for (var part in parts) {
-      var ctrlFrom = TextEditingController();
-      var ctrlTo = TextEditingController();
-      _parseRangeIntoControllers(part, ctrlFrom, ctrlTo);
-      ranges.add({'from': ctrlFrom, 'to': ctrlTo});
-    }
-    if (ranges.isEmpty) {
-      ranges.add({'from': TextEditingController(), 'to': TextEditingController()});
+  void _parseTextToRanges(String text, List<Map<String, dynamic>> targetList) {
+    targetList.clear();
+    if (text.trim().isEmpty) return;
+
+    List<String> segments = text.split('|');
+    for (var seg in segments) {
+      String trimmed = seg.trim();
+      if (trimmed.isEmpty) continue;
+
+      String detectedSurah = isJuzAmmaMode ? 'النبأ' : 'البقرة';
+      TextEditingController fromCtrl = TextEditingController();
+      TextEditingController toCtrl = TextEditingController();
+
+      // البحث عن اسم السورة في النص
+      for (var s in quranSurahs) {
+        if (trimmed.contains(s['name'])) {
+          detectedSurah = s['name'];
+          break;
+        }
+      }
+
+      RegExp exp = RegExp(r'\d+');
+      var matches = exp.allMatches(trimmed).map((m) => m.group(0)!).toList();
+      if (matches.length >= 2) {
+        fromCtrl.text = matches[0];
+        toCtrl.text = matches[1];
+      } else if (matches.length == 1) {
+        fromCtrl.text = matches[0];
+      }
+
+      targetList.add({
+        'surah': detectedSurah,
+        'from': fromCtrl,
+        'to': toCtrl,
+      });
     }
   }
 
   void _updateTotalPages() {
-    if (isCompletedStudent || absent || didNotRecite) return;
-    int from = int.tryParse(newMemoFrom.text) ?? 0;
-    int to = int.tryParse(newMemoTo.text) ?? 0;
-    int maxPage = from > to ? from : to;
+    if (isCompletedStudent || absent || didNotRecite || isJuzAmmaMode) {
+      if (isJuzAmmaMode) totalMemorizedPagesController.text = "0";
+      return;
+    }
+    int maxPage = 0;
+    for (var item in newMemoRanges) {
+      int to = int.tryParse((item['to'] as TextEditingController).text.trim()) ?? 0;
+      int from = int.tryParse((item['from'] as TextEditingController).text.trim()) ?? 0;
+      int m = from > to ? from : to;
+      if (m > maxPage) maxPage = m;
+    }
     if (maxPage > 0 && maxPage <= 604) {
       totalMemorizedPagesController.text = maxPage.toString();
     }
   }
 
-  String _buildRangeString(TextEditingController fromCtrl, TextEditingController toCtrl) {
-    String from = fromCtrl.text.trim();
-    String to = toCtrl.text.trim();
-    if (from.isEmpty && to.isEmpty) return "";
-    if (from.isNotEmpty && to.isEmpty) return from;
-    if (from.isEmpty && to.isNotEmpty) return to;
-    return "$from - $to";
-  }
-
-  String _buildMultiRangeString(List<Map<String, TextEditingController>> ranges) {
+  String _buildFormattedSectionText(List<Map<String, dynamic>> ranges) {
     List<String> parts = [];
-    for (var range in ranges) {
-      String val = _buildRangeString(range['from']!, range['to']!);
-      if (val.isNotEmpty) parts.add(val);
+    for (var item in ranges) {
+      String surah = item['surah'] ?? '';
+      String from = (item['from'] as TextEditingController).text.trim();
+      String to = (item['to'] as TextEditingController).text.trim();
+
+      if (from.isEmpty && to.isEmpty && surah.isEmpty) continue;
+
+      if (isJuzAmmaMode) {
+        if (from.isNotEmpty && to.isNotEmpty) {
+          parts.add("سورة $surah (من آية $from إلى $to)");
+        } else if (from.isNotEmpty) {
+          parts.add("سورة $surah (آية $from)");
+        } else if (surah.isNotEmpty) {
+          parts.add("سورة $surah كاملة");
+        }
+      } else {
+        String sName = surah.isNotEmpty ? surah : _getSurahNameByPage(from);
+        String prefix = sName.isNotEmpty ? "سورة $sName " : "";
+        if (from.isNotEmpty && to.isNotEmpty) {
+          parts.add("$prefix(ص $from - $to)");
+        } else if (from.isNotEmpty) {
+          parts.add("$prefix(ص $from)");
+        } else if (to.isNotEmpty) {
+          parts.add("$prefix(ص $to)");
+        }
+      }
     }
     return parts.join(" | ");
   }
@@ -322,35 +507,32 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     } catch (e) {
       print("Error checking student type in edit page: $e");
     } finally {
-      setState(() {
-        checkingStudentType = false;
-      });
+      if (mounted) setState(() => checkingStudentType = false);
     }
   }
 
   @override
   void dispose() {
     _bgController.dispose(); 
-    newMemoTo.removeListener(_updateTotalPages);
-    newMemoFrom.removeListener(_updateTotalPages);
-
-    newMemoFrom.dispose(); newMemoTo.dispose();
-    newRevFrom.dispose(); newRevTo.dispose();
-    readingFrom.dispose(); readingTo.dispose();
-    newHwFrom.dispose(); newHwTo.dispose();
-    newRevHwFrom.dispose(); newRevHwTo.dispose();
-    
-    for (var range in oldReviewRanges) {
-      range['from']?.dispose(); range['to']?.dispose();
-    }
-    for (var range in oldRevHwRanges) {
-      range['from']?.dispose(); range['to']?.dispose();
-    }
+    _disposeRanges(newMemoRanges);
+    _disposeRanges(newRevRanges);
+    _disposeRanges(oldReviewRanges);
+    _disposeRanges(readingRanges);
+    _disposeRanges(newHwRanges);
+    _disposeRanges(newRevHwRanges);
+    _disposeRanges(oldRevHwRanges);
 
     religiousActivities.dispose();
     notes.dispose();
     totalMemorizedPagesController.dispose(); 
     super.dispose();
+  }
+
+  void _disposeRanges(List<Map<String, dynamic>> list) {
+    for (var item in list) {
+      (item['from'] as TextEditingController?)?.dispose();
+      (item['to'] as TextEditingController?)?.dispose();
+    }
   }
 
   void _listen(TextEditingController controller) async {
@@ -414,17 +596,25 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     );
   }
 
-  Widget _buildMiniNumberInput(TextEditingController ctrl, bool isDarkMode) {
+  Widget _buildMiniNumberInput(TextEditingController ctrl, bool isDarkMode, {String hint = "---", Map<String, dynamic>? itemToSync}) {
     return SizedBox(
-      height: 45,
+      height: 42,
       child: TextField(
         controller: ctrl,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
         textAlign: TextAlign.center,
         style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+        onChanged: (val) {
+          if (itemToSync != null) {
+            _syncSurahFromPageController(ctrl, itemToSync);
+          } else {
+            setState(() {}); 
+          }
+          _updateTotalPages();
+        },
         decoration: InputDecoration(
-          hintText: "---",
+          hintText: hint,
           hintStyle: TextStyle(color: isDarkMode ? Colors.white30 : Colors.black26),
           contentPadding: EdgeInsets.zero,
           filled: true,
@@ -435,46 +625,212 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     );
   }
 
-  Widget _buildRangeRow(String title, IconData icon, TextEditingController fromCtrl, TextEditingController toCtrl, bool isDarkMode) {
+  // 👥 نافذة مرنة لاختيار مشرفين لقسم محدد
+  void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode, List<Map<String, String>> targetList, String title) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border.all(color: isDarkMode ? Colors.white12 : Colors.black12),
+          ),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Column(
+                children: [
+                  Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
+                  const SizedBox(height: 20),
+                  Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                  const SizedBox(height: 15),
+                  Expanded(
+                    child: FutureBuilder<List<QuerySnapshot>>(
+                      future: Future.wait([
+                        FirebaseFirestore.instance.collection('users').get(const GetOptions(source: Source.cache)),
+                        FirebaseFirestore.instance.collection('supervisors').get(const GetOptions(source: Source.cache))
+                      ]),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                        
+                        List<Map<String, String>> allStaff = [];
+                        if (snapshot.hasData) {
+                          for (var doc in snapshot.data![0].docs) {
+                            allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
+                          }
+                          for (var doc in snapshot.data![1].docs) {
+                            allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
+                          }
+                        }
+
+                        return ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: allStaff.length,
+                          itemBuilder: (context, index) {
+                            final staff = allStaff[index];
+                            final isSelected = targetList.any((s) => s['id'] == staff['id']);
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(color: isSelected ? accentGold : Colors.transparent),
+                              ),
+                              child: CheckboxListTile(
+                                activeColor: accentGold,
+                                title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
+                                value: isSelected,
+                                onChanged: (val) {
+                                  setModalState(() {
+                                    if (val == true) {
+                                      targetList.add(staff);
+                                    } else {
+                                      if (targetList.length > 1) {
+                                        targetList.removeWhere((s) => s['id'] == staff['id']);
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب اختيار مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
+                                      }
+                                    }
+                                  });
+                                  setState(() {}); 
+                                },
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            }
+          ),
+        );
+      }
+    );
+  }
+
+  Widget _buildSupervisorSelectorTile({
+    required String label,
+    required List<Map<String, String>> selectedList,
+    required VoidCallback onTap,
+    required bool isDarkMode,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+        border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 18),
-              const SizedBox(width: 8),
-              Text(title, style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Text("من ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 8),
-              Expanded(child: _buildMiniNumberInput(fromCtrl, isDarkMode)),
-              const SizedBox(width: 15),
-              Text("إلى ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 8),
-              Expanded(child: _buildMiniNumberInput(toCtrl, isDarkMode)),
-            ],
+          Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDarkMode ? Colors.white70 : primaryColor, fontFamily: 'Cairo')),
+          const SizedBox(height: 6),
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: selectedList.map((s) => Chip(
+                      label: Text(s['name']!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
+                      backgroundColor: accentGold,
+                      elevation: 1,
+                      visualDensity: VisualDensity.compact,
+                    )).toList(),
+                  ),
+                ),
+                Icon(Icons.edit_rounded, color: isDarkMode ? accentGold : primaryColor, size: 20),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMultiRangeRow(String title, IconData icon, List<Map<String, TextEditingController>> ranges, VoidCallback onAdd, VoidCallback onRemoveLast, bool isDarkMode) {
+  void _showSurahPagesPicker(BuildContext context, Map<String, dynamic> surah, TextEditingController fromCtrl, TextEditingController toCtrl, bool isDarkMode) {
+    int start = surah['startPage'];
+    int end = surah['endPage'];
+    List<int> pages = List.generate(end - start + 1, (i) => start + i);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "صفحات سورة ${surah['name']} (من $start إلى $end)",
+                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor, fontSize: 16),
+              ),
+              const SizedBox(height: 15),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: pages.map((p) {
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        fromCtrl.text = p.toString();
+                        toCtrl.text = p.toString();
+                        _updateTotalPages();
+                      });
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: accentGold.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: accentGold),
+                      ),
+                      child: Text("ص $p", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildUniversalQuranSection({
+    required String title,
+    required IconData icon,
+    required List<Map<String, dynamic>> ranges,
+    required VoidCallback onAdd,
+    required VoidCallback onRemove,
+    required bool isDarkMode,
+  }) {
+    List<Map<String, dynamic>> filteredSurahs = isJuzAmmaMode
+        ? quranSurahs.where((s) => (s['id'] as int) >= 78).toList()
+        : quranSurahs;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
         borderRadius: BorderRadius.circular(15),
@@ -497,20 +853,20 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                 children: [
                   if (ranges.length > 1)
                     InkWell(
-                      onTap: onRemoveLast,
+                      onTap: onRemove,
                       child: Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.2), shape: BoxShape.circle),
-                        child: const Icon(Icons.remove, size: 18, color: Colors.redAccent),
+                        decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                        child: const Icon(Icons.remove, size: 16, color: Colors.white),
                       ),
                     ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   InkWell(
                     onTap: onAdd,
                     child: Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), shape: BoxShape.circle),
-                      child: const Icon(Icons.add, size: 18, color: Colors.green),
+                      decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                      child: const Icon(Icons.add, size: 16, color: Colors.white),
                     ),
                   ),
                 ],
@@ -518,144 +874,110 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
             ],
           ),
           const SizedBox(height: 10),
+
           ...ranges.asMap().entries.map((entry) {
             int index = entry.key;
-            var range = entry.value;
+            var item = entry.value;
+            
+            TextEditingController fromCtrl = item['from'];
+            if (!isJuzAmmaMode && fromCtrl.text.isNotEmpty) {
+              String autoSurah = _getSurahNameByPage(fromCtrl.text);
+              if (autoSurah.isNotEmpty) {
+                item['surah'] = autoSurah;
+              }
+            }
+
+            String currentSurah = item['surah'] ?? filteredSurahs.first['name'];
+            var selectedSurahData = quranSurahs.firstWhere((s) => s['name'] == currentSurah, orElse: () => quranSurahs.first);
+
             return Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: Row(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (ranges.length > 1) Text("${index + 1}- ", style: TextStyle(color: accentGold, fontWeight: FontWeight.bold, fontSize: 12)),
-                  Text("من ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _buildMiniNumberInput(range['from']!, isDarkMode)),
-                  const SizedBox(width: 15),
-                  Text("إلى ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _buildMiniNumberInput(range['to']!, isDarkMode)),
+                  if (ranges.length > 1)
+                    Text("المقطع ${index + 1}:", style: TextStyle(color: accentGold, fontWeight: FontWeight.bold, fontSize: 11, fontFamily: 'Cairo')),
+                  
+                  DropdownButtonFormField<String>(
+                    value: filteredSurahs.any((s) => s['name'] == currentSurah) ? currentSurah : filteredSurahs.first['name'],
+                    dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: "اختر السورة",
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      filled: true,
+                      fillColor: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.7),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    ),
+                    items: filteredSurahs.map((s) => DropdownMenuItem(
+                      value: s['name'].toString(),
+                      child: Text("${s['id']}- سورة ${s['name']}"),
+                    )).toList(),
+                    onChanged: (v) {
+                      setState(() {
+                        item['surah'] = v;
+                        if (!isJuzAmmaMode) {
+                          var sData = quranSurahs.firstWhere((element) => element['name'] == v);
+                          (item['from'] as TextEditingController).text = sData['startPage'].toString();
+                          (item['to'] as TextEditingController).text = sData['endPage'].toString();
+                          _updateTotalPages();
+                        }
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+
+                  Row(
+                    children: [
+                      Text(isJuzAmmaMode ? "من آية:" : "من ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 6),
+                      Expanded(child: _buildMiniNumberInput(item['from'], isDarkMode, hint: isJuzAmmaMode ? "آية" : "صفحة", itemToSync: isJuzAmmaMode ? null : item)),
+                      const SizedBox(width: 10),
+                      Text(isJuzAmmaMode ? "إلى آية:" : "إلى ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 6),
+                      Expanded(child: _buildMiniNumberInput(item['to'], isDarkMode, hint: isJuzAmmaMode ? "آية" : "صفحة", itemToSync: isJuzAmmaMode ? null : item)),
+                    ],
+                  ),
+
+                  if (!isJuzAmmaMode) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                        onPressed: () => _showSurahPagesPicker(context, selectedSurahData, item['from'], item['to'], isDarkMode),
+                        icon: const Icon(Icons.menu_book_rounded, size: 14, color: Colors.orangeAccent),
+                        label: Text("عرض صفحات سورة ${selectedSurahData['name']}", style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ]
                 ],
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
-    );
-  }
-
-  void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(
-                  height: MediaQuery.of(context).size.height * 0.7,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.95),
-                    border: Border(top: BorderSide(color: isDarkMode ? Colors.white24 : Colors.white, width: 1.5)),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
-                      const SizedBox(height: 20),
-                      Text("تعديل المشرفين المشاركين", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
-                      const SizedBox(height: 15),
-                      Expanded(
-                        child: FutureBuilder<List<QuerySnapshot>>(
-                          future: Future.wait([
-                            FirebaseFirestore.instance.collection('users').get(),
-                            FirebaseFirestore.instance.collection('supervisors').get(),
-                          ]),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                            
-                            List<Map<String, String>> allStaff = [];
-                            if (snapshot.hasData) {
-                              for (var doc in snapshot.data![0].docs) {
-                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
-                              }
-                              for (var doc in snapshot.data![1].docs) {
-                                allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
-                              }
-                            }
-
-                            return ListView.builder(
-                              physics: const BouncingScrollPhysics(),
-                              itemCount: allStaff.length,
-                              itemBuilder: (context, index) {
-                                final staff = allStaff[index];
-                                final isSelected = selectedSupervisors.any((s) => s['id'] == staff['id']);
-
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
-                                    borderRadius: BorderRadius.circular(15),
-                                    border: Border.all(color: isSelected ? accentGold : Colors.transparent),
-                                  ),
-                                  child: CheckboxListTile(
-                                    activeColor: accentGold,
-                                    title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
-                                    value: isSelected,
-                                    onChanged: (val) {
-                                      setModalState(() {
-                                        if (val == true) {
-                                          selectedSupervisors.add(staff);
-                                        } else {
-                                          if (selectedSupervisors.length > 1) {
-                                            selectedSupervisors.removeWhere((s) => s['id'] == staff['id']);
-                                          } else {
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب إبقاء مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
-                                          }
-                                        }
-                                      });
-                                      setState(() {}); 
-                                    },
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 
   save() async {
     setState(() => loading = true);
 
-    double totalPages = isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0);
+    double totalPages = (isJuzAmmaMode) ? 0.0 : (isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0));
     String studentId = widget.data['studentId'] ?? '';
 
-    // 🎯 توحيد التاريخ مع إضافة الأصفار التلقائية
     final String monthStr = _selectedDate.month.toString().padLeft(2, '0');
     final String dayStr = _selectedDate.day.toString().padLeft(2, '0');
     final String date = "${_selectedDate.year}-$monthStr-$dayStr";
 
-    // 🕒 التقاط الوقت الفعلي للتعديل بالخلفية
     DateTime realNow = DateTime.now();
     String actualEditedTimeFormatted = DateFormat('yyyy-MM-dd hh:mm a').format(realNow);
 
-    String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newMemoFrom, newMemoTo);
-    String finalNearReview = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevFrom, newRevTo);
-    String finalFarReview = (!hasReview || absent || didNotRecite) ? '' : _buildMultiRangeString(oldReviewRanges);
+    String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newMemoRanges);
+    String finalNearReview = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevRanges);
+    String finalFarReview = (!hasReview || absent || didNotRecite) ? '' : _buildFormattedSectionText(oldReviewRanges);
     
-    String finalReading = (!hasReading || absent || didNotRecite) ? '' : _buildRangeString(readingFrom, readingTo);
+    String finalReading = (!hasReading || absent || didNotRecite) ? '' : _buildFormattedSectionText(readingRanges);
 
     String finalMemoRating = (!hasNewMemorization || absent || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
     
@@ -663,17 +985,15 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     String finalOldRevRating = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : oldReviewRating;
     String finalFallbackRevRating = isCompletedStudent ? newReviewRating : (finalNewRevRating.isNotEmpty ? finalNewRevRating : finalOldRevRating);
 
-    String finalNewHW = (absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newHwFrom, newHwTo);
-    String finalNewRevHW = (absent || isCompletedStudent || didNotRecite) ? '' : _buildRangeString(newRevHwFrom, newRevHwTo);
-    String finalOldRevHW = (absent || didNotRecite) ? '' : _buildMultiRangeString(oldRevHwRanges);
+    String finalNewHW = (absent || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newHwRanges);
+    String finalNewRevHW = (absent || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevHwRanges);
+    String finalOldRevHW = (absent || didNotRecite) ? '' : _buildFormattedSectionText(oldRevHwRanges);
     
     String combinedHW = "";
-    
     if (isCompletedStudent) {
       combinedHW = finalOldRevHW; 
     } else {
       if (finalNewHW.isNotEmpty) combinedHW += "حفظ: $finalNewHW";
-      
       List<String> revParts = [];
       if (finalNewRevHW.isNotEmpty) revParts.add(finalNewRevHW);
       if (finalOldRevHW.isNotEmpty) revParts.add(finalOldRevHW);
@@ -684,21 +1004,27 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       }
     }
 
-    List<String> supervisorIdsList = selectedSupervisors.map((e) => e['id']!).toList();
-    List<String> supervisorNamesList = selectedSupervisors.map((e) => e['name']!).toList();
+    List<String> newMemoSupIds = selectedNewMemoSupervisors.map((e) => e['id']!).toList();
+    List<String> newMemoSupNames = selectedNewMemoSupervisors.map((e) => e['name']!).toList();
+
+    List<String> reviewSupIds = selectedReviewSupervisors.map((e) => e['id']!).toList();
+    List<String> reviewSupNames = selectedReviewSupervisors.map((e) => e['name']!).toList();
 
     final Map<String, dynamic> updateData = {
       'studentId': studentId,
       'studentName': widget.data['studentName'] ?? '',
       'date': date, 
-      'actualEditedAt': actualEditedTimeFormatted,              // 🕵️‍♂️ الوقت الفعلي المقروء للتعديل
-      'lastUpdatedTimestamp': FieldValue.serverTimestamp(),      // 🕵️‍♂️ ختم النظام المباشر
+      'actualEditedAt': actualEditedTimeFormatted, 
+      'lastUpdatedTimestamp': FieldValue.serverTimestamp(), 
       'absent': absent,
       'didNotRecite': didNotRecite,
-      'supervisorId': supervisorIdsList.isNotEmpty ? supervisorIdsList.first : '', 
-      'supervisorName': supervisorNamesList.isNotEmpty ? supervisorNamesList.first : '', 
-      'supervisorIds': supervisorIdsList, 
-      'supervisorNames': supervisorNamesList, 
+      'isJuzAmma': isJuzAmmaMode,
+      'supervisorId': newMemoSupIds.isNotEmpty ? newMemoSupIds.first : widget.data['supervisorId'], 
+      'supervisorName': newMemoSupNames.isNotEmpty ? newMemoSupNames.first : widget.data['supervisorName'], 
+      'newMemoSupervisorIds': newMemoSupIds,
+      'newMemoSupervisorNames': newMemoSupNames,
+      'reviewSupervisorIds': reviewSupIds,
+      'reviewSupervisorNames': reviewSupNames,
       'newMemorization': finalNewMemo,
       'review': (absent || didNotRecite || !hasReview) ? '' : (isCompletedStudent ? finalFarReview : "$finalNearReview | $finalFarReview"),
       'nearReview': finalNearReview, 
@@ -725,7 +1051,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       print("خطأ في تحديث الجلسة: $e");
     });
 
-    if (!absent && !didNotRecite && studentId.isNotEmpty && !isCompletedStudent && totalMemorizedPagesController.text.trim().isNotEmpty) {
+    if (!absent && !didNotRecite && studentId.isNotEmpty && !isCompletedStudent) {
       FirebaseFirestore.instance.collection('students').doc(studentId).update({
         'memorizedPages': totalPages,
       }).catchError((e) {
@@ -935,6 +1261,33 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                               child: Column(
                                 children: [
                                   if (!isCompletedStudent) ...[
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: isJuzAmmaMode ? accentGold.withOpacity(0.18) : (isDarkMode ? Colors.black26 : Colors.white30),
+                                        borderRadius: BorderRadius.circular(15),
+                                        border: Border.all(color: isJuzAmmaMode ? accentGold : Colors.transparent),
+                                      ),
+                                      child: SwitchListTile(
+                                        activeColor: accentGold,
+                                        value: isJuzAmmaMode,
+                                        title: const Text("طالب في (جزء عمَّ) 👶", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                                        subtitle: const Text("لتسجيل أسماء السور ورقم الآيات لكافة الأقسام والواجبات", style: TextStyle(fontFamily: 'Cairo', fontSize: 11)),
+                                        onChanged: (v) {
+                                          setState(() {
+                                            isJuzAmmaMode = v;
+                                            String defaultSurah = isJuzAmmaMode ? 'النبأ' : 'البقرة';
+                                            for (var list in [newMemoRanges, newRevRanges, oldReviewRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+                                              for (var item in list) {
+                                                item['surah'] = defaultSurah;
+                                              }
+                                            }
+                                            if (isJuzAmmaMode) totalMemorizedPagesController.text = "0";
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+
                                     Row(
                                       children: [
                                         Expanded(child: _buildToggleTile("حفظ جديد", hasNewMemorization, Colors.blueAccent, (v) => setState(() => hasNewMemorization = v), isDarkMode)),
@@ -949,29 +1302,50 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                   const SizedBox(height: 20),
 
                                   if (!isCompletedStudent && hasNewMemorization) ...[
-                                    _buildRangeRow("الحفظ الجديد", Icons.star_border, newMemoFrom, newMemoTo, isDarkMode),
+                                    _buildUniversalQuranSection(
+                                      title: "الحفظ الجديد",
+                                      icon: Icons.star_border,
+                                      ranges: newMemoRanges,
+                                      onAdd: () => setState(() => newMemoRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onRemove: () { if (newMemoRanges.length > 1) setState(() { var r = newMemoRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                      isDarkMode: isDarkMode,
+                                    ),
                                   ],
                                   
                                   if (hasReview) ...[
                                     if (!isCompletedStudent) ...[
-                                      _buildRangeRow("مراجعة جديد", Icons.auto_stories_outlined, newRevFrom, newRevTo, isDarkMode),
+                                      _buildUniversalQuranSection(
+                                        title: "مراجعة جديد",
+                                        icon: Icons.auto_stories_outlined,
+                                        ranges: newRevRanges,
+                                        onAdd: () => setState(() => newRevRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                        onRemove: () { if (newRevRanges.length > 1) setState(() { var r = newRevRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                        isDarkMode: isDarkMode,
+                                      ),
                                     ],
-                                    _buildMultiRangeRow(
-                                      isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم", 
-                                      isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined, 
-                                      oldReviewRanges, 
-                                      () { setState(() => oldReviewRanges.add({'from': TextEditingController(), 'to': TextEditingController()})); },
-                                      () { if (oldReviewRanges.length > 1) setState(() { var r = oldReviewRanges.removeLast(); r['from']?.dispose(); r['to']?.dispose(); }); },
-                                      isDarkMode
+                                    _buildUniversalQuranSection(
+                                      title: isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم",
+                                      icon: isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined,
+                                      ranges: oldReviewRanges,
+                                      onAdd: () => setState(() => oldReviewRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onRemove: () { if (oldReviewRanges.length > 1) setState(() { var r = oldReviewRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                      isDarkMode: isDarkMode,
                                     ),
                                   ],
 
                                   if (hasReading) ...[
-                                    _buildRangeRow("قراءة نظراً من المصحف (اختياري)", Icons.menu_book_outlined, readingFrom, readingTo, isDarkMode),
+                                    _buildUniversalQuranSection(
+                                      title: "المقدار المقروء نظراً من المصحف",
+                                      icon: Icons.menu_book_outlined,
+                                      ranges: readingRanges,
+                                      onAdd: () => setState(() => readingRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onRemove: () { if (readingRanges.length > 1) setState(() { var r = readingRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                      isDarkMode: isDarkMode,
+                                    ),
                                   ],
                                   
-                                  if (!isCompletedStudent) ...[
-                                    const SizedBox(height: 20), 
+                                  if (!isCompletedStudent && !isJuzAmmaMode) ...[
+                                    const SizedBox(height: 10), 
                                     Divider(color: isDarkMode ? Colors.white24 : Colors.black12),
                                     const SizedBox(height: 10),
                                     TextField(
@@ -994,20 +1368,38 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                               child: Column(
                                 children: [
                                   if (isCompletedStudent) ...[
-                                    _buildMultiRangeRow(
-                                      "المقدار المطلوب للمرة القادمة", Icons.edit_note, oldRevHwRanges, 
-                                      () { setState(() => oldRevHwRanges.add({'from': TextEditingController(), 'to': TextEditingController()})); },
-                                      () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); r['from']?.dispose(); r['to']?.dispose(); }); },
-                                      isDarkMode
+                                    _buildUniversalQuranSection(
+                                      title: "المقدار المطلوب للمرة القادمة",
+                                      icon: Icons.edit_note,
+                                      ranges: oldRevHwRanges,
+                                      onAdd: () => setState(() => oldRevHwRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onRemove: () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                      isDarkMode: isDarkMode,
                                     ),
                                   ] else ...[
-                                    _buildRangeRow("واجب الحفظ الجديد القادم", Icons.edit_document, newHwFrom, newHwTo, isDarkMode),
-                                    _buildRangeRow("واجب المراجعة الجديد القادم", Icons.menu_book_rounded, newRevHwFrom, newRevHwTo, isDarkMode),
-                                    _buildMultiRangeRow(
-                                      "واجب المراجعة القديم القادم", Icons.history_edu_rounded, oldRevHwRanges, 
-                                      () { setState(() => oldRevHwRanges.add({'from': TextEditingController(), 'to': TextEditingController()})); },
-                                      () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); r['from']?.dispose(); r['to']?.dispose(); }); },
-                                      isDarkMode
+                                    _buildUniversalQuranSection(
+                                      title: "واجب الحفظ الجديد القادم",
+                                      icon: Icons.edit_document,
+                                      ranges: newHwRanges,
+                                      onAdd: () => setState(() => newHwRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onRemove: () { if (newHwRanges.length > 1) setState(() { var r = newHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                      isDarkMode: isDarkMode,
+                                    ),
+                                    _buildUniversalQuranSection(
+                                      title: "واجب المراجعة الجديد القادم",
+                                      icon: Icons.menu_book_rounded,
+                                      ranges: newRevHwRanges,
+                                      onAdd: () => setState(() => newRevHwRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onRemove: () { if (newRevHwRanges.length > 1) setState(() { var r = newRevHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                      isDarkMode: isDarkMode,
+                                    ),
+                                    _buildUniversalQuranSection(
+                                      title: "واجب المراجعة القديم القادم",
+                                      icon: Icons.history_edu_rounded,
+                                      ranges: oldRevHwRanges,
+                                      onAdd: () => setState(() => oldRevHwRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onRemove: () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                      isDarkMode: isDarkMode,
                                     ),
                                   ],
                                 ],
@@ -1094,38 +1486,28 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
                           const SizedBox(height: 15),
 
+                          // 👥 قسم المشرفين المعدّل لقسمين
                           _buildSectionCard(
                             title: "المشرفين المشاركين بالتسميع",
                             icon: Icons.groups_rounded,
                             isDarkMode: isDarkMode,
-                            child: InkWell(
-                              onTap: () => _showStaffSelectionBottomSheet(context, isDarkMode),
-                              borderRadius: BorderRadius.circular(15),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
-                                  borderRadius: BorderRadius.circular(15),
-                                  border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: selectedSupervisors.map((s) => Chip(
-                                          label: Text(s['name']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
-                                          backgroundColor: accentGold,
-                                          elevation: 2,
-                                          padding: const EdgeInsets.all(0),
-                                        )).toList(),
-                                      ),
-                                    ),
-                                    Icon(Icons.edit_rounded, color: isDarkMode ? accentGold : primaryColor),
-                                  ],
-                                ),
-                              ),
+                            child: Column(
+                              children: [
+                                if (hasNewMemorization)
+                                  _buildSupervisorSelectorTile(
+                                    label: "مشرف الحفظ الجديد:",
+                                    selectedList: selectedNewMemoSupervisors,
+                                    onTap: () => _showStaffSelectionBottomSheet(context, isDarkMode, selectedNewMemoSupervisors, "حدد مشرفي الحفظ الجديد"),
+                                    isDarkMode: isDarkMode,
+                                  ),
+                                if (hasReview)
+                                  _buildSupervisorSelectorTile(
+                                    label: "مشرف المراجعة:",
+                                    selectedList: selectedReviewSupervisors,
+                                    onTap: () => _showStaffSelectionBottomSheet(context, isDarkMode, selectedReviewSupervisors, "حدد مشرفي المراجعة"),
+                                    isDarkMode: isDarkMode,
+                                  ),
+                              ],
                             ),
                           ),
 
