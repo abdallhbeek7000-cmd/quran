@@ -454,6 +454,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     }
   }
 
+  // 🛠️ التعديل لمنع ظهور "سورة كاملة" عند ترك الآيات فارغة
   String _buildFormattedSectionText(List<Map<String, dynamic>> ranges) {
     List<String> parts = [];
     for (var item in ranges) {
@@ -461,21 +462,29 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       String from = (item['from'] as TextEditingController).text.trim();
       String to = (item['to'] as TextEditingController).text.trim();
 
-      if (from.isEmpty && to.isEmpty && surah.isEmpty) continue;
+      if (from.isEmpty && to.isEmpty) continue; // يتخطى الجزء عند عدم كتابة أي آيات/صفحات
 
       if (isJuzAmmaMode) {
         if (from.isNotEmpty && to.isNotEmpty) {
-          parts.add("سورة $surah (من آية $from إلى $to)");
+          if (from == to) {
+            parts.add("سورة $surah (آية $from)");
+          } else {
+            parts.add("سورة $surah (من آية $from إلى $to)");
+          }
         } else if (from.isNotEmpty) {
           parts.add("سورة $surah (آية $from)");
-        } else if (surah.isNotEmpty) {
-          parts.add("سورة $surah كاملة");
+        } else if (to.isNotEmpty) {
+          parts.add("سورة $surah (إلى آية $to)");
         }
       } else {
         String sName = surah.isNotEmpty ? surah : _getSurahNameByPage(from);
         String prefix = sName.isNotEmpty ? "سورة $sName " : "";
         if (from.isNotEmpty && to.isNotEmpty) {
-          parts.add("$prefix(ص $from - $to)");
+          if (from == to) {
+            parts.add("$prefix(ص $from)");
+          } else {
+            parts.add("$prefix(ص $from - $to)");
+          }
         } else if (from.isNotEmpty) {
           parts.add("$prefix(ص $from)");
         } else if (to.isNotEmpty) {
@@ -1270,7 +1279,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                       child: SwitchListTile(
                                         activeColor: accentGold,
                                         value: isJuzAmmaMode,
-                                        title: const Text("طالب في (جزء عمَّ) 👶", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                                        title: const Text("طالب في (جزء عمَّ) 👶", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
                                         subtitle: const Text("لتسجيل أسماء السور ورقم الآيات لكافة الأقسام والواجبات", style: TextStyle(fontFamily: 'Cairo', fontSize: 11)),
                                         onChanged: (v) {
                                           setState(() {
@@ -1279,6 +1288,8 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                             for (var list in [newMemoRanges, newRevRanges, oldReviewRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
                                               for (var item in list) {
                                                 item['surah'] = defaultSurah;
+                                                (item['from'] as TextEditingController).clear();
+                                                (item['to'] as TextEditingController).clear();
                                               }
                                             }
                                             if (isJuzAmmaMode) totalMemorizedPagesController.text = "0";

@@ -1,8 +1,12 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:widgets_to_image/widgets_to_image.dart';
 import '../services/theme_provider.dart';
 import '../widgets/offline_wrapper.dart';
 import 'edit_student_page.dart';
@@ -585,7 +589,7 @@ class DashboardPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🏆 1. صفحة ترتيب المشرفين الأكثر تسجيلاً للجلسات
+// 🏆 1. صفحة ترتيب المشرفين الأكثر تسجيلاً للجلسات (المحدثة والمدعومة كلياً)
 // =========================================================================
 class TopSessionSupervisorsPage extends StatelessWidget {
   const TopSessionSupervisorsPage({super.key});
@@ -648,19 +652,40 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                       for (var s in sessions) {
                         var data = s.data() as Map<String, dynamic>;
                         
+                        Set<String> sessionSupervisors = {};
+
+                        // 1. مشرفو الحفظ الجديد
+                        List<dynamic>? memoSupList = data['newMemoSupervisorNames'];
+                        if (memoSupList != null) {
+                          for (var name in memoSupList) {
+                            if (name.toString().trim().isNotEmpty) sessionSupervisors.add(name.toString().trim());
+                          }
+                        }
+
+                        // 2. مشرفو المراجعة
+                        List<dynamic>? revSupList = data['reviewSupervisorNames'];
+                        if (revSupList != null) {
+                          for (var name in revSupList) {
+                            if (name.toString().trim().isNotEmpty) sessionSupervisors.add(name.toString().trim());
+                          }
+                        }
+
+                        // 3. القائمة العامة القديمة (fallback)
                         List<dynamic>? supNamesList = data['supervisorNames'];
-                        if (supNamesList != null && supNamesList.isNotEmpty) {
-                          for (var supName in supNamesList) {
-                            String nameStr = supName.toString().trim();
-                            if (nameStr.isNotEmpty) {
-                              supervisorSessionCounts[nameStr] = (supervisorSessionCounts[nameStr] ?? 0) + 1;
-                            }
+                        if (supNamesList != null) {
+                          for (var name in supNamesList) {
+                            if (name.toString().trim().isNotEmpty) sessionSupervisors.add(name.toString().trim());
                           }
-                        } else {
-                          String singleSup = data['supervisorName']?.toString().trim() ?? '';
-                          if (singleSup.isNotEmpty) {
-                            supervisorSessionCounts[singleSup] = (supervisorSessionCounts[singleSup] ?? 0) + 1;
-                          }
+                        }
+
+                        // 4. الاسم الفردي القديم (fallback)
+                        String singleSup = data['supervisorName']?.toString().trim() ?? '';
+                        if (singleSup.isNotEmpty) {
+                          sessionSupervisors.add(singleSup);
+                        }
+
+                        for (String supName in sessionSupervisors) {
+                          supervisorSessionCounts[supName] = (supervisorSessionCounts[supName] ?? 0) + 1;
                         }
                       }
 
@@ -1041,7 +1066,7 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🚀 3. صفحة تقرير الغيابات التراكمية الشاملة لجميع الطلاب (المحدثة)
+// 🚀 3. صفحة تقرير الغيابات التراكمية
 // =========================================================================
 class AllAbsentStudentsSummaryPage extends StatelessWidget {
   const AllAbsentStudentsSummaryPage({super.key});
@@ -1058,21 +1083,204 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
     }
   }
 
-  void _shareAbsenceReport(String studentName, List<dynamic> sessions) {
-    String text = "إشعار غياب 🚨\n\n";
-    text += "الطالب: $studentName\n";
-    text += "إجمالي الغيابات: ${sessions.length}\n\n";
-    text += "تفاصيل الجلسات التي غاب عنها:\n";
-    
-    for (int i = 0; i < sessions.length; i++) {
-      String date = _extractDate(sessions[i]);
-      String supervisor = sessions[i]['supervisorName'] ?? 'غير محدد';
-      text += "${i + 1}- التاريخ: $date (المشرف: $supervisor)\n";
-    }
-    
-    text += "\nنرجو متابعة الطالب حرصاً على مستواه. شكراً لتعاونكم 🌸";
-    
-    Share.share(text);
+  void _shareAbsenceReportAsImage(
+    BuildContext context, {
+    required String studentName,
+    required List<dynamic> sessions,
+  }) {
+    final WidgetsToImageController controller = WidgetsToImageController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                WidgetsToImage(
+                  controller: controller,
+                  child: Container(
+                    width: 380,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xfff8fafc),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: const Color(0xffcbd5e1), width: 1.5),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, 4))
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent.withOpacity(0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.event_busy_rounded, color: Colors.redAccent, size: 24),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  "إشعار غياب طالب",
+                                  style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Color(0xff425c75),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xff425c75),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                "تقرير متابعة 📊",
+                                style: TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 22, thickness: 1),
+
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xffe2e8f0)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  "الطالب: $studentName",
+                                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xff1e293b)),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  "${sessions.length} غيابات",
+                                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 11),
+                                ),
+                              )
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        const Text(
+                          "تفاصيل جميع الجلسات المسجلة:",
+                          style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xff425c75)),
+                        ),
+                        const SizedBox(height: 8),
+
+                        Column(
+                          children: sessions.map((session) {
+                            String date = _extractDate(session as Map<String, dynamic>);
+                            String supervisor = session['supervisorName'] ?? 'غير محدد';
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xfff1f5f9)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.circle, size: 6, color: Colors.redAccent),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        "التاريخ: $date",
+                                        style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xff334155)),
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    "المشرف: $supervisor",
+                                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.black54),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+
+                        const SizedBox(height: 14),
+                        const Center(
+                          child: Text(
+                            "شاكرين لكم حسن التعاون والحرص على التزام الطالب 🌸",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.black54, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.share_rounded, color: Colors.white, size: 18),
+                    label: const Text(
+                      "مشاركة البطاقة كصورة 🚀",
+                      style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    onPressed: () async {
+                      Uint8List? bytes = await controller.capture();
+                      if (bytes != null) {
+                        final tempDir = await getTemporaryDirectory();
+                        final file = await File('${tempDir.path}/absence_card.png').create();
+                        await file.writeAsBytes(bytes);
+
+                        if (context.mounted) Navigator.pop(dialogContext);
+
+                        await Share.shareXFiles(
+                          [XFile(file.path)],
+                          text: "إشعار غياب الطالب: $studentName 📌",
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   String _extractDate(Map<String, dynamic> sessionData) {
@@ -1195,16 +1403,20 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () => _shareAbsenceReport(studentName, sessions),
+                  onPressed: () => _shareAbsenceReportAsImage(
+                    context,
+                    studentName: studentName,
+                    sessions: sessions,
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green.shade600,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   ),
-                  icon: const Icon(Icons.share_rounded, color: Colors.white),
+                  icon: const Icon(Icons.image_rounded, color: Colors.white),
                   label: const Text(
-                    "مشاركة التقرير مع ولي الأمر",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16),
+                    "مشاركة البطاقة كصورة إلكترونية 🖼️",
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 15),
                   ),
                 ),
               ),

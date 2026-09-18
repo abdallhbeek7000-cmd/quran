@@ -81,7 +81,7 @@ class _EditStudentPageState extends State<EditStudentPage> {
     }
   }
 
-  // 🔥 دالة الرفع المباشر المدمجة ببيانات السيرفر الخاص بك dqsrrej2b
+  // 🔥 دالة الرفع المباشر المدمجة ببيانات السيرفر
   Future<String> _uploadNewImageToCloudinary() async {
     if (_newSelectedImage == null) return currentImageUrl ?? '';
     try {
@@ -109,6 +109,87 @@ class _EditStudentPageState extends State<EditStudentPage> {
     }
   }
 
+  // 👑 نافذة تأكيد تغير حالة الختم
+  Future<void> _toggleCompletionStatus(bool isDarkMode) async {
+    bool isCurrentlyCompleted = studentType == 'completed';
+
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(color: accentGold.withOpacity(0.5), width: 1.5),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isCurrentlyCompleted ? "إلغاء صفة الخاتم ⚠️" : "ترقية الطالب لـ خاتم 👑",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDarkMode ? Colors.white : primaryColor,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  isCurrentlyCompleted
+                      ? "هل ترغب في تحويل حساب الطالب من خاتم إلى طالب منتظم؟"
+                      : "هل ترغب في اعتماد الطالب ${nameController.text} كخاتم لكتاب الله كاملاً (604 صفحة)؟",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDarkMode ? Colors.white70 : Colors.black87,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: Text("إلغاء", style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.grey[700], fontFamily: 'Cairo')),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isCurrentlyCompleted ? Colors.redAccent : accentGold,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text(
+                          isCurrentlyCompleted ? "تأكيد الإلغاء" : "تأكيد الختم 👑",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (confirm == true) {
+      setState(() {
+        studentType = isCurrentlyCompleted ? 'old' : 'completed';
+      });
+    }
+  }
+
   Future<void> updateStudent() async {
     if (nameController.text.trim().isEmpty || serialController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -119,16 +200,12 @@ class _EditStudentPageState extends State<EditStudentPage> {
 
     setState(() => _isLoading = true);
     try {
-      // رفع الصورة الجديدة إلى Cloudinary إذا تم اختيارها، وإلا الحفاظ على الرابط القديم
       String finalImageUrl = currentImageUrl ?? '';
       if (_newSelectedImage != null) {
         finalImageUrl = await _uploadNewImageToCloudinary();
       }
 
-      await FirebaseFirestore.instance
-          .collection('students')
-          .doc(widget.student.id)
-          .update({
+      Map<String, dynamic> updateData = {
         'name': nameController.text.trim(),
         'serial': int.tryParse(serialController.text.trim()) ?? 0,
         'fatherName': fatherNameController.text.trim(),
@@ -137,8 +214,19 @@ class _EditStudentPageState extends State<EditStudentPage> {
         'supervisorId': selectedSupervisorId ?? '',
         'supervisorName': selectedSupervisorName ?? 'غير موزع',
         'studentType': studentType,
-        'imageUrl': finalImageUrl, 
-      });
+        'imageUrl': finalImageUrl,
+      };
+
+      // إذا تم تحديد الطالب كخاتم تثبت صفحاته تلقائياً لـ 604
+      if (studentType == 'completed') {
+        updateData['memorizedPages'] = 604.0;
+        updateData['completedAt'] = FieldValue.serverTimestamp();
+      }
+
+      await FirebaseFirestore.instance
+          .collection('students')
+          .doc(widget.student.id)
+          .update(updateData);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -159,18 +247,18 @@ class _EditStudentPageState extends State<EditStudentPage> {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية خلف الـ AppBar لجمالية الزجاج
+      extendBodyBehindAppBar: true, 
       backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, // AppBar شفاف بالكامل
-        title: Text('تعديل بيانات الطالب', style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
+        backgroundColor: Colors.transparent, 
+        title: Text('تعديل بيانات الطالب', style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
       ),
       body: Stack(
         children: [
-          // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة (Blobs)
+          // 🎨 1. الخلفية الانسيابية مع الدوائر العائمة
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -210,7 +298,7 @@ class _EditStudentPageState extends State<EditStudentPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Column(
                 children: [
-                  // 🧊 3. قسم الصورة الشخصية والهيدر الزجاجي
+                  // 🧊 3. قسم الصورة الشخصية للهيدر الزجاجي
                   _buildGlassContainer(
                     isDarkMode: isDarkMode,
                     padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 20),
@@ -257,12 +345,63 @@ class _EditStudentPageState extends State<EditStudentPage> {
                         Text(
                           nameController.text.isEmpty ? "اسم الطالب" : nameController.text,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           "الرقم التسلسلي: ${serialController.text}",
-                          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 15),
+
+                  // 👑 4. بطاقة الترقية والتحكم السريع بحالة الخاتم
+                  _buildGlassContainer(
+                    isDarkMode: isDarkMode,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Text(studentType == 'completed' ? "👑" : "📖", style: const TextStyle(fontSize: 22)),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  studentType == 'completed' ? "حساب خاتم لكتاب الله" : "طالب غير خاتم حالياً",
+                                  style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.bold,
+                                    color: studentType == 'completed' ? accentGold : (isDarkMode ? Colors.white : primaryColor),
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  studentType == 'completed' ? "604 صفحة (نظام مراجعة كامل)" : "نظام الحفظ والمراجعة العادي",
+                                  style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDarkMode ? Colors.white54 : Colors.black54),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: studentType == 'completed' ? Colors.redAccent.withOpacity(0.8) : accentGold,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          onPressed: () => _toggleCompletionStatus(isDarkMode),
+                          child: Text(
+                            studentType == 'completed' ? "إلغاء الخاتم" : "ترقية لخاتم 👑",
+                            style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
@@ -270,7 +409,7 @@ class _EditStudentPageState extends State<EditStudentPage> {
 
                   const SizedBox(height: 20),
 
-                  // 🧊 4. قسم البيانات الأساسية الزجاجي
+                  // 🧊 5. قسم البيانات الأساسية الزجاجي
                   _buildGlassContainer(
                     isDarkMode: isDarkMode,
                     padding: const EdgeInsets.all(22),
@@ -279,7 +418,7 @@ class _EditStudentPageState extends State<EditStudentPage> {
                       children: [
                         TextField(
                           controller: nameController,
-                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                           decoration: _glassInputDecoration("اسم الطالب الكامل", Icons.badge_outlined, isDarkMode),
                         ),
                         const SizedBox(height: 15),
@@ -287,21 +426,21 @@ class _EditStudentPageState extends State<EditStudentPage> {
                         TextField(
                           controller: serialController,
                           keyboardType: TextInputType.number,
-                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                           decoration: _glassInputDecoration("الرقم التسلسلي", Icons.format_list_numbered_rtl, isDarkMode),
                         ),
                         const SizedBox(height: 15),
 
                         TextField(
                           controller: fatherNameController,
-                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                           decoration: _glassInputDecoration("اسم الأب", Icons.person_outline, isDarkMode),
                         ),
                         const SizedBox(height: 15),
 
                         TextField(
                           controller: motherNameController,
-                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                           decoration: _glassInputDecoration("اسم الأم", Icons.woman_outlined, isDarkMode),
                         ),
                         const SizedBox(height: 15),
@@ -309,7 +448,7 @@ class _EditStudentPageState extends State<EditStudentPage> {
                         TextField(
                           controller: phoneController,
                           keyboardType: TextInputType.phone,
-                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                           decoration: _glassInputDecoration("رقم هاتف ولي الأمر", Icons.phone_android, isDarkMode),
                         ),
                         const SizedBox(height: 15),
@@ -317,12 +456,12 @@ class _EditStudentPageState extends State<EditStudentPage> {
                         DropdownButtonFormField<String>(
                           value: studentType,
                           dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                           decoration: _glassInputDecoration("فئة الطالب", Icons.category_outlined, isDarkMode),
                           items: const [
                             DropdownMenuItem(value: "new", child: Text("طالب جديد")),
                             DropdownMenuItem(value: "old", child: Text("طالب قديم")),
-                            DropdownMenuItem(value: "completed", child: Text("طالب خاتم")),
+                            DropdownMenuItem(value: "completed", child: Text("طالب خاتم 👑")),
                           ],
                           onChanged: (v) => setState(() => studentType = v),
                         ),
@@ -350,9 +489,9 @@ class _EditStudentPageState extends State<EditStudentPage> {
 
                             return DropdownButtonFormField<String>(
                               value: currentSelection,
-                              hint: Text("اختر المشرف / الحلقة", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black45)),
+                              hint: Text("اختر المشرف / الحلقة", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black45, fontFamily: 'Cairo')),
                               dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                              style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                              style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                               decoration: _glassInputDecoration("المشرف المسؤول", Icons.gite_outlined, isDarkMode),
                               items: supervisorItems,
                               onChanged: (v) {
@@ -388,7 +527,7 @@ class _EditStudentPageState extends State<EditStudentPage> {
                                 ? const CircularProgressIndicator(color: Colors.white)
                                 : const Text(
                                     "حفظ التغييرات",
-                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5, fontFamily: 'Cairo'),
                                   ),
                           ),
                         ),
@@ -438,7 +577,7 @@ class _EditStudentPageState extends State<EditStudentPage> {
   InputDecoration _glassInputDecoration(String label, IconData icon, bool isDarkMode) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.w600, fontSize: 13),
+      labelStyle: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.w600, fontSize: 13, fontFamily: 'Cairo'),
       prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
       filled: true,
       fillColor: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), 

@@ -208,7 +208,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   String absenceType = "بدون عذر"; 
   String memorizationRating = "جيد"; 
   String newReviewRating = "جيد"; 
-  String oldReviewRating = "جيد";        
+  String oldReviewRating = "جيد";          
   String studentStatus = "مهذب";
 
   DateTime _selectedDate = DateTime.now();
@@ -326,7 +326,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
   void _updateTotalPages() {
     if (isCompletedStudent || absent || isExam || didNotRecite || isJuzAmmaMode) {
-      if (isJuzAmmaMode) totalMemorizedPagesController.text = "0"; // ⚡ تصفير لجزء عم
+      if (isJuzAmmaMode) totalMemorizedPagesController.text = "0";
       return;
     }
     int maxPage = 0;
@@ -348,21 +348,29 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       String from = (item['from'] as TextEditingController).text.trim();
       String to = (item['to'] as TextEditingController).text.trim();
 
-      if (from.isEmpty && to.isEmpty && surah.isEmpty) continue;
+      if (from.isEmpty && to.isEmpty) continue; 
 
       if (isJuzAmmaMode) {
         if (from.isNotEmpty && to.isNotEmpty) {
-          parts.add("سورة $surah (من آية $from إلى $to)");
+          if (from == to) {
+            parts.add("سورة $surah (آية $from)");
+          } else {
+            parts.add("سورة $surah (من آية $from إلى $to)");
+          }
         } else if (from.isNotEmpty) {
           parts.add("سورة $surah (آية $from)");
-        } else if (surah.isNotEmpty) {
-          parts.add("سورة $surah كاملة");
+        } else if (to.isNotEmpty) {
+          parts.add("سورة $surah (إلى آية $to)");
         }
       } else {
         String sName = surah.isNotEmpty ? surah : _getSurahNameByPage(from);
         String prefix = sName.isNotEmpty ? "سورة $sName " : "";
         if (from.isNotEmpty && to.isNotEmpty) {
-          parts.add("$prefix(ص $from - $to)");
+          if (from == to) {
+            parts.add("$prefix(ص $from)");
+          } else {
+            parts.add("$prefix(ص $from - $to)");
+          }
         } else if (from.isNotEmpty) {
           parts.add("$prefix(ص $from)");
         } else if (to.isNotEmpty) {
@@ -373,7 +381,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     return parts.join(" | ");
   }
 
-  // 👥 نافذة مرنة لاختيار أي عدد من المشرفين لقسم محدد (حفظ جديد أو مراجعة)
   void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode, List<Map<String, String>> targetList, String title) {
     showModalBottomSheet(
       context: context,
@@ -463,6 +470,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
+  // 📖🔥 زر اختيار صفحات السورة المحدث للتمرير الفعال بدون أخطاء Overflow
   void _showSurahPagesPicker(BuildContext context, Map<String, dynamic> surah, TextEditingController fromCtrl, TextEditingController toCtrl, bool isDarkMode) {
     int start = surah['startPage'];
     int end = surah['endPage'];
@@ -470,50 +478,82 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true, 
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                "صفحات سورة ${surah['name']} (من $start إلى $end)",
-                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor, fontSize: 16),
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.85,
+          builder: (context, scrollController) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              decoration: BoxDecoration(
+                color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  )
+                ]
               ),
-              const SizedBox(height: 15),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: pages.map((p) {
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        fromCtrl.text = p.toString();
-                        toCtrl.text = p.toString();
-                        _updateTotalPages();
-                      });
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: accentGold.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: accentGold),
-                      ),
-                      child: Text("ص $p", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // مقبض سحب زجاجي
+                  Container(
+                    width: 45,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? Colors.white30 : Colors.black26,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                  );
-                }).toList(),
+                  ),
+                  const SizedBox(height: 15),
+                  Text(
+                    "صفحات سورة ${surah['name']} (من $start إلى $end)",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor, fontSize: 16),
+                  ),
+                  const SizedBox(height: 15),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      physics: const BouncingScrollPhysics(),
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        alignment: WrapAlignment.center,
+                        children: pages.map((p) {
+                          return InkWell(
+                            onTap: () {
+                              setState(() {
+                                fromCtrl.text = p.toString();
+                                toCtrl.text = p.toString();
+                                _updateTotalPages();
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: accentGold.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: accentGold),
+                              ),
+                              child: Text("ص $p", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
               ),
-              const SizedBox(height: 20),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -661,6 +701,105 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
+  // 👑 نافذة أمان واحتفال بترقية الطالب عند الوصول إلى الصفحة 604
+  Future<bool> _showCompletionCelebrationDialog(BuildContext context, bool isDarkMode) async {
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: accentGold.withOpacity(0.6), width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: accentGold.withOpacity(0.25),
+                  blurRadius: 25,
+                  spreadRadius: 2,
+                )
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: accentGold.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Text("👑", style: TextStyle(fontSize: 45)),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "مبارك! ختم القران الكريم 🎉",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: isDarkMode ? Colors.white : primaryColor,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "بحفظ هذه الجلسة، سيكتمل حفظ الطالب ${widget.studentName} لـ (604 صفحة) كتمام الحفظ.\n\nسيتحول حساب الطالب تلقائياً إلى (حساب خاتم) لتتغير واجهاته إلى نظام المراجعة الشاملة ✨",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.6,
+                    color: isDarkMode ? Colors.white70 : Colors.black87,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: Text(
+                          "إلغاء / تعديل",
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            color: isDarkMode ? Colors.white54 : Colors.grey[700],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentGold,
+                          foregroundColor: Colors.black,
+                          elevation: 3,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text(
+                          "تأكيد الختم 👑",
+                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ) ?? false;
+  }
+
   addSession() async {
     if (loading) return;
 
@@ -673,6 +812,17 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         color: Colors.redAccent,
       );
       return;
+    }
+
+    // 👑 فحص الوصول إلى 604 صفحة لتحويل الحساب إلى خاتم
+    double inputPages = double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0;
+    bool willBeCompletedNow = false;
+
+    if (!isCompletedStudent && !absent && !isExam && !didNotRecite && !isJuzAmmaMode && inputPages == 604.0) {
+      final isDarkMode = Provider.of<ThemeProvider>(context, listen: false).isDarkMode;
+      bool confirmCompletion = await _showCompletionCelebrationDialog(context, isDarkMode);
+      if (!confirmCompletion) return; // إلغاء الحفظ إذا رفض المستخدم
+      willBeCompletedNow = true;
     }
 
     setState(() => loading = true);
@@ -693,7 +843,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     
     String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
     String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
-    String finalOldRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : oldReviewRating;
+    String finalOldRevRating = (!hasReview || absent || isExam || didNotRecite) ? '' : oldReviewRating;
     String finalFallbackRevRating = isCompletedStudent ? newReviewRating : (finalNewRevRating.isNotEmpty ? finalNewRevRating : finalOldRevRating);
 
     String finalNewHW = (absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newHwRanges);
@@ -715,8 +865,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       }
     }
 
-    // ⚡ لجزء عم تجبر أن تكون 0، ولغيرها تؤخذ القيمة المدخلة
-    double totalPages = (isJuzAmmaMode) ? 0.0 : (isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0));
+    double totalPages = (isJuzAmmaMode) ? 0.0 : (isCompletedStudent || willBeCompletedNow ? 604.0 : inputPages);
 
     List<String> newMemoSupIds = selectedNewMemoSupervisors.map((e) => e['id']!).toList();
     List<String> newMemoSupNames = selectedNewMemoSupervisors.map((e) => e['name']!).toList();
@@ -773,11 +922,22 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
             onTimeout: () => print("تم حفظ الجلسة محلياً بالكامل أوفلاين ⚡"),
           );
 
-      if (!absent) {
-        FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
-          'consecutiveAbsences': 0,
-          if (!isExam && !didNotRecite && !isCompletedStudent) 'memorizedPages': totalPages,
-        }).timeout(const Duration(seconds: 1), onTimeout: () => null).catchError((e) => print("Absences update error: $e"));
+      // تحديث بيانات الطالب وحالة الحساب عند الختم
+      Map<String, dynamic> studentUpdates = {
+        if (!absent) 'consecutiveAbsences': 0,
+        if (!absent && !isExam && !didNotRecite) 'memorizedPages': totalPages,
+      };
+
+      if (willBeCompletedNow) {
+        studentUpdates['studentType'] = 'completed';
+        studentUpdates['memorizedPages'] = 604.0;
+        studentUpdates['completedAt'] = FieldValue.serverTimestamp();
+      }
+
+      if (studentUpdates.isNotEmpty) {
+        FirebaseFirestore.instance.collection('students').doc(widget.studentId).update(studentUpdates)
+            .timeout(const Duration(seconds: 1), onTimeout: () => null)
+            .catchError((e) => print("Student status update error: $e"));
       }
 
       if (!kIsWeb) {
@@ -788,11 +948,11 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         ).catchError((e) => print("Workmanager error: $e"));
       }
 
-      String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : "📢 تحديث يومي من الحلقة"));
+      String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : (willBeCompletedNow ? "👑 تهنئة بختم القرآن الكريم" : "📢 تحديث يومي من الحلقة")));
       String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)" 
         : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)" 
         : (didNotRecite ? "حضر الطالب ${widget.studentName} في حلقة اليوم ولكنه لم يسمّع أو يقرأ شيئاً ⚠️" 
-        : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}")));
+        : (willBeCompletedNow ? "مبارك! أتم الطالب ${widget.studentName} حفظ القرآن الكريم كاملاً وتم تحويل حسابه لحساب خاتم 🎉👑" : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}"))));
       
       String notifyType = absent ? "absent" : (isExam ? "exam" : (didNotRecite ? "info" : "regular"));
 
@@ -806,9 +966,9 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
       GlassToast.show(
         context,
-        title: "تم الحفظ",
-        message: "تم تسجيل الجلسة للطالب بنجاح ✅",
-        icon: Icons.check_circle_outline_rounded,
+        title: willBeCompletedNow ? "مبارك الختم 👑" : "تم الحفظ",
+        message: willBeCompletedNow ? "تم تحويل حساب الطالب إلى خاتم بنجاح 🎉" : "تم تسجيل الجلسة للطالب بنجاح ✅",
+        icon: willBeCompletedNow ? Icons.workspace_premium : Icons.check_circle_outline_rounded,
         color: Colors.greenAccent.shade400,
       );
 
@@ -888,7 +1048,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
-  // 👥 كارت مخصص لاختيار مشرفين لقسم معين
   Widget _buildSupervisorSelectorTile({
     required String label,
     required List<Map<String, String>> selectedList,
@@ -1225,7 +1384,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                       child: SwitchListTile(
                                         activeColor: accentGold,
                                         value: isJuzAmmaMode,
-                                        title: const Text("طالب في (جزء عمَّ) 👶", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                                        title: const Text("طالب في (جزء عمَّ) 👶", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
                                         subtitle: const Text("لتسجيل أسماء السور ورقم الآيات لكافة الأقسام والواجبات", style: TextStyle(fontFamily: 'Cairo', fontSize: 11)),
                                         onChanged: (v) {
                                           setState(() {
@@ -1234,10 +1393,12 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                             for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
                                               for (var item in list) {
                                                 item['surah'] = defaultSurah;
+                                                (item['from'] as TextEditingController).clear();
+                                                (item['to'] as TextEditingController).clear();
                                               }
                                             }
                                             if (isJuzAmmaMode) {
-                                              totalMemorizedPagesController.text = "0"; // ⚡ تصفير تلقائي لطلاب جزء عم
+                                              totalMemorizedPagesController.text = "0";
                                             }
                                           });
                                         },
@@ -1301,7 +1462,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     ),
                                   ],
                                   
-                                  // ⚡ عدم عرض إجمالي صفحات الحفظ نهائياً لطالب جزء عمَّ
                                   if (!isCompletedStudent && !isJuzAmmaMode) ...[
                                     const SizedBox(height: 10),
                                     Divider(color: isDarkMode ? Colors.white24 : Colors.black12),
@@ -1439,7 +1599,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
                           const SizedBox(height: 20),
                           
-                          // 👥 قسم فصل اختيار المشرفين إلى كارتين منفصلين
                           _buildSectionCard(
                             title: "المشرفين المشاركين بالتسميع",
                             icon: Icons.groups_rounded,

@@ -76,7 +76,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     return "";
   }
 
-  // 📊 دالة التصدير للإكسل (محدثة لدعم نظام جزء عمَّ والمشرفين المنفصلين)
+  // 📊 دالة التصدير للإكسل (محدثة لدعم نظام جزء عمَّ والمشرفين المنفصلين)
   Future<void> exportSessionsToExcel(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -156,7 +156,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         bool didNotRecite = data['didNotRecite'] ?? false;
         bool isJuzAmma = data['isJuzAmma'] ?? false;
 
-        String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : (didNotRecite ? 'بدون تسميع' : (isJuzAmma ? 'حلقة (جزء عمَّ)' : 'حلقة عادية')));
+        String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : (didNotRecite ? 'بدون تسميع' : (isJuzAmma ? 'حلقة (جزء عمَّ)' : 'حلقة عادية')));
         String dateStr = data['date']?.toString() ?? '';
         String dayName = _getArabicDayName(dateStr);
         String actualTime = data['actualCreatedAt']?.toString() ?? 'غير مسجل';
@@ -217,7 +217,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwNewRev),
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwOldRev),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['religiousActivities'] ?? '')), 
-          pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (isJuzAmma ? 'جزء عمَّ' : (isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---')))), 
+          pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (isJuzAmma ? 'جزء عمَّ' : (isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---')))), 
           pkg_excel.TextCellValue(data['notes']?.toString() ?? ''),
         ]);
       }
@@ -443,7 +443,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       Row(
                         children: [
                           if (isJuzAmma && !isAbsent && !isExam) ...[
-                            _buildBadge("جزء عمَّ 👶", Colors.purple),
+                            _buildBadge("جزء عمَّ 👶", Colors.purple),
                             const SizedBox(width: 4),
                           ],
                           if (isAbsent) 
