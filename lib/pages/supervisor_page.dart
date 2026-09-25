@@ -68,11 +68,14 @@ class SupervisorPage extends StatelessWidget {
     );
   }
 
-  // 🎯 نافذة التعديل (BottomSheet) بستايل زجاجي وألوان متناسقة
+  // 🎯 نافذة التعديل (BottomSheet) بستايل زجاجي وألوان متناسقة + تعديل كلمة السر
   void _showEditBottomSheet(BuildContext context, String docId, Map<String, dynamic> currentData, bool isDarkMode) {
     final TextEditingController nameEditController = TextEditingController(text: currentData['name']);
+    final TextEditingController passwordEditController = TextEditingController(text: currentData['password'] ?? '');
+    
     String? currentImgUrl = currentData['imageUrl'];
     bool isUploading = false;
+    bool isPasswordObscured = true; // للتحكم في إظهار/إخفاء كلمة السر
 
     showModalBottomSheet(
       context: context,
@@ -159,6 +162,28 @@ class SupervisorPage extends StatelessWidget {
                             style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : Colors.black),
                             decoration: _glassInputDecoration("اسم المشرف الكامل", Icons.person, isDarkMode),
                           ),
+                          const SizedBox(height: 15),
+
+                          // 🔑 حقل إدخال وتعديل كلمة السر
+                          TextField(
+                            controller: passwordEditController,
+                            obscureText: isPasswordObscured,
+                            style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : Colors.black),
+                            decoration: _glassInputDecoration("كلمة المرور", Icons.lock_outline_rounded, isDarkMode).copyWith(
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  isPasswordObscured ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                                  color: isDarkMode ? Colors.white54 : Colors.grey,
+                                ),
+                                onPressed: () {
+                                  setModalState(() {
+                                    isPasswordObscured = !isPasswordObscured;
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
+
                           const SizedBox(height: 30),
                           
                           Row(
@@ -179,13 +204,14 @@ class SupervisorPage extends StatelessWidget {
                                         .doc(docId)
                                         .update({
                                       'name': nameEditController.text.trim(),
+                                      'password': passwordEditController.text.trim(),
                                       'imageUrl': currentImgUrl ?? '',
                                     });
                                     
                                     if (context.mounted) {
                                       Navigator.pop(context);
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث البيانات بنجاح", style: TextStyle(fontFamily: 'Cairo'))),
+                                        const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث البيانات وكلمة السر بنجاح", style: TextStyle(fontFamily: 'Cairo'))),
                                       );
                                     }
                                   },
@@ -305,6 +331,7 @@ class SupervisorPage extends StatelessWidget {
                     final data = supervisor.data() as Map<String, dynamic>;
                     String? imageUrl = data['imageUrl'];
                     String sName = data['name'] ?? 'بدون اسم';
+                    String sPassword = data['password'] ?? '---';
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 15),
@@ -335,16 +362,33 @@ class SupervisorPage extends StatelessWidget {
                           ),
                           subtitle: Padding(
                             padding: const EdgeInsets.only(top: 4.0),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(Icons.email_outlined, size: 13, color: isDarkMode ? Colors.white54 : Colors.grey[600]),
-                                const SizedBox(width: 5),
-                                Expanded(
-                                  child: Text(
-                                    data['email'] ?? '',
-                                    style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                Row(
+                                  children: [
+                                    Icon(Icons.email_outlined, size: 13, color: isDarkMode ? Colors.white54 : Colors.grey[600]),
+                                    const SizedBox(width: 5),
+                                    Expanded(
+                                      child: Text(
+                                        data['email'] ?? '',
+                                        style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.grey[700], fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                // 🔑 عرض كلمة المرور تحت البريد الإلكتروني
+                                Row(
+                                  children: [
+                                    Icon(Icons.key_rounded, size: 13, color: isDarkMode ? accentGold : Colors.amber.shade800),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      "كلمة السر: $sPassword",
+                                      style: TextStyle(color: isDarkMode ? accentGold : Colors.amber.shade900, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -404,7 +448,7 @@ class SupervisorPage extends StatelessWidget {
       prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
       filled: true,
       fillColor: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.05), 
-      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15), 

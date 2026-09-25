@@ -403,7 +403,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
     );
   }
 
-  // 🚀 دالة الحفظ الذكية المحصنة تماماً ضد تكرار الجلسات والطلبات المعتمدة
+  // 🚀 دالة الحفظ الذكية المحصنة: تحمي جلسات التسميع الحقيقية وتقتصر بالحذف على جلسات الغياب فقط
   Future<void> _saveAttendance(bool isDark) async {
     setState(() => isSaving = true);
     try {
@@ -430,18 +430,17 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
         String studentId = entry.key;
         var record = entry.value;
         String status = record['status'] ?? 'none';
-        bool isPreApproved = record['isPreApproved'] == true;
-
         String customSessionId = "${studentId}_$todayDate";
 
         if (status == 'present') {
           presentCount++;
 
-          // إذا تم تحويله لحاضر وكان لديه غياب عادي غير الاستئذان المعتمد، نحذف جلسة الغياب
+          // 🛡️ فحص حاسم: نحذف الجلسة فقط إذا كانت "جلسة غياب" وتغير الطالب لحاضر
+          // أما لو كانت جلسة تسميع حقيقية (فيها صفحات أو absent == false) فلن نمسها أبداً!
           var existingDoc = await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).get();
           if (existingDoc.exists) {
             var exData = existingDoc.data() ?? {};
-            if (exData['absenceType'] != 'بعذر' || !exData['notes'].toString().contains('استئذان')) {
+            if (exData['absent'] == true) {
               await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).delete().catchError((_) {});
             }
           }
@@ -451,25 +450,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
           String absenceType = record['absenceType'] ?? 'بدون عذر';
           String reason = record['reason'] ?? 'غياب عن الدوام المبدئي';
 
-          // 🛡️ فحص الجلسات المعتمدة لمنع تكرار الغياب
-          var existingSessionDoc = await FirebaseFirestore.instance
-              .collection('sessions')
-              .doc(customSessionId)
-              .get();
-
-          if (existingSessionDoc.exists) {
-            var existingData = existingSessionDoc.data() ?? {};
-            bool isAlreadyApprovedLeave = existingData['absenceType'] == 'بعذر' || 
-                                          existingData['notes']?.toString().contains('استئذان') == true ||
-                                          existingData['absenceReason']?.toString().contains('استئذان') == true;
-
-            if (isAlreadyApprovedLeave || isPreApproved) {
-              print("⚠️ الطالب $studentId يمتلك بالفعل جلسة غياب رسمية معتمدة مسبقاً (استئذان)، تم تجنب التكرار.");
-              continue; // 👈 التجاوز فوراً وعدم إنشاء جلسة ثانية فوقها
-            }
-          }
-
-          // 🟢 إنشاء جلسة غياب للطلاب الذين ليس لديهم جلسة استئذان سابقة
           var studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
           if (studentDoc.exists) {
             var sData = studentDoc.data()!;

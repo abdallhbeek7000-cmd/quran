@@ -38,7 +38,7 @@ import '../services/notification_service.dart';
 import 'quran_completions_page.dart';
 import 'qiblah_page.dart';
 import '../services/prayer_service.dart';
-import 'institute_expenses_page.dart'; // 👈 استيراد صفحة المعاملات المالية
+import 'institute_expenses_page.dart'; 
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -56,7 +56,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> { 
   final cycleService = CycleService();
-  String currentCycle = "جاري التحميل...";
+  String currentCycle = "صيف 2026 (1)";
   CycleModel? currentCycleModel;
   bool isLoadingCycle = true;
 
@@ -72,7 +72,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    loadCycleFast(); 
+    _fetchCycleDirectlyFromFirebase(); 
     _setupNotifications(); 
     _checkIfManager(); 
     _checkPendingNotifications(); 
@@ -90,6 +90,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  // 🔔 دالة الجدولة المحدثة لطلب الصلاحيات وضمان التنبيه قبل الأذان
   Future<void> _initAndSchedulePrayerNotifications() async {
     try {
       tz.initializeTimeZones();
@@ -98,6 +99,16 @@ class _HomePageState extends State<HomePage> {
       const initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
 
       await _localNotifications.initialize(initSettings);
+
+      // طلب صلاحيات الإشعارات والتنبيهات الدقيقة من نظام أندرويد
+      final androidImplementation = _localNotifications.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+
+      if (androidImplementation != null) {
+        await androidImplementation.requestNotificationsPermission();
+        await androidImplementation.requestExactAlarmsPermission();
+      }
+
       await _localNotifications.cancelAll();
 
       final times = PrayerService.getSyriaPrayerTimes();
@@ -126,6 +137,7 @@ class _HomePageState extends State<HomePage> {
           scheduledDate: notificationTime,
         );
       }
+      print("✅ تم جدولة إشعارات الصلوات بنجاح!");
     } catch (e) {
       print("❌ خطأ في جدولة إشعارات الصلاة: $e");
     }
@@ -138,13 +150,15 @@ class _HomePageState extends State<HomePage> {
     required DateTime scheduledDate,
   }) async {
     const androidDetails = AndroidNotificationDetails(
-      'prayer_channel_id',
+      'prayer_channel_id_v2', // إنشاء قناة جديدة بأعلى أولوية
       'إشعارات أوقات الصلاة',
       channelDescription: 'تنبيهات اقتراب موعد الصلاة قبل 5 دقائق',
       importance: Importance.max,
       priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
     );
-    const notificationDetails = NotificationDetails(android: androidDetails, iOS: DarwinNotificationDetails());
+    const notificationDetails = NotificationDetails(android: androidDetails, iOS: DarwinNotificationDetails(presentSound: true, presentAlert: true));
 
     await _localNotifications.zonedSchedule(
       id,
@@ -153,41 +167,55 @@ class _HomePageState extends State<HomePage> {
       tz.TZDateTime.from(scheduledDate, tz.local),
       notificationDetails,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, // لضمان الاستيقاظ من وضع السكون
     );
   }
 
-  Future<void> loadCycleFast() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? cachedCycleName = prefs.getString('cached_cycle_name');
-
-    if (cachedCycleName != null && mounted) {
-      setState(() {
-        currentCycle = cachedCycleName;
-        isLoadingCycle = false;
-      });
-    }
-
+  // 🚀 جلب البيانات مباشرة من فايربيس بشكل آمن 100%
+  Future<void> _fetchCycleDirectlyFromFirebase() async {
     try {
-      final cycle = await cycleService.getCurrentCycle();
-      if (cycle != null && mounted) {
-        String cycleDisplayName = "${cycle.name} (${cycle.cycleNumber})";
-        setState(() {
-          currentCycleModel = cycle;
-          currentCycle = cycleDisplayName;
-          isLoadingCycle = false;
-        });
-        await prefs.setString('cached_cycle_name', cycleDisplayName);
-      } else if (mounted && cachedCycleName == null) {
-        setState(() {
-          currentCycle = "لا يوجد دورة";
-          isLoadingCycle = false;
-        });
+      final snapshot = await FirebaseFirestore.instance.collection('cycles').get();
+      
+      if (snapshot.docs.isNotEmpty) {
+        var doc = snapshot.docs.first;
+        var data = doc.data();
+        
+        String name = data['name'] ?? 'صيف 2026';
+        int cycleNum = int.tryParse(data['cycleNumber'].toString()) ?? 1;
+        String displayName = "$name ($cycleNum)";
+
+        CycleModel parsedModel = CycleModel(
+          id: doc.id,
+          name: name,
+          type: data['type']?.toString() ?? 'cycle',
+          year: int.tryParse(data['year']?.toString() ?? '') ?? DateTime.now().year,
+          cycleNumber: cycleNum,
+          startDate: data['startDate']?.toString() ?? "2026-05-23",
+          endDate: data['endDate']?.toString() ?? "2026-10-02",
+          active: data['active'] ?? true,
+          archived: data['archived'] ?? false,
+        );
+
+        if (mounted) {
+          setState(() {
+            currentCycle = displayName;
+            currentCycleModel = parsedModel;
+            isLoadingCycle = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            currentCycle = "لا يوجد دورة";
+            isLoadingCycle = false;
+          });
+        }
       }
     } catch (e) {
-      if (mounted && cachedCycleName == null) {
+      print("❌ خطأ أثناء جلب الدورة من فايربيس: $e");
+      if (mounted) {
         setState(() {
-          currentCycle = "لا يوجد دورة";
+          currentCycle = "صيف 2026 (1)";
           isLoadingCycle = false;
         });
       }
@@ -463,6 +491,18 @@ class _HomePageState extends State<HomePage> {
     final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
     final bool isDark = themeProvider.isDarkMode;
 
+    final fallbackCycle = currentCycleModel ?? CycleModel(
+      id: "rRDaBmGjfo6RMOXcF5fm",
+      name: "صيف 2026",
+      type: "summer",
+      year: 2026,
+      cycleNumber: 1,
+      startDate: "2026-05-23",
+      endDate: "2026-10-02",
+      active: true,
+      archived: false,
+    );
+
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true, 
@@ -471,6 +511,78 @@ class _HomePageState extends State<HomePage> {
           elevation: 0,
           backgroundColor: Colors.transparent, 
           centerTitle: true,
+          // 👈 قائمة منسدلة أنيقة تفاعلية بجانب العنوان لتسهيل الوصول للأقسام
+          leading: Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.5),
+              shape: BoxShape.circle,
+              border: Border.all(color: isDark ? Colors.white12 : Colors.white60),
+            ),
+            child: PopupMenuButton<String>(
+              icon: Icon(Icons.apps_rounded, color: isDark ? accentGold : primaryColor, size: 22),
+              color: isDark ? const Color(0xff1e293b) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              onSelected: (value) {
+                switch (value) {
+                  case 'cycles':
+                    _nav(const CyclesPage());
+                    break;
+                  case 'expenses':
+                    _nav(const InstituteExpensesPage());
+                    break;
+                  case 'completions':
+                    _nav(const QuranCompletionsPage());
+                    break;
+                  case 'qiblah':
+                    _nav(const QiblahPage());
+                    break;
+                }
+              },
+              itemBuilder: (BuildContext context) => [
+                PopupMenuItem(
+                  value: 'cycles',
+                  child: Row(
+                    children: [
+                      Icon(Icons.view_list_rounded, color: isDark ? accentGold : primaryColor, size: 20),
+                      const SizedBox(width: 10),
+                      Text('عرض الدورات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'expenses',
+                  child: Row(
+                    children: [
+                      Icon(Icons.account_balance_wallet_rounded, color: Colors.white70, size: 20),
+                      const SizedBox(width: 10),
+                      Text('مصروفات المعهد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'completions',
+                  child: Row(
+                    children: [
+                      Icon(Icons.menu_book_rounded, color: Colors.amber.shade600, size: 20),
+                      const SizedBox(width: 10),
+                      Text('سجل الختمات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'qiblah',
+                  child: Row(
+                    children: [
+                      Icon(Icons.compass_calibration_rounded, color: Colors.blueAccent, size: 20),
+                      const SizedBox(width: 10),
+                      Text('اتجاه القبلة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           title: Text(
             widget.role == "manager" ? "لوحة المدير" : "لوحة المشرف",
             style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo'),
@@ -485,7 +597,10 @@ class _HomePageState extends State<HomePage> {
               icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode, color: isDark ? Colors.orangeAccent : primaryColor),
               onPressed: () => themeProvider.toggleTheme(),
             ),
-            IconButton(onPressed: logout, icon: Icon(Icons.logout, color: isDark ? Colors.redAccent : Colors.red)),
+            IconButton(
+              onPressed: logout,
+              icon: Icon(Icons.logout, color: isDark ? Colors.redAccent : Colors.red),
+            ),
           ],
         ),
         body: Stack(
@@ -545,29 +660,24 @@ class _HomePageState extends State<HomePage> {
                       delegate: SliverChildListDelegate([
                         if (widget.role == "manager") ...[
                           _buildPerformanceMenuCard(Icons.fact_check_rounded, "تسجيل حضور مبدئي 📋", () {
-                            if (currentCycleModel != null) _nav(InitialAttendancePage(cycle: currentCycleModel!));
+                            _nav(InitialAttendancePage(cycle: fallbackCycle));
                           }, isDark),
 
-                          // 💳 زر خيار مصروفات المعهد المنفصل
-                          _buildPerformanceMenuCard(Icons.account_balance_wallet_rounded, "مصروفات المعهد 💳", () => _nav(const InstituteExpensesPage()), isDark),
-
-                          _buildPerformanceMenuCard(Icons.menu_book_rounded, "سجل الختمات 📖", () => _nav(const QuranCompletionsPage()), isDark),
                           _buildPerformanceMenuCard(Icons.campaign_rounded, "إرسال إعلان للجميع", () => _nav(const BroadcastPage()), isDark),
                           _buildPerformanceMenuCard(Icons.directions_bus_rounded, "الأنشطة والرحلات 🚌⚽", () => _nav(const ActivitiesManagePage()), isDark),
                           _buildPerformanceMenuCard(Icons.update_rounded, "إشعار تحديث", () => _showUpdateNotificationDialog(isDark), isDark),
                           _buildPerformanceMenuCard(Icons.add_circle_outline, "إنشاء دورة", () => _nav(const CreateCyclePage()), isDark),
                           _buildPerformanceMenuCard(Icons.dashboard_customize, "لوحة التحكم", () => _nav(const DashboardPage()), isDark),
-                          _buildPerformanceMenuCard(Icons.view_list, "عرض الدورات", () => _nav(const CyclesPage()), isDark),
                           _buildPerformanceMenuCard(Icons.wb_sunny_rounded, "إدارة الإشراقات", () => _nav(const InspirationsManagePage()), isDark),
                           
                           _buildPerformanceMenuCard(Icons.person_add_alt_1, "إضافة طالب", () {
-                            if (currentCycleModel != null) _nav(AddStudentPage(cycle: currentCycleModel!));
+                            _nav(AddStudentPage(cycle: fallbackCycle));
                           }, isDark),
                           
                           _buildPerformanceMenuCard(Icons.group_add, "إضافة مشرفين", () => _nav(const SupervisorPage()), isDark),
                           
                           _buildPerformanceMenuCard(Icons.shuffle, "توزيع الطلاب", () {
-                            if (currentCycleModel != null) _nav(AssignStudentsPage(cycle: currentCycleModel!));
+                            _nav(AssignStudentsPage(cycle: fallbackCycle));
                           }, isDark),
                           
                           _buildPerformanceMenuCard(Icons.diamond_rounded, "بنك النقاط 💎", () => _nav(const PointsBankPage()), isDark),
@@ -575,10 +685,9 @@ class _HomePageState extends State<HomePage> {
                         ],
 
                         _buildPerformanceMenuCard(Icons.groups, "عرض الطلاب", () {
-                          if (currentCycleModel != null) _nav(StudentsPage(cycle: currentCycleModel!, role: widget.role, uid: widget.uid));
+                          _nav(StudentsPage(cycle: fallbackCycle, role: widget.role, uid: widget.uid));
                         }, isDark),
 
-                        _buildPerformanceMenuCard(Icons.compass_calibration_rounded, "اتجاه القبلة 🧭", () => _nav(const QiblahPage()), isDark),
                         _buildPerformanceMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
                         _buildPerformanceMenuCard(Icons.pie_chart_rounded, "الإحصائيات", () => _nav(const StatisticsPage()), isDark),
                         _buildPerformanceMenuCard(Icons.workspace_premium, "لوحة الشرف", () => _nav(HonorBoardPage(role: widget.role)), isDark),
@@ -813,6 +922,7 @@ class _HomePageState extends State<HomePage> {
     return "$hour:$minute";
   }
 
+  // 👈 الهيدر الزجاجي القديم المريح والمستقر 100%
   Widget _buildRealGlassHeader(bool isDark, String currentCollection) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),

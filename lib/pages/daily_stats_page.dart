@@ -275,6 +275,32 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                         formattedDate, isDarkMode),
                   ),
                   const SizedBox(height: 14),
+                  // 🚀 إضافة بطاقة "حضر ولم يسمّع" اليوم
+                  InkWell(
+                    borderRadius: BorderRadius.circular(25),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DailyDidNotReciteStudentsPage(
+                              targetDate: formattedDate),
+                        ),
+                      );
+                    },
+                    child: _buildStreamCard(
+                      title: "حضر ولم يسمّع اليوم ⚠️",
+                      subtitle: "عرض القائمة وتصدير الكرت لواتساب الأهالي",
+                      icon: Icons.speaker_notes_off_outlined,
+                      color: Colors.blueGrey,
+                      stream: FirebaseFirestore.instance
+                          .collection('sessions')
+                          .where('date', isEqualTo: formattedDate)
+                          .where('didNotRecite', isEqualTo: true)
+                          .snapshots(),
+                      isDarkMode: isDarkMode,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   InkWell(
                     borderRadius: BorderRadius.circular(25),
                     onTap: () {
@@ -1156,8 +1182,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                                                             style: TextStyle(
                                                                                 fontFamily: 'Cairo',
                                                                                 fontWeight: FontWeight.bold,
-                                                                                color: isDarkMode ? Colors.white : primaryColor))),
-                                                              )
+                                                                                color: isDarkMode ? Colors.white : primaryColor))))
                                                             : Center(
                                                                 child: Text(
                                                                     firstLetter,
@@ -1739,7 +1764,379 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 }
 
 // =========================================================================
-// 🚀 3. واجهة التسميعات والجلسات اليومية
+// 🚀 3. واجهة الطلاب الحاضرين الذين لم يسمّعوا (حضر ولم يسمّع) مع التصدير 📸
+// =========================================================================
+class DailyDidNotReciteStudentsPage extends StatefulWidget {
+  final String targetDate;
+  const DailyDidNotReciteStudentsPage({super.key, required this.targetDate});
+
+  @override
+  State<DailyDidNotReciteStudentsPage> createState() =>
+      _DailyDidNotReciteStudentsPageState();
+}
+
+class _DailyDidNotReciteStudentsPageState
+    extends State<DailyDidNotReciteStudentsPage> {
+  final WidgetsToImageController controller = WidgetsToImageController();
+  final Color primaryColor = const Color(0xff425c75);
+  final Color accentGold = const Color(0xffd4af37);
+  bool isExporting = false;
+
+  Future<void> _shareDidNotReciteListAsImage() async {
+    setState(() => isExporting = true);
+    try {
+      final bytes = await controller.capture();
+      if (bytes != null) {
+        final tempDir = await getTemporaryDirectory();
+        final file =
+            await File('${tempDir.path}/حضر_ولم_يسمع_${widget.targetDate}.png')
+                .create();
+        await file.writeAsBytes(bytes);
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text:
+              '⚠️ تنبيه أولياء الأمور الكرام: قائمة الطلاب الذين حضروا ولم يتمكنوا من التسميع يوم (${widget.targetDate})\nيرجى المتابعة والحرص على المراجعة بالمنزل 🌸\nمعهد الشيخ سعيد العبدالله 🕌',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("حدث خطأ أثناء إنشاء الصورة: $e")));
+      }
+    } finally {
+      if (mounted) setState(() => isExporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor:
+            isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text("حضر ولم يسمّع (${widget.targetDate}) ⚠️",
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : primaryColor,
+                  fontFamily: 'Cairo',
+                  fontSize: 16)),
+          iconTheme:
+              IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+          actions: [
+            IconButton(
+              icon: isExporting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(Icons.share_rounded,
+                      color: isDarkMode ? accentGold : primaryColor),
+              tooltip: "تصدير صورة لواتساب الأهالي",
+              onPressed: isExporting ? null : _shareDidNotReciteListAsImage,
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode
+                      ? [
+                          const Color(0xff0f172a),
+                          const Color(0xff1e293b),
+                          const Color(0xff0f172a)
+                        ]
+                      : [
+                          const Color(0xffe2e8f0),
+                          const Color(0xffcfdef3),
+                          const Color(0xffe0eafc)
+                        ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('sessions')
+                    .where('date', isEqualTo: widget.targetDate)
+                    .where('didNotRecite', isEqualTo: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final docs = snapshot.data!.docs;
+
+                  if (docs.isEmpty) {
+                    return Center(
+                      child: Text(
+                          "لا يوجد طلاب مسجلين بحالة (حضر ولم يسمّع) اليوم 🎉",
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.white70 : primaryColor,
+                              fontSize: 14)),
+                    );
+                  }
+
+                  return Stack(
+                    children: [
+                      Positioned(
+                        left: -9999,
+                        top: -9999,
+                        child: WidgetsToImage(
+                          controller: controller,
+                          child: SizedBox(
+                            width: 600,
+                            child: _buildExportablePoster(docs),
+                          ),
+                        ),
+                      ),
+                      ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.all(20),
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) {
+                          final data =
+                              docs[index].data() as Map<String, dynamic>;
+                          final String studentName =
+                              data['studentName'] ?? 'طالب';
+                          final String supervisor =
+                              data['supervisorName'] ?? 'غير محدد';
+                          final String notes = data['notes'] ?? '';
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: isDarkMode
+                                  ? Colors.white.withOpacity(0.06)
+                                  : Colors.white.withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: Colors.blueGrey.withOpacity(0.4),
+                                  width: 1.2),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: Colors.black.withOpacity(0.03),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4))
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                            Icons.speaker_notes_off_outlined,
+                                            color: Colors.blueGrey,
+                                            size: 20),
+                                        const SizedBox(width: 8),
+                                        Text(studentName,
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                                fontFamily: 'Cairo',
+                                                color: isDarkMode
+                                                    ? Colors.white
+                                                    : primaryColor)),
+                                      ],
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blueGrey.withOpacity(0.2),
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: Colors.blueGrey, width: 0.8),
+                                      ),
+                                      child: const Text("حضر ولم يسمّع",
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              fontFamily: 'Cairo',
+                                              color: Colors.blueGrey)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text("المشرف المسؤول: $supervisor",
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontFamily: 'Cairo',
+                                        color: isDarkMode
+                                            ? Colors.white60
+                                            : Colors.black54)),
+                                if (notes.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text("ملاحظات: $notes",
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontStyle: FontStyle.italic,
+                                          fontFamily: 'Cairo',
+                                          color: isDarkMode
+                                              ? Colors.white70
+                                              : Colors.black87)),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
+    return Container(
+      padding: const EdgeInsets.all(30),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xff0f172a), Color(0xff1e293b), Color(0xff0f172a)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.mosque, color: accentGold, size: 32),
+              const SizedBox(width: 12),
+              const Text("معهد الشيخ سعيد العبدالله",
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontFamily: 'Cairo')),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            decoration: BoxDecoration(
+                color: Colors.blueGrey.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(color: Colors.blueGrey, width: 1)),
+            child: Text(
+                "⚠️ قائمة الطلاب الذين حضروا ولم يسمّعوا يوم: ${widget.targetDate}",
+                style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.lightBlueAccent,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Cairo')),
+          ),
+          const SizedBox(height: 25),
+          Container(
+            decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white24, width: 1.2)),
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(2.2),
+                1: FlexColumnWidth(2),
+                2: FlexColumnWidth(1.6)
+              },
+              children: [
+                TableRow(
+                  decoration:
+                      BoxDecoration(color: Colors.white.withOpacity(0.12)),
+                  children: [
+                    _tableHeader("اسم الطالب"),
+                    _tableHeader("المشرف المسؤول"),
+                    _tableHeader("الحالة"),
+                  ],
+                ),
+                ...docs.map((d) {
+                  var data = d.data() as Map<String, dynamic>;
+                  String name = data['studentName'] ?? 'طالب';
+                  String supervisor = data['supervisorName'] ?? 'غير محدد';
+                  return TableRow(
+                    children: [
+                      _tableCell(name, isBold: true),
+                      _tableCell(supervisor),
+                      _tableCell("حضر ولم يسمّع ⚠️",
+                          color: Colors.amberAccent, isBold: true),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 25),
+          const Text(
+              "يرجى من أولياء الأمور الكرام المتابعة والحرص على تسميع المقدار بالبيت 🌸",
+              style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.white60,
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _tableHeader(String txt) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      child: Text(txt,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              color: accentGold,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Cairo',
+              fontSize: 13)),
+    );
+  }
+
+  Widget _tableCell(String txt, {bool isBold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: Text(
+        txt,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+            color: color ?? Colors.white,
+            fontSize: 12,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            fontFamily: 'Cairo'),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// 🚀 4. واجهة التسميعات والجلسات اليومية
 // =========================================================================
 class DailyRecitationsPage extends StatefulWidget {
   final String targetDate;

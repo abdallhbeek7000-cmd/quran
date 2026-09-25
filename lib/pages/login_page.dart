@@ -13,7 +13,6 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-// 🚀 تم إزالة SingleTickerProviderStateMixin لأننا أوقفنا الأنيميشن لتخفيف الضغط
 class _LoginPageState extends State<LoginPage> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
@@ -32,7 +31,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   login() async {
-    if (emailController.text.isEmpty || passwordController.text.isEmpty) {
+    final inputEmail = emailController.text.trim().toLowerCase();
+    final inputPassword = passwordController.text.trim();
+
+    if (inputEmail.isEmpty || inputPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("يرجى ملء جميع الحقول", style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
@@ -45,35 +47,87 @@ class _LoginPageState extends State<LoginPage> {
     try {
       setState(() => loading = true);
 
-      // 1. تسجيل الدخول عبر الفايربيز
-      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
-      );
-
-      final uid = credential.user!.uid;
-      
-      // 2. الفحص الصارم: نبحث في جدول المشرفين أولاً
-      DocumentSnapshot supervisorDoc = await FirebaseFirestore.instance.collection('supervisors').doc(uid).get();
+      String uid = '';
       String role = '';
 
-      if (supervisorDoc.exists) {
-        role = 'supervisor';
+      // 1. محاولة تسجيل الدخول عبر Firebase Auth أولاً
+      try {
+        final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: inputEmail,
+          password: inputPassword,
+        );
+        uid = credential.user!.uid;
+      } catch (authError) {
+        // إذا فشل Auth، سيتم الانتقال للفحص المباشر من Firestore أدناه
+        print("Auth Login Failed, attempting Direct Firestore Fallback: $authError");
+      }
+
+      // 2. البحث في جدول المشرفين (بالـ UID أولاً ثم بالبريد الإلكتروني)
+      QuerySnapshot supervisorQuery;
+      if (uid.isNotEmpty) {
+        supervisorQuery = await FirebaseFirestore.instance
+            .collection('supervisors')
+            .where(FieldPath.documentId, isEqualTo: uid)
+            .get();
+        if (supervisorQuery.docs.isEmpty) {
+          supervisorQuery = await FirebaseFirestore.instance
+              .collection('supervisors')
+              .where('email', isEqualTo: inputEmail)
+              .get();
+        }
       } else {
-        // إذا لم يكن مشرفاً، نبحث في جدول المدراء
-        DocumentSnapshot managerDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-        if (managerDoc.exists) {
-          role = 'manager';
+        supervisorQuery = await FirebaseFirestore.instance
+            .collection('supervisors')
+            .where('email', isEqualTo: inputEmail)
+            .where('password', isEqualTo: inputPassword)
+            .get();
+      }
+
+      if (supervisorQuery.docs.isNotEmpty) {
+        role = 'supervisor';
+        final supDoc = supervisorQuery.docs.first;
+        uid = supDoc.id;
+
+        // تحديث كلمة السر والبريد تلقائياً في المستند لضمان التزامن
+        await supDoc.reference.update({
+          'password': inputPassword,
+          'email': inputEmail,
+        });
+      } else {
+        // 3. إذا لم يكن مشرفاً، نبحث في جدول المدراء (users)
+        QuerySnapshot managerQuery;
+        if (uid.isNotEmpty) {
+          managerQuery = await FirebaseFirestore.instance
+              .collection('users')
+              .where(FieldPath.documentId, isEqualTo: uid)
+              .get();
+          if (managerQuery.docs.isEmpty) {
+            managerQuery = await FirebaseFirestore.instance
+                .collection('users')
+                .where('email', isEqualTo: inputEmail)
+                .get();
+          }
         } else {
-          throw Exception("حساب المستخدم غير موجود في النظام");
+          managerQuery = await FirebaseFirestore.instance
+              .collection('users')
+              .where('email', isEqualTo: inputEmail)
+              .where('password', isEqualTo: inputPassword)
+              .get();
+        }
+
+        if (managerQuery.docs.isNotEmpty) {
+          role = 'manager';
+          uid = managerQuery.docs.first.id;
+        } else {
+          throw Exception("حساب المستخدم أو كلمة المرور غير صحيحة");
         }
       }
 
-      // 3. 🧹 تنظيف الذاكرة القديمة بالكامل قبل الحفظ لمنع التداخل!
+      // 4. 🧹 تنظيف الذاكرة القديمة بالكامل قبل الحفظ
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear(); 
 
-      // 4. 💾 حفظ البيانات الجديدة بشكل نظيف
+      // 5. 💾 حفظ البيانات الجديدة
       await prefs.setString('userRole', role); 
       await prefs.setString('role', role); 
       await prefs.setString('userId', uid);    
@@ -84,7 +138,7 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
       
-      // 5. التوجيه الآمن لصفحة الهوم
+      // 6. التوجيه لصفحة الهوم
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -132,7 +186,6 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
           
-          // 🚀 تم تثبيت الدائرة الأولى 
           Positioned(
             top: -50,
             left: -50,
@@ -148,7 +201,6 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
           
-          // 🚀 تم تثبيت الدائرة الثانية 
           Positioned(
             bottom: -100,
             right: -50,
