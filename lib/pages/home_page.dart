@@ -90,7 +90,6 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // 🔔 دالة الجدولة المحدثة لطلب الصلاحيات وضمان التنبيه قبل الأذان
   Future<void> _initAndSchedulePrayerNotifications() async {
     try {
       tz.initializeTimeZones();
@@ -100,7 +99,6 @@ class _HomePageState extends State<HomePage> {
 
       await _localNotifications.initialize(initSettings);
 
-      // طلب صلاحيات الإشعارات والتنبيهات الدقيقة من نظام أندرويد
       final androidImplementation = _localNotifications.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
 
@@ -150,7 +148,7 @@ class _HomePageState extends State<HomePage> {
     required DateTime scheduledDate,
   }) async {
     const androidDetails = AndroidNotificationDetails(
-      'prayer_channel_id_v2', // إنشاء قناة جديدة بأعلى أولوية
+      'prayer_channel_id_v2',
       'إشعارات أوقات الصلاة',
       channelDescription: 'تنبيهات اقتراب موعد الصلاة قبل 5 دقائق',
       importance: Importance.max,
@@ -167,11 +165,10 @@ class _HomePageState extends State<HomePage> {
       tz.TZDateTime.from(scheduledDate, tz.local),
       notificationDetails,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, // لضمان الاستيقاظ من وضع السكون
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
 
-  // 🚀 جلب البيانات مباشرة من فايربيس بشكل آمن 100%
   Future<void> _fetchCycleDirectlyFromFirebase() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('cycles').get();
@@ -229,11 +226,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _checkIfManager() {
-    String realUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    if (widget.role == "manager") {
-      if (mounted) setState(() => isAlsoManager = true);
-    } else if (realUid.isNotEmpty && realUid != widget.uid) {
+  void _checkIfManager() async {
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    // فحص آمن: فقط إذا كان الحساب مسجلاً بجدول المدير الرسمي
+    var userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+    
+    if (userDoc.exists && widget.role == "manager") {
       if (mounted) setState(() => isAlsoManager = true);
     } else {
       if (mounted) setState(() => isAlsoManager = false);
@@ -511,7 +511,6 @@ class _HomePageState extends State<HomePage> {
           elevation: 0,
           backgroundColor: Colors.transparent, 
           centerTitle: true,
-          // 👈 قائمة منسدلة أنيقة تفاعلية بجانب العنوان لتسهيل الوصول للأقسام
           leading: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -550,16 +549,18 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'expenses',
-                  child: Row(
-                    children: [
-                      Icon(Icons.account_balance_wallet_rounded, color: Colors.white70, size: 20),
-                      const SizedBox(width: 10),
-                      Text('مصروفات المعهد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                    ],
+                // 🔒 المصروفات محصورة بالمدير فقط
+                if (widget.role == "manager")
+                  PopupMenuItem(
+                    value: 'expenses',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.account_balance_wallet_rounded, color: Colors.white70, size: 20),
+                        const SizedBox(width: 10),
+                        Text('مصروفات المعهد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                      ],
+                    ),
                   ),
-                ),
                 PopupMenuItem(
                   value: 'completions',
                   child: Row(
@@ -574,7 +575,7 @@ class _HomePageState extends State<HomePage> {
                   value: 'qiblah',
                   child: Row(
                     children: [
-                      Icon(Icons.compass_calibration_rounded, color: Colors.blueAccent, size: 20),
+                      const Icon(Icons.compass_calibration_rounded, color: Colors.blueAccent, size: 20),
                       const SizedBox(width: 10),
                       Text('اتجاه القبلة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
                     ],
@@ -922,7 +923,6 @@ class _HomePageState extends State<HomePage> {
     return "$hour:$minute";
   }
 
-  // 👈 الهيدر الزجاجي القديم المريح والمستقر 100%
   Widget _buildRealGlassHeader(bool isDark, String currentCollection) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),

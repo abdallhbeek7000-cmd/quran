@@ -1,11 +1,11 @@
-import 'dart:ui'; // 🎯 لتأثير الزجاج والـ Blur
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart'; // 🎯 لقراءة المظهر
+import 'package:provider/provider.dart';
 import '../services/cycle_service.dart';
-import '../models/cycle_model.dart'; 
-import '../services/theme_provider.dart'; // 🎯 استدعاء الـ ThemeProvider
-import 'students_page.dart'; 
+import '../models/cycle_model.dart';
+import '../services/theme_provider.dart';
+import 'students_page.dart';
 
 class CyclesPage extends StatefulWidget {
   const CyclesPage({super.key});
@@ -18,7 +18,7 @@ class _CyclesPageState extends State<CyclesPage> {
   final firestore = FirebaseFirestore.instance;
   final cycleService = CycleService();
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37); // لون الإنعكاس الزجاجي
+  final Color accentGold = const Color(0xffd4af37);
 
   archiveCycle(String id) async {
     await cycleService.archiveCycle(id);
@@ -75,22 +75,20 @@ class _CyclesPageState extends State<CyclesPage> {
 
   @override
   Widget build(BuildContext context) {
-    // قراءة المظهر
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
-      extendBodyBehindAppBar: true, // 🎯 تمديد الخلفية خلف الـ AppBar لجمالية الزجاج
+      extendBodyBehindAppBar: true,
       backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, // AppBar شفاف
+        backgroundColor: Colors.transparent,
         title: Text("إدارة الدورات", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
       ),
       body: Stack(
         children: [
-          // 🎨 1. الخلفية المتدرجة الانسيابية مع الدوائر العائمة
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -123,7 +121,6 @@ class _CyclesPageState extends State<CyclesPage> {
             ),
           ),
 
-          // 🏢 2. المحتوى الأساسي للواجهة
           SafeArea(
             child: StreamBuilder(
               stream: firestore.collection('cycles').orderBy('startDate', descending: true).snapshots(),
@@ -176,29 +173,26 @@ class _CyclesPageState extends State<CyclesPage> {
                               "رقم الدورة: ${data['cycleNumber'] ?? ''}",
                               style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.grey[600]),
                             ),
-                            
-                            // زر الإجراء في اليمين
-                            trailing: isArchived 
+                            trailing: isArchived
                               ? IconButton(
                                   icon: Icon(Icons.visibility_outlined, size: 22, color: isDarkMode ? Colors.blueGrey.shade300 : Colors.blueGrey),
                                   tooltip: "استعراض أرشيف طلاب الدورة",
                                   onPressed: () {
                                     final dynamic outputModel = CycleModel;
                                     Navigator.push(
-                                      context, 
+                                      context,
                                       MaterialPageRoute(
                                         builder: (_) => StudentsPage(
                                           cycle: (outputModel is CycleModel) ? (cycle as dynamic) : (cycle as dynamic),
                                           role: "manager",
                                           uid: "",
-                                          isArchivedFromHistory: true, // وضع التصفح التام والآمن 🔒
+                                          isArchivedFromHistory: true,
                                         ),
                                       ),
                                     );
                                   },
                                 )
                               : Icon(Icons.arrow_drop_down_circle_outlined, color: isDarkMode ? accentGold : primaryColor, size: 20),
-                              
                             children: [
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
@@ -264,7 +258,6 @@ class _CyclesPageState extends State<CyclesPage> {
     );
   }
 
-  // 🧊 أداة مساعدة لتغليف العناصر وتأثير الزجاج (Glassmorphism)
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(25),
@@ -293,7 +286,6 @@ class _CyclesPageState extends State<CyclesPage> {
     );
   }
 
-  // 🧊 أداة عرض بيانات التواريخ بستايل متناسق مع المظهر
   Widget _buildDateInfo(String label, String date, IconData icon, Color color, bool isDarkMode) {
     return Column(
       children: [
@@ -310,7 +302,6 @@ class _CyclesPageState extends State<CyclesPage> {
     );
   }
 
-  // 🧊 واجهة الحالة الفارغة بستايل زجاجي
   Widget _buildEmptyState(bool isDarkMode) {
     return Center(
       child: _buildGlassContainer(
