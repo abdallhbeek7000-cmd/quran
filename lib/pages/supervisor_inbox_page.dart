@@ -6,7 +6,7 @@ import '../services/theme_provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'supervisor_chat_page.dart'; 
 import 'staff_chat_page.dart'; 
-import '../widgets/offline_wrapper.dart'; // 🚀 استيراد غلاف الأوفلاين
+import '../widgets/offline_wrapper.dart';
 
 class SupervisorInboxPage extends StatefulWidget {
   final String supervisorId;
@@ -23,11 +23,43 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
   
   // 🚀 كاش (ذاكرة مؤقتة) لحفظ أسماء الموظفين
   final Map<String, Map<String, dynamic>> _peerCache = {};
+  
+  String? _effectiveSupervisorId;
+  bool _isLoadingEffectiveId = true;
 
   @override
   void initState() {
     super.initState();
     timeago.setLocaleMessages('ar', timeago.ArMessages());
+    _resolveEffectiveSupervisorId();
+  }
+
+  // 🎯 جلب الـ ID الفعلي للمشرف في حال وجود حساب مدير مرتبط بـ linkedSupervisorId
+  Future<void> _resolveEffectiveSupervisorId() async {
+    try {
+      var userDoc = await FirebaseFirestore.instance.collection('users').doc(widget.supervisorId).get();
+      if (userDoc.exists && userDoc.data()?['linkedSupervisorId'] != null) {
+        String linkedId = userDoc.data()!['linkedSupervisorId'];
+        if (linkedId.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _effectiveSupervisorId = linkedId;
+              _isLoadingEffectiveId = false;
+            });
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      print("خطأ أثناء جلب حساب المشرف المربوط: $e");
+    }
+
+    if (mounted) {
+      setState(() {
+        _effectiveSupervisorId = widget.supervisorId;
+        _isLoadingEffectiveId = false;
+      });
+    }
   }
 
   // 🎯 دالة لتوليد ID فريد وموحد لغرفة الدردشة بين أي موظفين
@@ -75,7 +107,7 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
       print("خطأ في حذف المحادثة: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.redAccent, content: Text("فشل الحذف، تأكد من الاتصال بالإنترنت", style: const TextStyle(fontFamily: 'Cairo'))),
+          const SnackBar(backgroundColor: Colors.redAccent, content: Text("فشل الحذف، تأكد من الاتصال بالإنترنت", style: TextStyle(fontFamily: 'Cairo'))),
         );
       }
     }
@@ -172,8 +204,10 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
   }
 
   Widget _buildStudentsTab(bool isDark) {
+    String currentSupId = _effectiveSupervisorId ?? widget.supervisorId;
+
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('students').where('supervisorId', isEqualTo: widget.supervisorId).snapshots(),
+      stream: FirebaseFirestore.instance.collection('students').where('supervisorId', isEqualTo: currentSupId).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: goldColor));
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return Center(child: Text("لا يوجد طلاب مسجلين باسمك حالياً", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54)));
@@ -198,7 +232,7 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                 trailing: Icon(Icons.chat_bubble_outline, color: goldColor),
                 onTap: () {
                   Navigator.pop(context); 
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorChatPage(chatId: '${studentDoc.id}_${widget.supervisorId}', studentId: studentDoc.id, studentName: studentName, supervisorId: widget.supervisorId)));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorChatPage(chatId: '${studentDoc.id}_$currentSupId', studentId: studentDoc.id, studentName: studentName, supervisorId: currentSupId)));
                 },
               ),
             );
@@ -209,6 +243,8 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
   }
 
   Widget _buildStaffTab(bool isDark) {
+    String currentSupId = _effectiveSupervisorId ?? widget.supervisorId;
+
     return FutureBuilder<List<QuerySnapshot>>(
       future: Future.wait([FirebaseFirestore.instance.collection('users').get(), FirebaseFirestore.instance.collection('supervisors').get()]),
       builder: (context, snapshot) {
@@ -217,10 +253,10 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
 
         List<Map<String, dynamic>> allStaff = [];
         for (var doc in snapshot.data![0].docs) { 
-          if (doc.id != widget.supervisorId) { var data = doc.data() as Map<String, dynamic>; data['id'] = doc.id; data['staffRole'] = 'manager'; allStaff.add(data); }
+          if (doc.id != widget.supervisorId && doc.id != currentSupId) { var data = doc.data() as Map<String, dynamic>; data['id'] = doc.id; data['staffRole'] = 'manager'; allStaff.add(data); }
         }
         for (var doc in snapshot.data![1].docs) { 
-          if (doc.id != widget.supervisorId) { var data = doc.data() as Map<String, dynamic>; data['id'] = doc.id; data['staffRole'] = 'supervisor'; allStaff.add(data); }
+          if (doc.id != widget.supervisorId && doc.id != currentSupId) { var data = doc.data() as Map<String, dynamic>; data['id'] = doc.id; data['staffRole'] = 'supervisor'; allStaff.add(data); }
         }
 
         if (allStaff.isEmpty) return Center(child: Text("لا يوجد أعضاء آخرين في الطاقم.", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54)));
@@ -261,6 +297,15 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
 
+    if (_isLoadingEffectiveId) {
+      return Scaffold(
+        backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final String currentSupId = _effectiveSupervisorId ?? widget.supervisorId;
+
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true,
@@ -289,10 +334,10 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
 
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('chats').where('supervisorId', isEqualTo: widget.supervisorId).snapshots(),
+                stream: FirebaseFirestore.instance.collection('chats').where('supervisorId', whereIn: [widget.supervisorId, currentSupId]).snapshots(),
                 builder: (context, parentSnap) {
                   return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection('staff_chats').where('participants', arrayContains: widget.supervisorId).snapshots(),
+                    stream: FirebaseFirestore.instance.collection('staff_chats').where('participants', arrayContainsAny: [widget.supervisorId, currentSupId]).snapshots(),
                     builder: (context, staffSnap) {
                       if (parentSnap.connectionState == ConnectionState.waiting && staffSnap.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
@@ -361,14 +406,14 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                               time: lastTime,
                               unreadCount: unreadCount,
                               icon: Icons.person_rounded, iconColor: primaryColor,
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorChatPage(chatId: docId, studentId: chatData['studentId'], studentName: studentName, supervisorId: widget.supervisorId))),
-                              onLongPress: () => _showDeleteConfirmDialog(docId, false, isDark), // 🚀 تفعيل الحذف بالضغط المطول
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorChatPage(chatId: docId, studentId: chatData['studentId'], studentName: studentName, supervisorId: currentSupId))),
+                              onLongPress: () => _showDeleteConfirmDialog(docId, false, isDark),
                             );
                           } 
                           else {
-                            final unreadCount = chatData['unread_${widget.supervisorId}'] ?? 0;
+                            final unreadCount = chatData['unread_${widget.supervisorId}'] ?? chatData['unread_$currentSupId'] ?? 0;
                             List parts = chatData['participants'] ?? [];
-                            String peerId = parts.firstWhere((id) => id != widget.supervisorId, orElse: () => '');
+                            String peerId = parts.firstWhere((id) => id != widget.supervisorId && id != currentSupId, orElse: () => '');
 
                             return FutureBuilder<Map<String, dynamic>>(
                               future: _getPeerDataCached(peerId),
@@ -386,14 +431,14 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                                   icon: isManager ? Icons.admin_panel_settings : Icons.support_agent, 
                                   iconColor: isManager ? goldColor : primaryColor,
                                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StaffChatPage(chatId: docId, currentUserId: widget.supervisorId, peerId: peerId, peerName: peerName, peerRole: peerRole))),
-                                  onLongPress: () => _showDeleteConfirmDialog(docId, true, isDark), // 🚀 تفعيل الحذف بالضغط المطول
+                                  onLongPress: () => _showDeleteConfirmDialog(docId, true, isDark),
                                 );
                               },
                             );
                           }
                         },
                       );
-                    }
+                    },
                   );
                 },
               ),
@@ -417,7 +462,7 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: InkWell(
             onTap: onTap,
-            onLongPress: onLongPress, // 🚀 استدعاء عملية الحذف
+            onLongPress: onLongPress,
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(

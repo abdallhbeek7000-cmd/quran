@@ -7,9 +7,47 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:widgets_to_image/widgets_to_image.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import '../services/theme_provider.dart';
 import '../widgets/offline_wrapper.dart';
 import 'edit_student_page.dart';
+
+// 📌 دالة فحص دقيقة وشاملة للتحقق هل تحتوي الجلسة على تسميع أم لا
+bool _hasRecitation(Map<String, dynamic> data) {
+  // 1. فحص الحفظ الجديد بكافة مسمياته الشائعة
+  bool hasMemo = (data['newMemo'] != null && data['newMemo'].toString().trim().isNotEmpty) ||
+      (data['memo'] != null && data['memo'].toString().trim().isNotEmpty) ||
+      (data['memorization'] != null && data['memorization'].toString().trim().isNotEmpty) ||
+      (data['hifz'] != null && data['hifz'].toString().trim().isNotEmpty) ||
+      (data['newMemoPage'] != null && data['newMemoPage'].toString().trim().isNotEmpty) ||
+      (data['memoPage'] != null && data['memoPage'].toString().trim().isNotEmpty) ||
+      (data['memoFromPage'] != null && data['memoFromPage'].toString().trim().isNotEmpty) ||
+      (data['memoToPage'] != null && data['memoToPage'].toString().trim().isNotEmpty) ||
+      (data['memoFromSurah'] != null && data['memoFromSurah'].toString().trim().isNotEmpty);
+
+  // 2. فحص المراجعة بكافة مسمياتها الشائعة
+  bool hasReview = (data['review'] != null && data['review'].toString().trim().isNotEmpty) ||
+      (data['revision'] != null && data['revision'].toString().trim().isNotEmpty) ||
+      (data['muraja'] != null && data['muraja'].toString().trim().isNotEmpty) ||
+      (data['reviewPage'] != null && data['reviewPage'].toString().trim().isNotEmpty) ||
+      (data['reviewFromPage'] != null && data['reviewFromPage'].toString().trim().isNotEmpty) ||
+      (data['reviewToPage'] != null && data['reviewToPage'].toString().trim().isNotEmpty) ||
+      (data['reviewFromSurah'] != null && data['reviewFromSurah'].toString().trim().isNotEmpty);
+
+  // 3. فحص التقييمات أو الدرجات المسجلة للتسميع
+  bool hasGrade = (data['memoMark'] != null && data['memoMark'].toString().trim().isNotEmpty) ||
+      (data['reviewMark'] != null && data['reviewMark'].toString().trim().isNotEmpty) ||
+      (data['grade'] != null && data['grade'].toString().trim().isNotEmpty) ||
+      (data['rating'] != null && data['rating'].toString().trim().isNotEmpty);
+
+  // 4. فحص عام لأي حقل صفحات أو أجزاء عام
+  bool hasGeneralPages = (data['pages'] != null && data['pages'].toString().trim().isNotEmpty) ||
+      (data['fromPage'] != null && data['fromPage'].toString().trim().isNotEmpty) ||
+      (data['toPage'] != null && data['toPage'].toString().trim().isNotEmpty);
+
+  return hasMemo || hasReview || hasGrade || hasGeneralPages;
+}
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
@@ -54,31 +92,6 @@ class DashboardPage extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(
-            top: -30,
-            left: -50,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.14),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 40,
-            right: -60,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDarkMode ? primaryColor.withOpacity(0.18) : primaryColor.withOpacity(0.22),
-              ),
-            ),
-          ),
-
           SafeArea(
             child: FutureBuilder<List<dynamic>>(
               future: Future.wait([
@@ -96,11 +109,19 @@ class DashboardPage extends StatelessWidget {
                 final sessions = (snapshot.data![2] as QuerySnapshot).docs;
 
                 int absentCount = 0;
+                int unrecitedCount = 0;
                 int noSupervisor = 0;
 
                 for (var s in sessions) {
                   final data = s.data() as Map<String, dynamic>;
-                  if (data['absent'] == true) absentCount++;
+                  if (data['absent'] == true) {
+                    absentCount++;
+                  } else {
+                    // استخدام الفحص الشامل لمنع احتساب الجلسات المسمعة
+                    if (!_hasRecitation(data)) {
+                      unrecitedCount++;
+                    }
+                  }
                 }
 
                 for (var s in students) {
@@ -119,18 +140,14 @@ class DashboardPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildHeaderSection(isDarkMode),
-
                       const SizedBox(height: 15),
-
                       _buildProgressSummaryCard(
                         totalStudents: totalStudents,
                         assignedStudents: assignedStudents,
                         percentage: assignedPercentage,
                         isDarkMode: isDarkMode,
                       ),
-
                       const SizedBox(height: 20),
-
                       GridView.count(
                         crossAxisCount: 2,
                         shrinkWrap: true,
@@ -147,7 +164,6 @@ class DashboardPage extends StatelessWidget {
                             color: isDarkMode ? Colors.lightBlueAccent : Colors.blue.shade600,
                             isDarkMode: isDarkMode,
                           ),
-                          
                           InkWell(
                             borderRadius: BorderRadius.circular(25),
                             onTap: () {
@@ -165,7 +181,6 @@ class DashboardPage extends StatelessWidget {
                               isDarkMode: isDarkMode,
                             ),
                           ),
-
                           _buildGlassStatCard(
                             title: "إجمالي الجلسات",
                             value: sessions.length.toString(),
@@ -174,7 +189,6 @@ class DashboardPage extends StatelessWidget {
                             color: Colors.greenAccent.shade700,
                             isDarkMode: isDarkMode,
                           ),
-                          
                           InkWell(
                             borderRadius: BorderRadius.circular(25),
                             onTap: () {
@@ -194,10 +208,77 @@ class DashboardPage extends StatelessWidget {
                           ),
                         ],
                       ),
-                      
-                      const SizedBox(height: 20),
-
-                      // 🏅 زر الانتقال لإحصائية أكثر المشرفين تسجيلاً للجلسات
+                      const SizedBox(height: 15),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(25),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const UnrecitedSessionsPage()),
+                          );
+                        },
+                        child: _buildGlassContainer(
+                          isDarkMode: isDarkMode,
+                          padding: const EdgeInsets.all(18),
+                          customColor: isDarkMode ? Colors.purple.withOpacity(0.12) : Colors.purple.withOpacity(0.15),
+                          customBorderColor: Colors.purpleAccent.withOpacity(0.5),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.history_edu_rounded, color: Colors.purpleAccent, size: 30),
+                              ),
+                              const SizedBox(width: 15),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "حضور بدون تسميع 📝",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color: isDarkMode ? Colors.white : primaryColor,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      "جلسات تم حضورها دون تسجيل تسميع",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDarkMode ? Colors.white70 : Colors.black54,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.purpleAccent,
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: Text(
+                                  unrecitedCount.toString(),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 15),
                       InkWell(
                         borderRadius: BorderRadius.circular(25),
                         onTap: () {
@@ -252,9 +333,7 @@ class DashboardPage extends StatelessWidget {
                           ),
                         ),
                       ),
-
-                      const SizedBox(height: 20),
-
+                      const SizedBox(height: 15),
                       InkWell(
                         borderRadius: BorderRadius.circular(25),
                         onTap: () {
@@ -294,9 +373,7 @@ class DashboardPage extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      noSupervisor > 0 
-                                          ? "هناك $noSupervisor طالباً ينتظرون التوزيع"
-                                          : "تم توزيع جميع الطلاب بنجاح 🎉",
+                                      noSupervisor > 0 ? "هناك $noSupervisor طالباً ينتظرون التوزيع" : "تم توزيع جميع الطلاب بنجاح 🎉",
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: isDarkMode ? Colors.white70 : Colors.black54,
@@ -311,9 +388,6 @@ class DashboardPage extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: Colors.orange,
                                   borderRadius: BorderRadius.circular(15),
-                                  boxShadow: [
-                                    BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 8)
-                                  ],
                                 ),
                                 child: Text(
                                   noSupervisor.toString(),
@@ -329,11 +403,8 @@ class DashboardPage extends StatelessWidget {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 20),
-
                       _buildNotesSection(isDarkMode),
-
                       const SizedBox(height: 30),
                     ],
                   ),
@@ -351,7 +422,7 @@ class DashboardPage extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "نظرة عامة 👑", 
+          "نظرة عامة 👑",
           style: TextStyle(
             color: isDarkMode ? Colors.white : primaryColor,
             fontSize: 26,
@@ -360,7 +431,7 @@ class DashboardPage extends StatelessWidget {
           ),
         ),
         Text(
-          "إليك أحدث الإحصائيات والأداء العام للمعهد لهذه الدورة", 
+          "إليك أحدث الإحصائيات والأداء العام للمعهد لهذه الدورة",
           style: TextStyle(
             color: isDarkMode ? Colors.white60 : Colors.grey[700],
             fontSize: 13,
@@ -588,8 +659,34 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
+String _formatDateWithDay(dynamic dateVal) {
+  DateTime? dt;
+  if (dateVal is Timestamp) {
+    dt = dateVal.toDate();
+  } else if (dateVal is String && dateVal.isNotEmpty) {
+    dt = DateTime.tryParse(dateVal);
+  }
+  if (dt != null) {
+    try {
+      initializeDateFormatting('ar_SA', null);
+      String dayName = DateFormat('EEEE', 'ar').format(dt);
+      String formattedDate = DateFormat('yyyy/MM/dd').format(dt);
+      return "$dayName $formattedDate";
+    } catch (_) {
+      return "${dt.year}/${dt.month}/${dt.day}";
+    }
+  }
+  return dateVal?.toString().split(' ').first ?? 'غير محدد';
+}
+
+DateTime _getDateTime(dynamic dateVal) {
+  if (dateVal is Timestamp) return dateVal.toDate();
+  if (dateVal is String) return DateTime.tryParse(dateVal) ?? DateTime(1970);
+  return DateTime(1970);
+}
+
 // =========================================================================
-// 🏆 1. صفحة ترتيب المشرفين الأكثر تسجيلاً للجلسات (المحدثة والمدعومة كلياً)
+// 🏆 1. صفحة ترتيب المشرفين الأكثر تسجيلاً للجلسات
 // =========================================================================
 class TopSessionSupervisorsPage extends StatelessWidget {
   const TopSessionSupervisorsPage({super.key});
@@ -609,8 +706,8 @@ class TopSessionSupervisorsPage extends StatelessWidget {
           elevation: 0,
           backgroundColor: Colors.transparent,
           title: Text(
-            "أكثر المشرفين تسجيلاً للجلسات 🏆", 
-            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)
+            "أكثر المشرفين تسجيلاً للجلسات 🏆",
+            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16),
           ),
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
@@ -646,15 +743,12 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                       if (!sessionSnap.hasData) return const Center(child: CircularProgressIndicator());
 
                       final sessions = sessionSnap.data!.docs;
-
                       Map<String, int> supervisorSessionCounts = {};
 
                       for (var s in sessions) {
                         var data = s.data() as Map<String, dynamic>;
-                        
                         Set<String> sessionSupervisors = {};
 
-                        // 1. مشرفو الحفظ الجديد
                         List<dynamic>? memoSupList = data['newMemoSupervisorNames'];
                         if (memoSupList != null) {
                           for (var name in memoSupList) {
@@ -662,7 +756,6 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                           }
                         }
 
-                        // 2. مشرفو المراجعة
                         List<dynamic>? revSupList = data['reviewSupervisorNames'];
                         if (revSupList != null) {
                           for (var name in revSupList) {
@@ -670,7 +763,6 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                           }
                         }
 
-                        // 3. القائمة العامة القديمة (fallback)
                         List<dynamic>? supNamesList = data['supervisorNames'];
                         if (supNamesList != null) {
                           for (var name in supNamesList) {
@@ -678,7 +770,6 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                           }
                         }
 
-                        // 4. الاسم الفردي القديم (fallback)
                         String singleSup = data['supervisorName']?.toString().trim() ?? '';
                         if (singleSup.isNotEmpty) {
                           sessionSupervisors.add(singleSup);
@@ -693,7 +784,7 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                         var supData = sup.data() as Map<String, dynamic>;
                         String supName = supData['name']?.toString().trim() ?? 'مشرف';
                         String imageUrl = supData['imageUrl'] ?? '';
-                        
+
                         return {
                           'id': sup.id,
                           'name': supName,
@@ -731,9 +822,6 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                                           : (isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.7)),
                                       width: index == 0 ? 1.8 : 1.2,
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-                                    ],
                                   ),
                                   child: Row(
                                     children: [
@@ -741,8 +829,7 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                                         alignment: Alignment.bottomRight,
                                         children: [
                                           Container(
-                                            width: 50,
-                                            height: 50,
+                                            width: 50, height: 50,
                                             decoration: BoxDecoration(
                                               shape: BoxShape.circle,
                                               border: Border.all(color: index == 0 ? accentGold : primaryColor.withOpacity(0.3), width: 2),
@@ -750,66 +837,33 @@ class TopSessionSupervisorsPage extends StatelessWidget {
                                             child: ClipRRect(
                                               borderRadius: BorderRadius.circular(25),
                                               child: imageUrl.isNotEmpty
-                                                  ? Image.network(
-                                                      imageUrl,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (c, e, s) => _buildAvatarFallback(supName, isDarkMode, primaryColor),
-                                                    )
+                                                  ? Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildAvatarFallback(supName, isDarkMode, primaryColor))
                                                   : _buildAvatarFallback(supName, isDarkMode, primaryColor),
                                             ),
                                           ),
-                                          if (index == 0)
-                                            const CircleAvatar(radius: 10, backgroundColor: Colors.amber, child: Icon(Icons.star_rounded, size: 12, color: Colors.white))
-                                          else if (index == 1)
-                                            const CircleAvatar(radius: 10, backgroundColor: Colors.grey, child: Icon(Icons.star_rounded, size: 12, color: Colors.white))
-                                          else if (index == 2)
-                                            const CircleAvatar(radius: 10, backgroundColor: Colors.brown, child: Icon(Icons.star_rounded, size: 12, color: Colors.white)),
+                                          if (index == 0) const CircleAvatar(radius: 10, backgroundColor: Colors.amber, child: Icon(Icons.star_rounded, size: 12, color: Colors.white)),
                                         ],
                                       ),
                                       const SizedBox(width: 14),
-
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              supName,
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                                fontFamily: 'Cairo',
-                                                color: isDarkMode ? Colors.white : primaryColor,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              "الترتيب: #${index + 1}",
-                                              style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDarkMode ? Colors.white54 : Colors.black54),
-                                            ),
+                                            Text(supName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor)),
+                                            Text("الترتيب: #${index + 1}", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDarkMode ? Colors.white54 : Colors.black54)),
                                           ],
                                         ),
                                       ),
-
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                         decoration: BoxDecoration(
-                                          color: sessionCount > 0 
-                                              ? (isDarkMode ? accentGold.withOpacity(0.2) : Colors.green.withOpacity(0.12)) 
-                                              : Colors.grey.withOpacity(0.15),
+                                          color: sessionCount > 0 ? (isDarkMode ? accentGold.withOpacity(0.2) : Colors.green.withOpacity(0.12)) : Colors.grey.withOpacity(0.15),
                                           borderRadius: BorderRadius.circular(14),
-                                          border: Border.all(
-                                            color: sessionCount > 0 ? (isDarkMode ? accentGold : Colors.green) : Colors.grey, 
-                                            width: 1,
-                                          ),
+                                          border: Border.all(color: sessionCount > 0 ? (isDarkMode ? accentGold : Colors.green) : Colors.grey, width: 1),
                                         ),
                                         child: Text(
                                           "$sessionCount جلسة",
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            fontFamily: 'Cairo',
-                                            color: sessionCount > 0 ? (isDarkMode ? accentGold : Colors.green.shade800) : Colors.grey,
-                                          ),
+                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: sessionCount > 0 ? (isDarkMode ? accentGold : Colors.green.shade800) : Colors.grey),
                                         ),
                                       ),
                                     ],
@@ -865,8 +919,8 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
           elevation: 0,
           backgroundColor: Colors.transparent,
           title: Text(
-            "توزيع الطلاب على المشرفين 👥", 
-            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)
+            "توزيع الطلاب على المشرفين 👥",
+            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16),
           ),
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
@@ -890,19 +944,12 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
 
                   final supervisors = supSnap.data!.docs;
 
-                  if (supervisors.isEmpty) {
-                    return Center(
-                      child: Text("لا يوجد مشرفون مسجلون بالنظام حالياً 📭", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
-                    );
-                  }
-
                   return StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false).snapshots(),
                     builder: (context, stdSnap) {
                       if (!stdSnap.hasData) return const Center(child: CircularProgressIndicator());
 
                       final students = stdSnap.data!.docs;
-
                       Map<String, int> supervisorCounts = {};
                       for (var std in students) {
                         var data = std.data() as Map<String, dynamic>;
@@ -946,91 +993,40 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
                                     borderRadius: BorderRadius.circular(22),
-                                    border: Border.all(
-                                      color: index == 0
-                                          ? accentGold.withOpacity(0.8)
-                                          : (isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.7)),
-                                      width: index == 0 ? 1.8 : 1.2,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-                                    ],
+                                    border: Border.all(color: isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.7)),
                                   ),
                                   child: Row(
                                     children: [
-                                      Stack(
-                                        alignment: Alignment.bottomRight,
-                                        children: [
-                                          Container(
-                                            width: 50,
-                                            height: 50,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: index == 0 ? accentGold : primaryColor.withOpacity(0.3), width: 2),
-                                            ),
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(25),
-                                              child: imageUrl.isNotEmpty
-                                                  ? Image.network(
-                                                      imageUrl,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (c, e, s) => _buildAvatarFallback(supName, isDarkMode, primaryColor),
-                                                    )
-                                                  : _buildAvatarFallback(supName, isDarkMode, primaryColor),
-                                            ),
-                                          ),
-                                          if (index == 0)
-                                            const CircleAvatar(radius: 10, backgroundColor: Colors.amber, child: Icon(Icons.star_rounded, size: 12, color: Colors.white))
-                                          else if (index == 1)
-                                            const CircleAvatar(radius: 10, backgroundColor: Colors.grey, child: Icon(Icons.star_rounded, size: 12, color: Colors.white))
-                                          else if (index == 2)
-                                            const CircleAvatar(radius: 10, backgroundColor: Colors.brown, child: Icon(Icons.star_rounded, size: 12, color: Colors.white)),
-                                        ],
+                                      Container(
+                                        width: 50, height: 50,
+                                        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: primaryColor.withOpacity(0.3), width: 2)),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(25),
+                                          child: imageUrl.isNotEmpty
+                                              ? Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildAvatarFallback(supName, isDarkMode, primaryColor))
+                                              : _buildAvatarFallback(supName, isDarkMode, primaryColor),
+                                        ),
                                       ),
                                       const SizedBox(width: 14),
-
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              supName,
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                                fontFamily: 'Cairo',
-                                                color: isDarkMode ? Colors.white : primaryColor,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              "الترتيب: #${index + 1}",
-                                              style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDarkMode ? Colors.white54 : Colors.black54),
-                                            ),
+                                            Text(supName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor)),
+                                            Text("الترتيب: #${index + 1}", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDarkMode ? Colors.white54 : Colors.black54)),
                                           ],
                                         ),
                                       ),
-
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                         decoration: BoxDecoration(
-                                          color: studentCount > 0 
-                                              ? (isDarkMode ? accentGold.withOpacity(0.2) : primaryColor.withOpacity(0.12)) 
-                                              : Colors.grey.withOpacity(0.15),
+                                          color: studentCount > 0 ? (isDarkMode ? accentGold.withOpacity(0.2) : primaryColor.withOpacity(0.12)) : Colors.grey.withOpacity(0.15),
                                           borderRadius: BorderRadius.circular(14),
-                                          border: Border.all(
-                                            color: studentCount > 0 ? (isDarkMode ? accentGold : primaryColor) : Colors.grey, 
-                                            width: 1,
-                                          ),
+                                          border: Border.all(color: studentCount > 0 ? (isDarkMode ? accentGold : primaryColor) : Colors.grey, width: 1),
                                         ),
                                         child: Text(
                                           "$studentCount طلاب",
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            fontFamily: 'Cairo',
-                                            color: studentCount > 0 ? (isDarkMode ? accentGold : primaryColor) : Colors.grey,
-                                          ),
+                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: studentCount > 0 ? (isDarkMode ? accentGold : primaryColor) : Colors.grey),
                                         ),
                                       ),
                                     ],
@@ -1089,6 +1085,12 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
     required List<dynamic> sessions,
   }) {
     final WidgetsToImageController controller = WidgetsToImageController();
+
+    sessions.sort((a, b) {
+      dynamic dateA = (a as Map<String, dynamic>)['date'] ?? a['createdAt'] ?? a['timestamp'];
+      dynamic dateB = (b as Map<String, dynamic>)['date'] ?? b['createdAt'] ?? b['timestamp'];
+      return _getDateTime(dateB).compareTo(_getDateTime(dateA));
+    });
 
     showDialog(
       context: context,
@@ -1157,7 +1159,6 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                           ],
                         ),
                         const Divider(height: 22, thickness: 1),
-
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
@@ -1189,17 +1190,17 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 12),
-
                         const Text(
-                          "تفاصيل جميع الجلسات المسجلة:",
+                          "تفاصيل جميع الجلسات المسجلة (حسب التاريخ):",
                           style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xff425c75)),
                         ),
                         const SizedBox(height: 8),
-
                         Column(
                           children: sessions.map((session) {
-                            String date = _extractDate(session as Map<String, dynamic>);
-                            String supervisor = session['supervisorName'] ?? 'غير محدد';
+                            var data = session as Map<String, dynamic>;
+                            dynamic rawDate = data['date'] ?? data['createdAt'] ?? data['timestamp'];
+                            String dateStr = _formatDateWithDay(rawDate);
+                            String supervisor = data['supervisorName'] ?? 'غير محدد';
                             return Container(
                               margin: const EdgeInsets.only(bottom: 6),
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1216,21 +1217,20 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                                       const Icon(Icons.circle, size: 6, color: Colors.redAccent),
                                       const SizedBox(width: 8),
                                       Text(
-                                        "التاريخ: $date",
-                                        style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xff334155)),
+                                        dateStr,
+                                        style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xff334155)),
                                       ),
                                     ],
                                   ),
                                   Text(
                                     "المشرف: $supervisor",
-                                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.black54),
+                                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.black54),
                                   ),
                                 ],
                               ),
                             );
                           }).toList(),
                         ),
-
                         const SizedBox(height: 14),
                         const Center(
                           child: Text(
@@ -1244,7 +1244,6 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 14),
-
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -1283,16 +1282,13 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
     );
   }
 
-  String _extractDate(Map<String, dynamic> sessionData) {
-    dynamic dateVal = sessionData['date'] ?? sessionData['createdAt'] ?? sessionData['timestamp'];
-    if (dateVal is Timestamp) {
-      DateTime dt = dateVal.toDate();
-      return "${dt.year}/${dt.month}/${dt.day}";
-    }
-    return dateVal?.toString().split(' ').first ?? 'غير محدد';
-  }
-
   void _showStudentAbsenceDetails(BuildContext context, String studentName, List<dynamic> sessions, bool isDarkMode) {
+    sessions.sort((a, b) {
+      dynamic dateA = (a as Map<String, dynamic>)['date'] ?? a['createdAt'] ?? a['timestamp'];
+      dynamic dateB = (b as Map<String, dynamic>)['date'] ?? b['createdAt'] ?? b['timestamp'];
+      return _getDateTime(dateB).compareTo(_getDateTime(dateA));
+    });
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1313,8 +1309,7 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
             children: [
               Center(
                 child: Container(
-                  width: 50,
-                  height: 5,
+                  width: 50, height: 5,
                   decoration: BoxDecoration(
                     color: isDarkMode ? Colors.white24 : Colors.black26,
                     borderRadius: BorderRadius.circular(10),
@@ -1341,7 +1336,7 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                "إجمالي الغيابات: ${sessions.length} جلسة",
+                "إجمالي الغيابات: ${sessions.length} جلسة (مرتبة حسب التاريخ)",
                 style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black54),
               ),
               const Divider(height: 30),
@@ -1351,6 +1346,9 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                   itemCount: sessions.length,
                   itemBuilder: (context, index) {
                     final session = sessions[index] as Map<String, dynamic>;
+                    dynamic rawDate = session['date'] ?? session['createdAt'] ?? session['timestamp'];
+                    String dateStr = _formatDateWithDay(rawDate);
+
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(12),
@@ -1375,7 +1373,7 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  "تاريخ الجلسة: ${_extractDate(session)}",
+                                  dateStr,
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontFamily: 'Cairo',
@@ -1503,7 +1501,7 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
                       final String studentName = item['studentName'];
                       final List<dynamic> studentSessions = item['sessions'];
                       final int totalAbsences = studentSessions.length;
-                      
+
                       final String lastSupervisorName = studentSessions.last['supervisorName'] ?? 'غير محدد';
 
                       return FutureBuilder<DocumentSnapshot>(
@@ -1596,7 +1594,141 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
 }
 
 // =========================================================================
-// 🚀 4. صفحة عرض الطلاب غير الموزعين على مشرفين
+// 🚀 4. صفحة الجلسات التي حضرها الطلاب بدون تسميع (محدثة بالفحص الشامل)
+// =========================================================================
+class UnrecitedSessionsPage extends StatelessWidget {
+  const UnrecitedSessionsPage({super.key});
+
+  final Color primaryColor = const Color(0xff425c75);
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text(
+            "جلسات حضور بدون تسميع 📝",
+            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+        ),
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity, height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('sessions')
+                    .where('absent', isEqualTo: false)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+                  // 📌 تصفية الجلسات باستخدام دالة الفحص الشاملة _hasRecitation
+                  final unrecitedDocs = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return !_hasRecitation(data);
+                  }).toList();
+
+                  if (unrecitedDocs.isEmpty) {
+                    return Center(
+                      child: Text("جميع الجلسات مسجلة بتسميع ممتاز 🎉", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
+                    );
+                  }
+
+                  // 📌 ترتيب الجلسات حسب التاريخ من الأحدث إلى الأقدم
+                  unrecitedDocs.sort((a, b) {
+                    var dataA = a.data() as Map<String, dynamic>;
+                    var dataB = b.data() as Map<String, dynamic>;
+                    dynamic dateA = dataA['date'] ?? dataA['createdAt'] ?? dataA['timestamp'];
+                    dynamic dateB = dataB['date'] ?? dataB['createdAt'] ?? dataB['timestamp'];
+                    return _getDateTime(dateB).compareTo(_getDateTime(dateA));
+                  });
+
+                  return ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.all(20),
+                    itemCount: unrecitedDocs.length,
+                    itemBuilder: (context, index) {
+                      final doc = unrecitedDocs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final String studentName = data['studentName'] ?? 'طالب';
+                      final String supervisorName = data['supervisorName'] ?? 'غير محدد';
+                      dynamic rawDate = data['date'] ?? data['createdAt'] ?? data['timestamp'];
+                      String dateStr = _formatDateWithDay(rawDate);
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.purpleAccent.withOpacity(0.4), width: 1.2),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.history_edu_rounded, color: Colors.purpleAccent, size: 24),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    studentName,
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "التاريخ: $dateStr",
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black87),
+                                  ),
+                                  Text(
+                                    "المشرف المسؤول: $supervisorName",
+                                    style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDarkMode ? Colors.white54 : Colors.black54),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// 🚀 5. صفحة عرض الطلاب غير الموزعين على مشرفين
 // =========================================================================
 class UnassignedStudentsPage extends StatelessWidget {
   const UnassignedStudentsPage({super.key});

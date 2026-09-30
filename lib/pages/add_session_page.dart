@@ -162,9 +162,9 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     {'id': 114, 'name': 'الناس', 'startPage': 604, 'endPage': 604, 'verses': 6},
   ];
 
-  bool isJuzAmmaMode = false;
+  // 0: عام (حسب الصفحات), 30: جزء عم, 29: جزء تبارك, 28: قد سمع, 27: الذاريات, 26: الأحقاف
+  int selectedJuz = 0;
 
-  // 💡 تم تصفير قيم 'surah' و 'toSurah' افتراضياً لمنع التسجيل التلقائي
   List<Map<String, dynamic>> newMemoRanges = [
     {'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()}
   ];
@@ -305,7 +305,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   }
 
   void _syncSurahFromPageController(TextEditingController ctrl, Map<String, dynamic> item, bool isFromPage) {
-    if (isJuzAmmaMode) return;
+    if (selectedJuz > 0) return;
     String pageVal = ctrl.text.trim();
     if (pageVal.isEmpty) return;
 
@@ -357,8 +357,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   }
 
   void _updateTotalPages() {
-    if (isCompletedStudent || absent || isExam || didNotRecite || isJuzAmmaMode) {
-      if (isJuzAmmaMode) totalMemorizedPagesController.text = "0";
+    if (isCompletedStudent || absent || isExam || didNotRecite || selectedJuz > 0) {
+      if (selectedJuz > 0) totalMemorizedPagesController.text = "0";
       return;
     }
     int maxPage = 0;
@@ -373,7 +373,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
-  // 📖🔥 دالة الترتيب والنصوص المحدثة بشكل ذكي وتتجاهل النصف فارغ
   String _buildFormattedSectionText(List<Map<String, dynamic>> ranges) {
     List<String> parts = [];
     for (var item in ranges) {
@@ -383,10 +382,9 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       String from = (item['from'] as TextEditingController).text.trim();
       String to = (item['to'] as TextEditingController).text.trim();
 
-      // 🛑 إذا لم يحدد السورة نهائياً، يتجاهل المقطع بالكامل ولا يسجل شيء
       if (surahFrom.isEmpty && from.isEmpty && to.isEmpty) continue;
 
-      if (isJuzAmmaMode) {
+      if (selectedJuz > 0) {
         if (surahFrom.isEmpty) continue;
 
         if (isFull) {
@@ -659,25 +657,21 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
           return dateComparison;
         });
 
-        Map<String, dynamic>? lastSessionWithHomework;
-        for (var doc in docs) {
-          var data = doc.data();
-          bool hasHw = (data['newHomework']?.toString().isNotEmpty ?? false) ||
-                       (data['newReviewHomework']?.toString().isNotEmpty ?? false) ||
-                       (data['oldReviewHomework']?.toString().isNotEmpty ?? false) ||
-                       (data['homework']?.toString().isNotEmpty ?? false);
+        var lastSession = docs.first.data();
 
-          if (hasHw) {
-            lastSessionWithHomework = data;
-            break;
-          }
-        }
+        bool hasHw = (lastSession['newHomework']?.toString().isNotEmpty ?? false) ||
+            (lastSession['newReviewHomework']?.toString().isNotEmpty ?? false) ||
+            (lastSession['oldReviewHomework']?.toString().isNotEmpty ?? false) ||
+            (lastSession['homework']?.toString().isNotEmpty ?? false);
 
-        if (lastSessionWithHomework != null && mounted) {
+        if (hasHw && mounted) {
           setState(() {
-            _parseRangeIntoControllers(lastSessionWithHomework!['newHomework'] ?? '', newMemoRanges.first['from'], newMemoRanges.first['to']);
-            _parseRangeIntoControllers(lastSessionWithHomework!['newReviewHomework'] ?? '', newRevRanges.first['from'], newRevRanges.first['to']);
-            _parseRangeIntoControllers(lastSessionWithHomework!['oldReviewHomework'] ?? '', oldRevRanges.first['from'], oldRevRanges.first['to']);
+            _parseRangeIntoControllers(
+                lastSession['newHomework'] ?? '', newMemoRanges.first['from'], newMemoRanges.first['to']);
+            _parseRangeIntoControllers(
+                lastSession['newReviewHomework'] ?? '', newRevRanges.first['from'], newRevRanges.first['to']);
+            _parseRangeIntoControllers(
+                lastSession['oldReviewHomework'] ?? '', oldRevRanges.first['from'], oldRevRanges.first['to']);
 
             for (var list in [newMemoRanges, newRevRanges, oldRevRanges]) {
               for (var item in list) {
@@ -866,7 +860,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     double inputPages = double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0;
     bool willBeCompletedNow = false;
 
-    if (!isCompletedStudent && !absent && !isExam && !didNotRecite && !isJuzAmmaMode && inputPages == 604.0) {
+    if (!isCompletedStudent && !absent && !isExam && !didNotRecite && selectedJuz == 0 && inputPages == 604.0) {
       final isDarkMode = Provider.of<ThemeProvider>(context, listen: false).isDarkMode;
       bool confirmCompletion = await _showCompletionCelebrationDialog(context, isDarkMode);
       if (!confirmCompletion) return;
@@ -913,7 +907,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       }
     }
 
-    double totalPages = (isJuzAmmaMode) ? 0.0 : (isCompletedStudent || willBeCompletedNow ? 604.0 : inputPages);
+    double totalPages = (selectedJuz > 0) ? 0.0 : (isCompletedStudent || willBeCompletedNow ? 604.0 : inputPages);
 
     List<String> newMemoSupIds = selectedNewMemoSupervisors.map((e) => e['id']!).toList();
     List<String> newMemoSupNames = selectedNewMemoSupervisors.map((e) => e['name']!).toList();
@@ -937,7 +931,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'absent': absent,
       'isExam': isExam,
       'didNotRecite': didNotRecite,
-      'isJuzAmma': isJuzAmmaMode,
+      'isJuzAmma': selectedJuz == 30,
+      'selectedJuz': selectedJuz,
       'examScore': isExam && !absent ? examScoreController.text.trim() : '',
       'newMemorization': finalNewMemo,
       'nearReview': finalNearReview,
@@ -1140,7 +1135,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
-  // 📖🔥 قسم اختيار المقاطع المحدث مع دعم خيار "غير محدد" وتحديد الآيات/السورة كاملة
   Widget _buildUniversalQuranSection({
     required String title,
     required IconData icon,
@@ -1149,9 +1143,21 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     required VoidCallback onRemove,
     required bool isDarkMode,
   }) {
-    List<Map<String, dynamic>> filteredSurahs = isJuzAmmaMode
-        ? quranSurahs.where((s) => (s['id'] as int) >= 78).toList()
-        : quranSurahs;
+    List<Map<String, dynamic>> filteredSurahs;
+
+    if (selectedJuz == 30) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 78).toList(); // عم
+    } else if (selectedJuz == 29) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 67 && (s['id'] as int) <= 77).toList(); // تبارك
+    } else if (selectedJuz == 28) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 58 && (s['id'] as int) <= 66).toList(); // قد سمع
+    } else if (selectedJuz == 27) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 51 && (s['id'] as int) <= 57).toList(); // الذاريات
+    } else if (selectedJuz == 26) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 46 && (s['id'] as int) <= 50).toList(); // الأحقاف
+    } else {
+      filteredSurahs = quranSurahs; // عام
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
@@ -1207,7 +1213,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
             TextEditingController fromCtrl = item['from'];
             TextEditingController toCtrl = item['to'];
 
-            if (!isJuzAmmaMode) {
+            if (selectedJuz == 0) {
               if (fromCtrl.text.isNotEmpty) {
                 String autoSurah = _getStartSurahByPage(fromCtrl.text);
                 if (autoSurah.isNotEmpty) item['surah'] = autoSurah;
@@ -1232,8 +1238,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                   if (ranges.length > 1)
                     Text("المقطع ${index + 1}:", style: TextStyle(color: accentGold, fontWeight: FontWeight.bold, fontSize: 11, fontFamily: 'Cairo')),
 
-                  if (isJuzAmmaMode) ...[
-                    // 👶 التحكم بنطاق جزء عمَّ (سورة كاملة أم آيات معينة)
+                  if (selectedJuz > 0) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -1337,7 +1342,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                       ),
                     ],
                   ] else ...[
-                    // 📖 نظام الصفحات العام للمحفظين
                     DropdownButtonFormField<String>(
                       value: filteredSurahs.any((s) => s['name'] == currentSurah) ? currentSurah : '',
                       dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
@@ -1541,34 +1545,53 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                               child: Column(
                                 children: [
                                   if (!isCompletedStudent) ...[
+                                    // 🌟 شريط اختيار الأجزاء الأخيرة 🌟
                                     Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                                       decoration: BoxDecoration(
-                                        color: isJuzAmmaMode ? accentGold.withOpacity(0.18) : (isDarkMode ? Colors.black26 : Colors.white30),
+                                        color: isDarkMode ? Colors.black26 : Colors.white30,
                                         borderRadius: BorderRadius.circular(15),
-                                        border: Border.all(color: isJuzAmmaMode ? accentGold : Colors.transparent),
+                                        border: Border.all(color: selectedJuz > 0 ? accentGold : Colors.transparent, width: 1.2),
                                       ),
-                                      child: SwitchListTile(
-                                        activeColor: accentGold,
-                                        value: isJuzAmmaMode,
-                                        title: const Text("طالب في (جزء عمَّ) 👶", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                                        subtitle: const Text("لتسجيل المدى بأسماء السور والآيات وبشكل مبسط", style: TextStyle(fontFamily: 'Cairo', fontSize: 11)),
-                                        onChanged: (v) {
-                                          setState(() {
-                                            isJuzAmmaMode = v;
-                                            for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
-                                              for (var item in list) {
-                                                item['surah'] = '';
-                                                item['toSurah'] = '';
-                                                item['isFullSurah'] = true;
-                                                (item['from'] as TextEditingController).clear();
-                                                (item['to'] as TextEditingController).clear();
-                                              }
-                                            }
-                                            if (isJuzAmmaMode) {
-                                              totalMemorizedPagesController.text = "0";
-                                            }
-                                          });
-                                        },
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(Icons.style_rounded, size: 16, color: accentGold),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                "حدد نظام التسميع:",
+                                                style: TextStyle(
+                                                  fontFamily: 'Cairo',
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                  color: isDarkMode ? Colors.white70 : primaryColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            physics: const BouncingScrollPhysics(),
+                                            child: Row(
+                                              children: [
+                                                _buildJuzChip(0, "العادي (صفحات)", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(30, "جزء عمَّ 👶", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(29, "جزء تبارك", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(28, "قد سمع", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(27, "الذاريات", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(26, "الأحقاف", isDarkMode),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                     const SizedBox(height: 12),
@@ -1629,7 +1652,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     ),
                                   ],
 
-                                  if (!isCompletedStudent && !isJuzAmmaMode) ...[
+                                  if (!isCompletedStudent && selectedJuz == 0) ...[
                                     const SizedBox(height: 10),
                                     Divider(color: isDarkMode ? Colors.white24 : Colors.black12),
                                     const SizedBox(height: 10),
@@ -1883,6 +1906,44 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                 ],
               ),
       ),
+    );
+  }
+
+  Widget _buildJuzChip(int juzNum, String title, bool isDarkMode) {
+    bool isSelected = selectedJuz == juzNum;
+    return ChoiceChip(
+      label: Text(
+        title,
+        style: TextStyle(
+          fontFamily: 'Cairo',
+          fontSize: 11,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? Colors.black : (isDarkMode ? Colors.white70 : Colors.black87),
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: accentGold,
+      backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
+      elevation: isSelected ? 2 : 0,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() {
+            selectedJuz = juzNum;
+            for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+              for (var item in list) {
+                item['surah'] = '';
+                item['toSurah'] = '';
+                item['isFullSurah'] = true;
+                (item['from'] as TextEditingController).clear();
+                (item['to'] as TextEditingController).clear();
+              }
+            }
+            if (selectedJuz > 0) {
+              totalMemorizedPagesController.text = "0";
+            }
+          });
+        }
+      },
     );
   }
 
