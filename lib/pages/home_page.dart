@@ -56,9 +56,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> { 
   final cycleService = CycleService();
-  String currentCycle = "صيف 2026 (1)";
-  CycleModel? currentCycleModel;
-  bool isLoadingCycle = true;
 
   final Color primaryNavy = const Color(0xff1e293b);
   final Color accentGold = const Color(0xffD4AF37); 
@@ -74,11 +71,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _fetchCycleDirectlyFromFirebase(); 
     _setupNotifications(); 
     _checkIfManager(); 
     _checkPendingNotifications(); 
-    
     _initAndSchedulePrayerNotifications();
 
     _prayerTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
@@ -137,9 +132,8 @@ class _HomePageState extends State<HomePage> {
           scheduledDate: notificationTime,
         );
       }
-      print("✅ تم جدولة إشعارات الصلوات بنجاح!");
     } catch (e) {
-      print("❌ خطأ في جدولة إشعارات الصلاة: $e");
+      debugPrint("❌ خطأ في جدولة إشعارات الصلاة: $e");
     }
   }
 
@@ -169,56 +163,6 @@ class _HomePageState extends State<HomePage> {
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
-  }
-
-  Future<void> _fetchCycleDirectlyFromFirebase() async {
-    try {
-      final snapshot = await FirebaseFirestore.instance.collection('cycles').get();
-      
-      if (snapshot.docs.isNotEmpty) {
-        var doc = snapshot.docs.first;
-        var data = doc.data();
-        
-        String name = data['name'] ?? 'صيف 2026';
-        int cycleNum = int.tryParse(data['cycleNumber'].toString()) ?? 1;
-        String displayName = "$name ($cycleNum)";
-
-        CycleModel parsedModel = CycleModel(
-          id: doc.id,
-          name: name,
-          type: data['type']?.toString() ?? 'cycle',
-          year: int.tryParse(data['year']?.toString() ?? '') ?? DateTime.now().year,
-          cycleNumber: cycleNum,
-          startDate: data['startDate']?.toString() ?? "2026-05-23",
-          endDate: data['endDate']?.toString() ?? "2026-10-02",
-          active: data['active'] ?? true,
-          archived: data['archived'] ?? false,
-        );
-
-        if (mounted) {
-          setState(() {
-            currentCycle = displayName;
-            currentCycleModel = parsedModel;
-            isLoadingCycle = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            currentCycle = "لا يوجد دورة";
-            isLoadingCycle = false;
-          });
-        }
-      }
-    } catch (e) {
-      print("❌ خطأ أثناء جلب الدورة من فايربيس: $e");
-      if (mounted) {
-        setState(() {
-          currentCycle = "صيف 2026 (1)";
-          isLoadingCycle = false;
-        });
-      }
-    }
   }
 
   void _checkPendingNotifications() async {
@@ -254,106 +198,132 @@ class _HomePageState extends State<HomePage> {
         );
       }
     } catch (e) {
-      print("❌ خطأ في إعداد الإشعارات: $e");
+      debugPrint("❌ خطأ في إعداد الإشعارات: $e");
     }
   }
 
   void _showSupervisorsList(bool isDark) {
-    showModalBottomSheet(
+    showGeneralDialog(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              height: MediaQuery.of(context).size.height * 0.7,
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xff0f172a).withOpacity(0.95) : Colors.white.withOpacity(0.95),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                border: Border.all(color: accentGold.withOpacity(0.3)),
-              ),
-              child: Column(
-                children: [
-                  Container(width: 45, height: 5, decoration: BoxDecoration(color: accentGold.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
-                  const SizedBox(height: 20),
-                  Text("إدارة الحسابات المشرفة 👑", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryNavy, fontFamily: 'Cairo')),
-                  if (isAlsoManager && widget.role == 'supervisor') ...[
-                    const SizedBox(height: 15),
-                    InkWell(
-                      onTap: () {
-                        Navigator.pop(context);
-                        _returnToManager();
-                      },
+      barrierDismissible: true,
+      barrierLabel: 'SupervisorsList',
+      barrierColor: Colors.black.withOpacity(0.6),
+      transitionDuration: const Duration(milliseconds: 350),
+      pageBuilder: (context, anim1, anim2) => const SizedBox.shrink(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        final curve = CurvedAnimation(parent: anim1, curve: Curves.easeOutCubic);
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(curve),
+          child: FadeTransition(
+            opacity: curve,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  margin: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 10, left: 16, right: 16),
+                  height: MediaQuery.of(context).size.height * 0.75,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(32),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+                        padding: const EdgeInsets.all(22),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                          color: isDark ? const Color(0xff0f172a).withOpacity(0.88) : Colors.white.withOpacity(0.88),
+                          borderRadius: BorderRadius.circular(32),
+                          border: Border.all(color: isDark ? accentGold.withOpacity(0.4) : primaryNavy.withOpacity(0.2), width: 1.5),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Column(
                           children: [
-                            Icon(Icons.admin_panel_settings_rounded, color: Colors.orange.shade800),
-                            const SizedBox(width: 10),
-                            Text("العودة للوحة الإدارة الأساسية", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.orange.shade800)),
+                            Container(width: 50, height: 5, decoration: BoxDecoration(color: isDark ? accentGold.withOpacity(0.6) : primaryNavy.withOpacity(0.3), borderRadius: BorderRadius.circular(10))),
+                            const SizedBox(height: 18),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: accentGold.withOpacity(0.18), shape: BoxShape.circle), child: Icon(Icons.stars_rounded, color: accentGold, size: 22)),
+                                const SizedBox(width: 10),
+                                Text("إدارة الحسابات المشرفة 👑", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: isDark ? Colors.white : primaryNavy, fontFamily: 'Cairo')),
+                              ],
+                            ),
+                            if (isAlsoManager && widget.role == 'supervisor') ...[
+                              const SizedBox(height: 18),
+                              InkWell(
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _returnToManager();
+                                },
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(colors: [Colors.amber.shade700.withOpacity(0.2), Colors.orange.shade900.withOpacity(0.15)]),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.orange.shade600.withOpacity(0.5)),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.admin_panel_settings_rounded, color: Colors.orange.shade600, size: 22),
+                                      const SizedBox(width: 10),
+                                      Text("العودة للوحة الإدارة الأساسية", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.orange.shade300 : Colors.orange.shade900)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            Align(alignment: Alignment.centerRight, child: Text("اختر الحساب للدخول كـ مشرف:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isDark ? Colors.white60 : Colors.black54, fontFamily: 'Cairo'))),
+                            const SizedBox(height: 12),
+                            Expanded(
+                              child: StreamBuilder<QuerySnapshot>(
+                                stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
+                                builder: (context, snapshot) {
+                                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                                  final docs = snapshot.data!.docs;
+                                  if (docs.isEmpty) return const Center(child: Text("لا يوجد مشرفين حالياً", style: TextStyle(fontFamily: 'Cairo')));
+                                  return ListView.builder(
+                                    physics: const BouncingScrollPhysics(),
+                                    itemCount: docs.length,
+                                    itemBuilder: (context, index) {
+                                      var sup = docs[index].data() as Map<String, dynamic>;
+                                      String supId = docs[index].id;
+                                      return Container(
+                                        margin: const EdgeInsets.only(bottom: 12),
+                                        decoration: BoxDecoration(
+                                          color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.6),
+                                          borderRadius: BorderRadius.circular(22),
+                                          border: Border.all(color: isDark ? Colors.white12 : Colors.black.withOpacity(0.08)),
+                                        ),
+                                        child: ListTile(
+                                          leading: CircleAvatar(
+                                            radius: 22,
+                                            backgroundColor: accentGold.withOpacity(0.2),
+                                            backgroundImage: sup['imageUrl'] != null && sup['imageUrl'].isNotEmpty ? NetworkImage(sup['imageUrl']) : null,
+                                            child: (sup['imageUrl'] == null || sup['imageUrl'].isEmpty) ? Icon(Icons.person, color: accentGold) : null,
+                                          ),
+                                          title: Text(sup['name'] ?? 'مشرف', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87)),
+                                          subtitle: Text(sup['phone'] ?? '', style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54, fontSize: 11)),
+                                          trailing: Icon(Icons.login_rounded, color: accentGold, size: 18),
+                                          onTap: () => _impersonateSupervisor(supId),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    Divider(color: isDark ? Colors.white24 : Colors.black12),
-                  ],
-                  const SizedBox(height: 10),
-                  Text("اختر الحساب للدخول كـ مشرف:", style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : Colors.black54, fontFamily: 'Cairo')),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                        final docs = snapshot.data!.docs;
-                        if (docs.isEmpty) return const Center(child: Text("لا يوجد مشرفين حالياً", style: TextStyle(fontFamily: 'Cairo')));
-                        return ListView.builder(
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: docs.length,
-                          itemBuilder: (context, index) {
-                            var sup = docs[index].data() as Map<String, dynamic>;
-                            String supId = docs[index].id;
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: BoxDecoration(
-                                color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-                              ),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: accentGold.withOpacity(0.2),
-                                  backgroundImage: sup['imageUrl'] != null && sup['imageUrl'].isNotEmpty ? NetworkImage(sup['imageUrl']) : null,
-                                  child: (sup['imageUrl'] == null || sup['imageUrl'].isEmpty) ? Icon(Icons.person, color: accentGold) : null,
-                                ),
-                                title: Text(sup['name'] ?? 'مشرف', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87)),
-                                subtitle: Text(sup['phone'] ?? '', style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54, fontSize: 12)),
-                                trailing: Icon(Icons.login_rounded, color: accentGold),
-                                onTap: () => _impersonateSupervisor(supId),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
                   ),
-                ],
+                ),
               ),
             ),
           ),
         );
-      }
+      },
     );
   }
 
@@ -393,7 +363,7 @@ class _HomePageState extends State<HomePage> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text("تم تحديث صورة البروفايل بنجاح 🎉", style: TextStyle(fontFamily: 'Cairo'))));
       }
     } catch (e) {
-      print("خطأ في رفع الصورة: $e");
+      debugPrint("خطأ في رفع الصورة: $e");
     } finally {
       setState(() => _isUploadingManagerImage = false);
     }
@@ -405,315 +375,341 @@ class _HomePageState extends State<HomePage> {
     final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
     final bool isDark = themeProvider.isDarkMode;
 
-    final fallbackCycle = currentCycleModel ?? CycleModel(
-      id: "rRDaBmGjfo6RMOXcF5fm",
-      name: "صيف 2026",
-      type: "summer",
-      year: 2026,
-      cycleNumber: 1,
-      startDate: "2026-05-23",
-      endDate: "2026-10-02",
-      active: true,
-      archived: false,
-    );
-
+    // 🚀 بث مباشر وحي للدورات النشطة حصراً
     return OfflineWrapper(
-      child: Scaffold(
-        extendBodyBehindAppBar: true, 
-        backgroundColor: isDark ? const Color(0xff0b1120) : const Color(0xfff8fafc),
-        appBar: AppBar(
-          elevation: 0,
-          backgroundColor: Colors.transparent, 
-          centerTitle: true,
-          leading: Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.6),
-              shape: BoxShape.circle,
-              border: Border.all(color: isDark ? Colors.white12 : Colors.white),
-            ),
-            child: PopupMenuButton<String>(
-              icon: Icon(Icons.grid_view_rounded, color: isDark ? accentGold : primaryNavy, size: 22),
-              color: isDark ? const Color(0xff0f172a) : Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-              onSelected: (value) {
-                switch (value) {
-                  case 'cycles':
-                    _nav(const CyclesPage());
-                    break;
-                  case 'all_cycles_students':
-                    _nav(const AllCyclesStudentsPage());
-                    break;
-                  case 'create_cycle':
-                    _nav(const CreateCyclePage());
-                    break;
-                  case 'broadcast':
-                    _nav(const BroadcastPage());
-                    break;
-                  case 'inspirations':
-                    _nav(const InspirationsManagePage());
-                    break;
-                  case 'points_bank':
-                    _nav(const PointsBankPage());
-                    break;
-                  case 'activities':
-                    _nav(const ActivitiesManagePage());
-                    break;
-                  case 'assign_students':
-                    _nav(AssignStudentsPage(cycle: fallbackCycle));
-                    break;
-                  case 'expenses':
-                    _nav(const InstituteExpensesPage());
-                    break;
-                  case 'honor_board':
-                    _nav(HonorBoardPage(role: widget.role));
-                    break;
-                  case 'completions':
-                    _nav(const QuranCompletionsPage());
-                    break;
-                  case 'qiblah':
-                    _nav(const QiblahPage());
-                    break;
-                }
-              },
-              itemBuilder: (BuildContext context) => [
-                PopupMenuItem(
-                  value: 'cycles',
-                  child: Row(
-                    children: [
-                      Icon(Icons.view_list_rounded, color: isDark ? accentGold : primaryNavy, size: 20),
-                      const SizedBox(width: 10),
-                      Text('عرض الدورات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                    ],
-                  ),
-                ),
-                
-                if (widget.role == "manager") ...[
-                  PopupMenuItem(
-                    value: 'all_cycles_students',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.badge_rounded, color: Colors.blueAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Text('جميع طلاب الدورات 🎒', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'create_cycle',
-                    child: Row(
-                      children: [
-                        Icon(Icons.add_circle_outline_rounded, color: isDark ? accentGold : primaryNavy, size: 20),
-                        const SizedBox(width: 10),
-                        Text('إنشاء دورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'broadcast',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.campaign_rounded, color: Colors.lightBlueAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Text('إرسال إعلان للجميع', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'inspirations',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.wb_sunny_rounded, color: Colors.orangeAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Text('إدارة الإشراقات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'points_bank',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.diamond_rounded, color: Colors.purpleAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Text('بنك النقاط', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'activities',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.directions_bus_rounded, color: Colors.tealAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Text('الأنشطة والرحلات 🚌', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'assign_students',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.shuffle_rounded, color: Colors.indigoAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Text('توزيع الطلاب', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'expenses',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.account_balance_wallet_rounded, color: Colors.greenAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Text('مصروفات المعهد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'completions',
-                    child: Row(
-                      children: [
-                        Icon(Icons.menu_book_rounded, color: Colors.amber.shade600, size: 20),
-                        const SizedBox(width: 10),
-                        Text('سجل الختمات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                      ],
-                    ),
-                  ),
-                ],
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('cycles')
+            .snapshots(),
+        builder: (context, cycleSnap) {
+          CycleModel? activeCycleModel;
 
-                PopupMenuItem(
-                  value: 'honor_board',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 20),
-                      const SizedBox(width: 10),
-                      Text('لوحة الشرف 🏆', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+          if (cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty) {
+            for (var doc in cycleSnap.data!.docs) {
+              var data = doc.data() as Map<String, dynamic>;
+              bool isCurrent = data['isCurrent'] == true;
+              bool isActive = data['status'] == 'active' || data['active'] == true;
+              bool isNotClosed = data['isClosed'] != true && data['archived'] != true;
+
+              if ((isCurrent || isActive) && isNotClosed) {
+                // ✅ الحل المباشر والصحيح 100%
+var data = doc.data() as Map<String, dynamic>;
+activeCycleModel = CycleModel(
+  id: doc.id,
+  name: data['name'] ?? '',
+  type: data['type']?.toString() ?? '',
+  year: int.tryParse(data['year']?.toString() ?? '') ?? DateTime.now().year,
+  cycleNumber: int.tryParse(data['cycleNumber']?.toString() ?? '') ?? 1,
+  startDate: data['startDate']?.toString() ?? '',
+  endDate: data['endDate']?.toString() ?? '',
+  active: data['active'] == true,
+  archived: data['archived'] == true,
+);
+                break;
+              }
+            }
+          }
+
+          void openPageWithActiveCycle(Widget Function(CycleModel cycle) pageBuilder) {
+            if (activeCycleModel == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  backgroundColor: Colors.orange,
+                  content: Text("لا توجد دورة نشطة حالياً 🚫 يرجى إنشاء دورة جديدة من القائمة.", style: TextStyle(fontFamily: 'Cairo')),
+                ),
+              );
+              return;
+            }
+            _nav(pageBuilder(activeCycleModel!));
+          }
+
+          return Scaffold(
+            extendBodyBehindAppBar: true, 
+            backgroundColor: isDark ? const Color(0xff0b1120) : const Color(0xfff8fafc),
+            appBar: AppBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent, 
+              centerTitle: true,
+              leading: Container(
+                margin: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.6),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: isDark ? Colors.white12 : Colors.white),
+                ),
+                child: PopupMenuButton<String>(
+                  icon: Icon(Icons.grid_view_rounded, color: isDark ? accentGold : primaryNavy, size: 22),
+                  color: isDark ? const Color(0xff0f172a) : Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'cycles':
+                        _nav(const CyclesPage());
+                        break;
+                      case 'all_cycles_students':
+                        _nav(const AllCyclesStudentsPage());
+                        break;
+                      case 'create_cycle':
+                        _nav(const CreateCyclePage());
+                        break;
+                      case 'broadcast':
+                        _nav(const BroadcastPage());
+                        break;
+                      case 'inspirations':
+                        _nav(const InspirationsManagePage());
+                        break;
+                      case 'points_bank':
+                        _nav(const PointsBankPage());
+                        break;
+                      case 'activities':
+                        _nav(const ActivitiesManagePage());
+                        break;
+                      case 'assign_students':
+                        openPageWithActiveCycle((cycle) => AssignStudentsPage(cycle: cycle));
+                        break;
+                      case 'expenses':
+                        _nav(const InstituteExpensesPage());
+                        break;
+                      case 'honor_board':
+                        _nav(HonorBoardPage(role: widget.role));
+                        break;
+                      case 'completions':
+                        _nav(const QuranCompletionsPage());
+                        break;
+                      case 'qiblah':
+                        _nav(const QiblahPage());
+                        break;
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => [
+                    PopupMenuItem(
+                      value: 'cycles',
+                      child: Row(
+                        children: [
+                          Icon(Icons.view_list_rounded, color: isDark ? accentGold : primaryNavy, size: 20),
+                          const SizedBox(width: 10),
+                          Text('عرض الدورات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                        ],
+                      ),
+                    ),
+                    if (widget.role == "manager") ...[
+                      PopupMenuItem(
+                        value: 'all_cycles_students',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.badge_rounded, color: Colors.blueAccent, size: 20),
+                            const SizedBox(width: 10),
+                            Text('جميع طلاب الدورات 🎒', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'create_cycle',
+                        child: Row(
+                          children: [
+                            Icon(Icons.add_circle_outline_rounded, color: isDark ? accentGold : primaryNavy, size: 20),
+                            const SizedBox(width: 10),
+                            Text('إنشاء دورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'broadcast',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.campaign_rounded, color: Colors.lightBlueAccent, size: 20),
+                            const SizedBox(width: 10),
+                            Text('إرسال إعلان للجميع', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'inspirations',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.wb_sunny_rounded, color: Colors.orangeAccent, size: 20),
+                            const SizedBox(width: 10),
+                            Text('إدارة الإشراقات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'points_bank',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.diamond_rounded, color: Colors.purpleAccent, size: 20),
+                            const SizedBox(width: 10),
+                            Text('بنك النقاط', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'activities',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.directions_bus_rounded, color: Colors.tealAccent, size: 20),
+                            const SizedBox(width: 10),
+                            Text('الأنشطة والرحلات 🚌', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'assign_students',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.shuffle_rounded, color: Colors.indigoAccent, size: 20),
+                            const SizedBox(width: 10),
+                            Text('توزيع الطلاب', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'expenses',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.account_balance_wallet_rounded, color: Colors.greenAccent, size: 20),
+                            const SizedBox(width: 10),
+                            Text('مصروفات المعهد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'completions',
+                        child: Row(
+                          children: [
+                            Icon(Icons.menu_book_rounded, color: Colors.amber.shade600, size: 20),
+                            const SizedBox(width: 10),
+                            Text('سجل الختمات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
                     ],
+                    PopupMenuItem(
+                      value: 'honor_board',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 20),
+                          const SizedBox(width: 10),
+                          Text('لوحة الشرف 🏆', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'qiblah',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.compass_calibration_rounded, color: Colors.blueAccent, size: 20),
+                          const SizedBox(width: 10),
+                          Text('اتجاه القبلة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              title: Text(
+                widget.role == "manager" ? "لوحة المدير 👑" : "لوحة المشرف 👤",
+                style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : primaryNavy, fontFamily: 'Cairo', fontSize: 18),
+              ),
+              actions: [
+                if (isAlsoManager)
+                  IconButton(
+                    icon: Icon(Icons.supervisor_account_rounded, color: isDark ? accentGold : primaryNavy),
+                    onPressed: () => _showSupervisorsList(isDark),
+                  ),
+                IconButton(
+                  icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: isDark ? Colors.orangeAccent : primaryNavy),
+                  onPressed: () => themeProvider.toggleTheme(),
+                ),
+                IconButton(
+                  onPressed: logout,
+                  icon: Icon(Icons.power_settings_new_rounded, color: isDark ? Colors.redAccent : Colors.red),
+                ),
+              ],
+            ),
+            body: Stack(
+              children: [
+                Container(
+                  width: double.infinity, height: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDark 
+                          ? [const Color(0xff0b1120), const Color(0xff1e293b), const Color(0xff0f172a)] 
+                          : [const Color(0xfff1f5f9), const Color(0xffe2e8f0), const Color(0xffcbd5e1)], 
+                      begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    ),
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'qiblah',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.compass_calibration_rounded, color: Colors.blueAccent, size: 20),
-                      const SizedBox(width: 10),
-                      Text('اتجاه القبلة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                Positioned(
+                  top: -80, left: -80,
+                  child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, color: accentGold.withOpacity(isDark ? 0.08 : 0.15))),
+                ),
+                Positioned(
+                  top: 250, right: -100,
+                  child: Container(width: 320, height: 320, decoration: BoxDecoration(shape: BoxShape.circle, color: softBlue.withOpacity(isDark ? 0.08 : 0.12))),
+                ),
+
+                SafeArea(
+                  child: CustomScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        sliver: SliverToBoxAdapter(
+                          child: _buildRealGlassHeader(isDark, currentCollection, activeCycleModel),
+                        ),
+                      ),
+                      
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+                          child: _buildUltraPrayerGlassCard(isDark),
+                        ),
+                      ),
+
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 15, 20, 30),
+                        sliver: SliverGrid(
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 1.15,
+                          ),
+                          delegate: SliverChildListDelegate([
+                            if (widget.role == "manager") ...[
+                              _buildCreativeMenuCard(Icons.fact_check_rounded, "تسجيل الحضور 📋", const [Color(0xff10b981), Color(0xff059669)], () {
+                                openPageWithActiveCycle((cycle) => InitialAttendancePage(cycle: cycle));
+                              }, isDark),
+                              _buildCreativeMenuCard(Icons.dashboard_customize_rounded, "لوحة التحكم", const [Color(0xff3b82f6), Color(0xff1d4ed8)], () => _nav(const DashboardPage()), isDark),
+                              _buildCreativeMenuCard(Icons.person_add_alt_1_rounded, "إضافة طالب", const [Color(0xff8b5cf6), Color(0xff6d28d9)], () {
+                                openPageWithActiveCycle((cycle) => AddStudentPage(cycle: cycle));
+                              }, isDark),
+                              _buildCreativeMenuCard(Icons.group_add_rounded, "إضافة مشرفين", const [Color(0xfff59e0b), Color(0xffd97706)], () => _nav(const SupervisorPage()), isDark),
+                              _buildCreativeMenuCard(Icons.query_stats_rounded, "الإحصائيات اليومية", const [Color(0xffec4899), Color(0xffbe185d)], () => _nav(const DailyStatsPage()), isDark),
+                            ],
+
+                            _buildCreativeMenuCard(Icons.groups_rounded, "عرض الطلاب 🎒", const [Color(0xff06b6d4), Color(0xff0891b2)], () {
+                              openPageWithActiveCycle((cycle) => StudentsPage(cycle: cycle, role: widget.role, uid: widget.uid));
+                            }, isDark),
+
+                            _buildCreativeMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", const [Color(0xff6366f1), Color(0xff4338ca)], () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
+                            _buildCreativeMenuCard(Icons.pie_chart_rounded, "الإحصائيات العامة", const [Color(0xff14b8a6), Color(0xff0d9488)], () => _nav(const StatisticsPage()), isDark),
+                            _buildCreativeMenuCard(Icons.event_busy_rounded, "طلبات الاستئذان", const [Color(0xfff43f5e), Color(0xffe11d48)], () => _nav(LeaveRequestsPage(supervisorId: widget.uid, role: widget.role)), isDark),
+                          ]),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
-          ),
-          title: Text(
-            widget.role == "manager" ? "لوحة المدير 👑" : "لوحة المشرف 👤",
-            style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : primaryNavy, fontFamily: 'Cairo', fontSize: 18),
-          ),
-          actions: [
-            if (isAlsoManager)
-              IconButton(
-                icon: Icon(Icons.supervisor_account_rounded, color: isDark ? accentGold : primaryNavy),
-                onPressed: () => _showSupervisorsList(isDark),
-              ),
-            IconButton(
-              icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: isDark ? Colors.orangeAccent : primaryNavy),
-              onPressed: () => themeProvider.toggleTheme(),
-            ),
-            IconButton(
-              onPressed: logout,
-              icon: Icon(Icons.power_settings_new_rounded, color: isDark ? Colors.redAccent : Colors.red),
-            ),
-          ],
-        ),
-        body: Stack(
-          children: [
-            // 🌌 خلفية نيون زجاجية متدرجة وحيوية للغاية
-            Container(
-              width: double.infinity, height: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isDark 
-                      ? [const Color(0xff0b1120), const Color(0xff1e293b), const Color(0xff0f172a)] 
-                      : [const Color(0xfff1f5f9), const Color(0xffe2e8f0), const Color(0xffcbd5e1)], 
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
-                ),
-              ),
-            ),
-            
-            // 🔮 تأثير الدوائر السحرية المشعة
-            Positioned(
-              top: -80, left: -80,
-              child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, color: accentGold.withOpacity(isDark ? 0.08 : 0.15))),
-            ),
-            Positioned(
-              top: 250, right: -100,
-              child: Container(width: 320, height: 320, decoration: BoxDecoration(shape: BoxShape.circle, color: softBlue.withOpacity(isDark ? 0.08 : 0.12))),
-            ),
-
-            SafeArea(
-              child: CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  // 👑 الهيدر الملكي الفاخر
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    sliver: SliverToBoxAdapter(
-                      child: _buildRealGlassHeader(isDark, currentCollection),
-                    ),
-                  ),
-                  
-                  // 🕌 مركز أوقات الصلاة المستقبلي
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-                      child: _buildUltraPrayerGlassCard(isDark),
-                    ),
-                  ),
-
-                  // 💎 شبكة التحكم والأزرار بتنسيق ثلاثي الأبعاد زجاجي
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 15, 20, 30),
-                    sliver: SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 1.15,
-                      ),
-                      delegate: SliverChildListDelegate([
-                        if (widget.role == "manager") ...[
-                          _buildCreativeMenuCard(Icons.fact_check_rounded, "تسجيل الحضور 📋", const [Color(0xff10b981), Color(0xff059669)], () {
-                            _nav(InitialAttendancePage(cycle: fallbackCycle));
-                          }, isDark),
-                          _buildCreativeMenuCard(Icons.dashboard_customize_rounded, "لوحة التحكم", const [Color(0xff3b82f6), Color(0xff1d4ed8)], () => _nav(const DashboardPage()), isDark),
-                          
-                          _buildCreativeMenuCard(Icons.person_add_alt_1_rounded, "إضافة طالب", const [Color(0xff8b5cf6), Color(0xff6d28d9)], () {
-                            _nav(AddStudentPage(cycle: fallbackCycle));
-                          }, isDark),
-                          
-                          _buildCreativeMenuCard(Icons.group_add_rounded, "إضافة مشرفين", const [Color(0xfff59e0b), Color(0xffd97706)], () => _nav(const SupervisorPage()), isDark),
-                          _buildCreativeMenuCard(Icons.query_stats_rounded, "الإحصائيات اليومية", const [Color(0xffec4899), Color(0xffbe185d)], () => _nav(const DailyStatsPage()), isDark),
-                        ],
-
-                        _buildCreativeMenuCard(Icons.groups_rounded, "عرض الطلاب 🎒", const [Color(0xff06b6d4), Color(0xff0891b2)], () {
-                          _nav(StudentsPage(cycle: fallbackCycle, role: widget.role, uid: widget.uid));
-                        }, isDark),
-
-                        _buildCreativeMenuCard(Icons.mark_chat_unread_rounded, "رسائل الأهالي", const [Color(0xff6366f1), Color(0xff4338ca)], () => _nav(SupervisorInboxPage(supervisorId: widget.uid)), isDark),
-                        _buildCreativeMenuCard(Icons.pie_chart_rounded, "الإحصائيات العامة", const [Color(0xff14b8a6), Color(0xff0d9488)], () => _nav(const StatisticsPage()), isDark),
-                        _buildCreativeMenuCard(Icons.event_busy_rounded, "طلبات الاستئذان", const [Color(0xfff43f5e), Color(0xffe11d48)], () => _nav(LeaveRequestsPage(supervisorId: widget.uid, role: widget.role)), isDark),
-                      ]),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  // 🕌 كارد أوقات الصلاة المستقبلي المتألق
   Widget _buildUltraPrayerGlassCard(bool isDark) {
     try {
       final times = PrayerService.getSyriaPrayerTimes();
@@ -758,9 +754,6 @@ class _HomePageState extends State<HomePage> {
               color: isDark ? const Color(0xff1e293b).withOpacity(0.55) : Colors.white.withOpacity(0.65),
               borderRadius: BorderRadius.circular(28),
               border: Border.all(color: isDark ? accentGold.withOpacity(0.35) : primaryNavy.withOpacity(0.2), width: 1.5),
-              boxShadow: [
-                BoxShadow(color: isDark ? Colors.black.withOpacity(0.3) : primaryNavy.withOpacity(0.06), blurRadius: 20, offset: const Offset(0, 8))
-              ],
             ),
             child: Column(
               children: [
@@ -769,7 +762,6 @@ class _HomePageState extends State<HomePage> {
                   decoration: BoxDecoration(
                     color: isDark ? accentGold.withOpacity(0.12) : primaryNavy.withOpacity(0.06),
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                    border: Border(bottom: BorderSide(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05))),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -785,19 +777,12 @@ class _HomePageState extends State<HomePage> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                "الصلاة القادمة: ${nextPrayer['name']}",
-                                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : primaryNavy),
-                              ),
-                              Text(
-                                _formatTime12(nextPrayer['time'] as DateTime),
-                                style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDark ? accentGold : primaryNavy.withOpacity(0.8), fontWeight: FontWeight.bold),
-                              ),
+                              Text("الصلاة القادمة: ${nextPrayer['name']}", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : primaryNavy)),
+                              Text(_formatTime12(nextPrayer['time'] as DateTime), style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDark ? accentGold : primaryNavy.withOpacity(0.8), fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ],
                       ),
-
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
@@ -805,28 +790,18 @@ class _HomePageState extends State<HomePage> {
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: isDark ? accentGold.withOpacity(0.4) : primaryNavy.withOpacity(0.25)),
                         ),
-                        child: Text(
-                          countdownStr,
-                          style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.w800, color: isDark ? accentGold : primaryNavy),
-                        ),
+                        child: Text(countdownStr, style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.w800, color: isDark ? accentGold : primaryNavy)),
                       ),
                     ],
                   ),
                 ),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: list.map((item) {
                       bool isNext = item["name"] == nextPrayer!["name"];
-                      return _buildPrayerItemTile(
-                        name: item["name"],
-                        time: item["time"],
-                        icon: item["icon"],
-                        isNext: isNext,
-                        isDark: isDark,
-                      );
+                      return _buildPrayerItemTile(name: item["name"], time: item["time"], icon: item["icon"], isNext: isNext, isDark: isDark);
                     }).toList(),
                   ),
                 ),
@@ -840,13 +815,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Widget _buildPrayerItemTile({
-    required String name,
-    required DateTime time,
-    required IconData icon,
-    required bool isNext,
-    required bool isDark,
-  }) {
+  Widget _buildPrayerItemTile({required String name, required DateTime time, required IconData icon, required bool isNext, required bool isDark}) {
     Color activeColor = isDark ? accentGold : primaryNavy;
     String formatted = _formatTime12(time);
 
@@ -877,8 +846,7 @@ class _HomePageState extends State<HomePage> {
     return "$hour:$minute";
   }
 
-  // 👑 الهيدر الزجاجي الفاخر
-  Widget _buildRealGlassHeader(bool isDark, String currentCollection) {
+  Widget _buildRealGlassHeader(bool isDark, String currentCollection, CycleModel? activeCycle) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
@@ -889,7 +857,6 @@ class _HomePageState extends State<HomePage> {
             color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.45),
             borderRadius: BorderRadius.circular(28),
             border: Border.all(color: isDark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.8), width: 1.5),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20)],
           ),
           child: Column(
             children: [
@@ -906,29 +873,11 @@ class _HomePageState extends State<HomePage> {
 
                   Widget buildGreetingText() {
                     if (widget.role == "manager") {
-                      return Text(
-                        "أهلاً مدير المعهد 👑",
-                        style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'),
-                      );
+                      return Text("أهلاً مدير المعهد 👑", style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'));
                     } else if (currentName != null && currentName.isNotEmpty) {
-                      return Text(
-                        "المشرف: $currentName",
-                        style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'),
-                      );
+                      return Text("المشرف: $currentName", style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'));
                     } else {
-                      return FutureBuilder<DocumentSnapshot>(
-                        future: FirebaseFirestore.instance.collection('supervisors').doc(widget.uid).get(),
-                        builder: (context, supSnap) {
-                          String nameToShow = "المشرف";
-                          if (supSnap.hasData && supSnap.data!.exists) {
-                            nameToShow = (supSnap.data!.data() as Map<String, dynamic>?)?['name'] ?? "المشرف";
-                          }
-                          return Text(
-                            "المشرف: $nameToShow",
-                            style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'),
-                          );
-                        },
-                      );
+                      return Text("المشرف", style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'));
                     }
                   }
 
@@ -939,10 +888,7 @@ class _HomePageState extends State<HomePage> {
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
-                            Container(
-                              width: 90, height: 90,
-                              decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [accentGold, softBlue])),
-                            ),
+                            Container(width: 90, height: 90, decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [accentGold, softBlue]))),
                             CircleAvatar(
                               radius: 42,
                               backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white,
@@ -971,16 +917,25 @@ class _HomePageState extends State<HomePage> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.event_note_rounded, color: isDark ? accentGold : primaryNavy),
+                    Icon(
+                      activeCycle != null ? Icons.event_note_rounded : Icons.event_busy_rounded, 
+                      color: activeCycle != null ? (isDark ? accentGold : primaryNavy) : Colors.redAccent,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text("الدورة الفعالة حالياً", style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[700], fontFamily: 'Cairo')),
-                          isLoadingCycle 
-                              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                              : Text(currentCycle, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : primaryNavy, fontFamily: 'Cairo')),
+                          Text(
+                            activeCycle?.name ?? "لا توجد دورة نشطة حالياً 🚫",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold, 
+                              fontSize: 14, 
+                              color: activeCycle != null ? (isDark ? Colors.white : primaryNavy) : Colors.redAccent, 
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -994,7 +949,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 💎 كارد تحكم زجاجي إبداعي ثلاثي الأبعاد
   Widget _buildCreativeMenuCard(IconData icon, String title, List<Color> gradientColors, VoidCallback onTap, bool isDark) {
     return InkWell(
       onTap: onTap,
@@ -1009,9 +963,6 @@ class _HomePageState extends State<HomePage> {
               color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.55),
               borderRadius: BorderRadius.circular(26),
               border: Border.all(color: isDark ? Colors.white12 : Colors.white.withOpacity(0.85), width: 1.5),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(isDark ? 0.25 : 0.04), blurRadius: 12, offset: const Offset(0, 5)),
-              ],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1021,7 +972,6 @@ class _HomePageState extends State<HomePage> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(colors: gradientColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
-                    boxShadow: [BoxShadow(color: gradientColors.first.withOpacity(0.35), blurRadius: 10, offset: const Offset(0, 4))],
                   ),
                   child: Icon(icon, size: 26, color: Colors.white),
                 ),
@@ -1046,9 +996,7 @@ class _HomePageState extends State<HomePage> {
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => page,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 250), 
       ),
     );

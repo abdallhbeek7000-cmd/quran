@@ -14,10 +14,16 @@ class ArchivedStudentsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
 
+    // 1. الاستماع التلقائي للدورة النشطة الحالية
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('students').snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+      stream: FirebaseFirestore.instance
+          .collection('cycles')
+          .where('isCurrent', isEqualTo: true)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .snapshots(),
+      builder: (context, cycleSnap) {
+        if (cycleSnap.connectionState == ConnectionState.waiting) {
           return Scaffold(
             backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
             appBar: AppBar(
@@ -31,107 +37,176 @@ class ArchivedStudentsPage extends StatelessWidget {
           );
         }
 
-        // 🚀 تصفية الطلاب: نجلب فقط من لديهم isArchived == true أو archived == true
-        final archivedStudents = (snapshot.hasData && snapshot.data!.docs.isNotEmpty)
-            ? snapshot.data!.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return data['isArchived'] == true || data['archived'] == true;
-              }).toList()
-            : [];
+        // التحقق من وجود دورة نشطة
+        bool isCycleActive = cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty;
+        final String? activeCycleId = isCycleActive ? cycleSnap.data!.docs.first.id : null;
 
-        int totalArchived = archivedStudents.length;
-
-        return Scaffold(
-          backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
-          appBar: AppBar(
-            elevation: 0,
-            backgroundColor: Colors.transparent,
-            title: Text(
-              "الطلاب المتوقفين (الأرشيف) ($totalArchived)",
-              style: TextStyle(color: isDark ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo'),
+        // إذا لم تكن هناك دورة نشطة، نعرض واجهة التنبيه التلقائية
+        if (!isCycleActive || activeCycleId == null) {
+          return Scaffold(
+            backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
+            appBar: AppBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              title: Text(
+                "الطلاب المتوقفين (الأرشيف)",
+                style: TextStyle(color: isDark ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo'),
+              ),
+              centerTitle: true,
+              iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
             ),
-            centerTitle: true,
-            iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
-          ),
-          body: archivedStudents.isEmpty
-              ? _buildEmptyState(isDark)
-              : ListView.builder(
-                  padding: const EdgeInsets.all(15),
-                  itemCount: archivedStudents.length,
-                  itemBuilder: (context, index) {
-                    final student = archivedStudents[index];
-                    final data = student.data() as Map<String, dynamic>;
-                    
-                    String supervisorName = data['supervisorName'] ?? data['supervisor'] ?? '';
+            body: Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.all(25),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xff1e293b).withOpacity(0.7) : Colors.white.withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.event_busy_rounded, size: 70, color: Colors.orangeAccent),
+                    const SizedBox(height: 15),
+                    Text(
+                      "لا توجد دورة نشطة حالياً 🚫",
+                      style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "تم إغلاق الدورة. يرجى تفعيل أو فتح دورة جديدة لاستعراض أو استرجاع الطلاب.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontFamily: 'Cairo', fontSize: 12.5, color: isDark ? Colors.white60 : Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
 
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xff1e293b).withOpacity(0.6) : Colors.white.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        // زر الاسترجاع السريع من اليسار (طابق الأيقونة الخضراء في الواجهة)
-                        leading: IconButton(
-                          icon: const Icon(Icons.settings_backup_restore_rounded, color: Colors.greenAccent),
-                          tooltip: "استرجاع الطالب",
-                          onPressed: () => _confirmRestore(context, student.id, data['name'] ?? ''),
-                        ),
-                        // اسم الطالب والمعلومات على اليمين
-                        title: Text(
-                          data['name'] ?? 'بدون اسم',
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: isDark ? Colors.white : primaryColor,
-                            fontFamily: 'Cairo',
+        // 2. الاستماع للطلاب المؤرشفين التابعين للدورة النشطة
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('students')
+              .where('cycleId', isEqualTo: activeCycleId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Scaffold(
+                backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
+                appBar: AppBar(
+                  title: Text(
+                    "الطلاب المتوقفين (الأرشيف)",
+                    style: TextStyle(color: isDark ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo'),
+                  ),
+                  iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
+                ),
+                body: const Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            // تصفية الطلاب المؤرشفين
+            final archivedStudents = (snapshot.hasData && snapshot.data!.docs.isNotEmpty)
+                ? snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return data['isArchived'] == true || data['archived'] == true;
+                  }).toList()
+                : [];
+
+            int totalArchived = archivedStudents.length;
+
+            return Scaffold(
+              backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
+              appBar: AppBar(
+                elevation: 0,
+                backgroundColor: Colors.transparent,
+                title: Text(
+                  "الطلاب المتوقفين (الأرشيف) ($totalArchived)",
+                  style: TextStyle(color: isDark ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo'),
+                ),
+                centerTitle: true,
+                iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
+              ),
+              body: archivedStudents.isEmpty
+                  ? _buildEmptyState(isDark)
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(15),
+                      itemCount: archivedStudents.length,
+                      itemBuilder: (context, index) {
+                        final student = archivedStudents[index];
+                        final data = student.data() as Map<String, dynamic>;
+                        
+                        String supervisorName = data['supervisorName'] ?? data['supervisor'] ?? '';
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xff1e293b).withOpacity(0.6) : Colors.white.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
                           ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (supervisorName.isNotEmpty)
-                              Text(
-                                "المشرف: $supervisorName",
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark ? Colors.white60 : Colors.black54,
-                                  fontFamily: 'Cairo',
-                                ),
-                              ),
-                            Text(
-                              "(ضغط مطول للاسترجاع)",
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            leading: IconButton(
+                              icon: const Icon(Icons.settings_backup_restore_rounded, color: Colors.greenAccent),
+                              tooltip: "استرجاع الطالب",
+                              onPressed: () => _confirmRestore(context, student.id, data['name'] ?? ''),
+                            ),
+                            title: Text(
+                              data['name'] ?? 'بدون اسم',
                               textAlign: TextAlign.right,
                               style: TextStyle(
-                                fontSize: 11,
-                                color: isDark ? Colors.white38 : Colors.black38,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: isDark ? Colors.white : primaryColor,
                                 fontFamily: 'Cairo',
                               ),
                             ),
-                          ],
-                        ),
-                        // أيقونة التوقف البرتقالية في أقصى اليمين بدون ترقيم
-                        trailing: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.15),
-                            shape: BoxShape.circle,
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (supervisorName.isNotEmpty)
+                                  Text(
+                                    "المشرف: $supervisorName",
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark ? Colors.white60 : Colors.black54,
+                                      fontFamily: 'Cairo',
+                                    ),
+                                  ),
+                                Text(
+                                  "(ضغط مطول للاسترجاع)",
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark ? Colors.white38 : Colors.black38,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ],
+                            ),
+                            trailing: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.pause_circle_filled_rounded,
+                                color: Colors.orange,
+                                size: 22,
+                              ),
+                            ),
+                            onLongPress: () => _confirmRestore(context, student.id, data['name'] ?? ''),
                           ),
-                          child: const Icon(
-                            Icons.pause_circle_filled_rounded,
-                            color: Colors.orange,
-                            size: 22,
-                          ),
-                        ),
-                        onLongPress: () => _confirmRestore(context, student.id, data['name'] ?? ''),
-                      ),
-                    );
-                  },
-                ),
+                        );
+                      },
+                    ),
+            );
+          },
         );
       },
     );

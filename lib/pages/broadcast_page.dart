@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
+import '../models/cycle_model.dart';
 
 class BroadcastPage extends StatefulWidget {
   const BroadcastPage({super.key});
@@ -21,7 +22,6 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
   int _totalTarget = 0;
   int _sentCount = 0;
 
-  // 🚀 متغيرات مخصصة لتحديد نوع الإرسال والطلاب المستهدفين
   bool _sendToAll = true; 
   List<String> _selectedStudentIds = [];
 
@@ -46,8 +46,17 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
     super.dispose();
   }
 
-  // 🚀 دالة الإرسال الذكية (للجميع أو للمحددين)
   Future<void> _sendBroadcast() async {
+    final activeCycle = Provider.of<CycleModel?>(context, listen: false);
+
+    // ⛔ التحقق من وجود دورة نشطة أولاً
+    if (activeCycle == null || activeCycle.id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: Colors.red, content: Text("لا توجد دورة نشطة حالياً لإرسال الإعلانات!", style: TextStyle(fontFamily: 'Cairo'))),
+      );
+      return;
+    }
+
     final String title = _titleController.text.trim();
     final String body = _bodyController.text.trim();
 
@@ -75,11 +84,15 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
       List<String> targets = [];
 
       if (_sendToAll) {
-        // 1. جلب جميع الطلاب من قاعدة البيانات
-        final QuerySnapshot studentsSnapshot = await FirebaseFirestore.instance.collection('students').get();
+        // 🎯 جلب طلاب الدورة النشطة الحالية فقط
+        final QuerySnapshot studentsSnapshot = await FirebaseFirestore.instance
+            .collection('students')
+            .where('cycleId', isEqualTo: activeCycle.id)
+            .where('archived', isEqualTo: false)
+            .get();
+
         targets = studentsSnapshot.docs.map((doc) => doc.id).toList();
       } else {
-        // الاعتماد على قائمة الطلاب المحددة يدوياً
         targets = List.from(_selectedStudentIds);
       }
 
@@ -87,10 +100,12 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
 
       if (_totalTarget == 0) {
         setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: Colors.orange, content: Text("لا يوجد طلاب مسجلون في الدورة الحالية للإرسال لهم", style: TextStyle(fontFamily: 'Cairo'))),
+        );
         return;
       }
 
-      // 2. حلقة إرسال الإشعارات للطلاب المستهدفين
       for (String studentId in targets) {
         await NotificationService.sendAndSaveNotification(
           studentId: studentId,
@@ -148,7 +163,6 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
       ),
       body: Stack(
         children: [
-          // الخلفية التراكمية الأصلية
           Container(
             width: double.infinity, height: double.infinity,
             decoration: BoxDecoration(
@@ -159,7 +173,6 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
             ),
           ),
           
-          // الدوائر العائمة المتحركة كما هي
           AnimatedBuilder(
             animation: _bgAnimation,
             builder: (context, child) {
@@ -198,7 +211,6 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                       Text("سيصل كإشعار منبثق ويوثق في سجلات أولياء الأمور المستهدفين.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.black54, fontFamily: 'Cairo')),
                       const SizedBox(height: 25),
 
-                      // 🚀 الراديو بوتون لاختيار الفئة المستهدفة (الكل أو مخصص)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         decoration: BoxDecoration(
@@ -210,7 +222,7 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                           children: [
                             RadioListTile<bool>(
                               activeColor: isDarkMode ? accentGold : primaryColor,
-                              title: const Text("إرسال للجميع (كل الطلاب) 🌍", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold)),
+                              title: const Text("إرسال لطلاب الدورة الحالية 🌍", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold)),
                               value: true,
                               groupValue: _sendToAll,
                               onChanged: (val) => setState(() => _sendToAll = val!),
@@ -227,13 +239,11 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                       ),
                       const SizedBox(height: 20),
 
-                      // 🚀 قائمة اختيار الطلاب المنبثقة الذكية عند الرغبة بالإرسال المخصص
                       if (!_sendToAll) ...[
                         _buildStudentSelectorSection(isDarkMode),
                         const SizedBox(height: 20),
                       ],
 
-                      // حقل العنوان
                       TextField(
                         controller: _titleController,
                         style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
@@ -241,7 +251,6 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                       ),
                       const SizedBox(height: 15),
 
-                      // حقل التفاصيل
                       TextField(
                         controller: _bodyController,
                         maxLines: 4,
@@ -250,7 +259,6 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                       ),
                       const SizedBox(height: 25),
 
-                      // شريط التقدم أثناء الإرسال التراكمي
                       if (_isLoading) ...[
                         Column(
                           children: [
@@ -268,7 +276,6 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
                         ),
                       ],
 
-                      // زر الإرسال النهائي مدمج بالحالة اللحظية
                       SizedBox(
                         width: double.infinity,
                         height: 55,
@@ -297,21 +304,62 @@ class _BroadcastPageState extends State<BroadcastPage> with SingleTickerProvider
     );
   }
 
-  // 🚀 ويدجت ذكي يعرض الطلاب يتيح لك انتقاء أعداد مخصصة للإرسال الفوري
+  // 🚀 ويدجت عرض القائمة مع الفحص الصارم لوجود الدورة النشطة
   Widget _buildStudentSelectorSection(bool isDarkMode) {
+    final activeCycle = Provider.of<CycleModel?>(context);
+
+    // 🚨 حالة عدم وجود دورة نشطة
+    if (activeCycle == null || activeCycle.id.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDarkMode ? Colors.amber.withOpacity(0.1) : Colors.amber.shade50,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: Colors.amber.shade300),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 36),
+            const SizedBox(height: 8),
+            Text(
+              "لا توجد دورة نشطة حالياً ⚠️\nيرجى إنشاء أو تفعيل دورة جديدة لعرض طلابها.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.amber.shade200 : Colors.amber.shade900),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
-      constraints: const BoxConstraints(maxHeight: 200), // تثبيت الطول لمنع زحف الشاشة
+      constraints: const BoxConstraints(maxHeight: 200),
       decoration: BoxDecoration(
         color: isDarkMode ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.02),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: isDarkMode ? Colors.white12 : Colors.black12),
       ),
       child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('students').snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('students')
+            .where('cycleId', isEqualTo: activeCycle.id) // 👈 جلب طلاب الدورة النشطة فقط
+            .where('archived', isEqualTo: false)
+            .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final docs = snapshot.data!.docs;
-          if (docs.isEmpty) return const Padding(padding: EdgeInsets.all(15), child: Text("لا يوجد طلاب مسجلين بالمعهد حالياً", style: TextStyle(fontFamily: 'Cairo', fontSize: 13)));
+
+          if (docs.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(18),
+              child: Center(
+                child: Text(
+                  "لا يوجد طلاب مسجلون في الدورة الحالية 📝",
+                  style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.grey),
+                ),
+              ),
+            );
+          }
 
           return ListView.builder(
             shrinkWrap: true,

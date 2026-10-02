@@ -10,6 +10,9 @@ import 'package:widgets_to_image/widgets_to_image.dart';
 import '../services/theme_provider.dart';
 import 'manage_honor_board_page.dart'; 
 
+// ⚙️ معرف الدورة الحالية المعتمد في التطبيق (إذا كانت فارغة يعتبر لا توجد دورة نشطة)
+const String currentCycleId = 'cycle_2026_q4';
+
 class HonorBoardPage extends StatelessWidget {
   final String role; 
 
@@ -76,44 +79,86 @@ class HonorBoardPage extends StatelessWidget {
           ),
 
           SafeArea(
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              children: [
-                _buildGlassContainer(
-                  isDarkMode: isDarkMode,
-                  padding: const EdgeInsets.all(20),
-                  customColor: isDarkMode ? goldColor.withOpacity(0.15) : goldColor.withOpacity(0.2),
-                  customBorderColor: goldColor.withOpacity(0.5),
-                  child: Row(
+            child: currentCycleId.isEmpty
+                ? _buildClosedCycleBanner(isDarkMode)
+                : ListView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     children: [
-                      const Icon(Icons.emoji_events, color: Colors.amber, size: 55),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      _buildGlassContainer(
+                        isDarkMode: isDarkMode,
+                        padding: const EdgeInsets.all(20),
+                        customColor: isDarkMode ? goldColor.withOpacity(0.15) : goldColor.withOpacity(0.2),
+                        customBorderColor: goldColor.withOpacity(0.5),
+                        child: Row(
                           children: [
-                            Text("فرسان الحلقة", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                            const SizedBox(height: 5),
-                            Text("الطلاب الأكثر تميزاً وإنجازاً باختيار الإدارة", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
+                            const Icon(Icons.emoji_events, color: Colors.amber, size: 55),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("فرسان الحلقة 🏆", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                  const SizedBox(height: 5),
+                                  Text("الطلاب الأكثر تميزاً وإنجازاً باختيار الإدارة للدورة الحالية", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
+                      
+                      const SizedBox(height: 25),
+                      _buildCategorySection("الطلاب الجدد", "new_students", isDarkMode ? Colors.lightBlueAccent : Colors.blue, Icons.auto_awesome, isDarkMode),
+                      const SizedBox(height: 25),
+                      _buildCategorySection("الطلاب القدماء", "old_students", Colors.orange, Icons.history_edu, isDarkMode),
+                      const SizedBox(height: 25),
+                      _buildCategorySection("الطلاب الخاتمين", "completed_students", Colors.green, Icons.verified, isDarkMode),
+                      const SizedBox(height: 40),
                     ],
                   ),
-                ),
-                
-                const SizedBox(height: 25),
-                _buildCategorySection("الطلاب الجدد", "new_students", isDarkMode ? Colors.lightBlueAccent : Colors.blue, Icons.auto_awesome, isDarkMode),
-                const SizedBox(height: 25),
-                _buildCategorySection("الطلاب القدماء", "old_students", Colors.orange, Icons.history_edu, isDarkMode),
-                const SizedBox(height: 25),
-                _buildCategorySection("الطلاب الخاتمين", "completed_students", Colors.green, Icons.verified, isDarkMode),
-                const SizedBox(height: 40),
-              ],
-            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildClosedCycleBanner(bool isDarkMode) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(25),
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(color: Colors.orange.withOpacity(0.4), width: 1.5),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_clock_rounded, color: Colors.orange, size: 55),
+            const SizedBox(height: 15),
+            Text(
+              "لا توجد دورة نشطة حالياً 🛑",
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: isDarkMode ? Colors.white : primaryColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "الدورة الحالية مغلقة. يرجى تفعيل دورة جديدة لعرض وتحديث فرسان لوحة الشرف.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                color: isDarkMode ? Colors.white60 : Colors.black54,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -168,7 +213,12 @@ class HonorBoardPage extends StatelessWidget {
                 final int serialNumber = rawSerial is int ? rawSerial : (int.tryParse(rawSerial?.toString() ?? '') ?? 0);
 
                 return FutureBuilder<QuerySnapshot>(
-                  future: FirebaseFirestore.instance.collection('students').where('serial', whereIn: [serialNumber, serialNumber.toString()]).limit(1).get(),
+                  future: FirebaseFirestore.instance
+                      .collection('students')
+                      .where('cycleId', isEqualTo: currentCycleId)
+                      .where('serial', whereIn: [serialNumber, serialNumber.toString()])
+                      .limit(1)
+                      .get(),
                   builder: (context, studentSnapshot) {
                     String imageUrl = '';
                     if (studentSnapshot.hasData && studentSnapshot.data!.docs.isNotEmpty) {
@@ -288,6 +338,11 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
   }
 
   Future<void> _loadAllStars() async {
+    if (currentCycleId.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
     List<Map<String, dynamic>> newS = await _fetchCategoryKnights('new_students');
     List<Map<String, dynamic>> oldS = await _fetchCategoryKnights('old_students');
     List<Map<String, dynamic>> compS = await _fetchCategoryKnights('completed_students');
@@ -323,7 +378,13 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
       int serialNumber = rawSerial is int ? rawSerial : (int.tryParse(rawSerial?.toString() ?? '') ?? 0);
       
       String imageUrl = '';
-      var sSnap = await FirebaseFirestore.instance.collection('students').where('serial', whereIn: [serialNumber, serialNumber.toString()]).limit(1).get();
+      var sSnap = await FirebaseFirestore.instance
+          .collection('students')
+          .where('cycleId', isEqualTo: currentCycleId)
+          .where('serial', whereIn: [serialNumber, serialNumber.toString()])
+          .limit(1)
+          .get();
+
       if (sSnap.docs.isNotEmpty) {
         imageUrl = (sSnap.docs.first.data() as Map<String, dynamic>)['imageUrl'] ?? '';
       }
@@ -379,7 +440,7 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: Colors.amber))
         : allStars.isEmpty 
-            ? const Center(child: Text("لا يوجد نجوم لعرضهم بالبوستر حالياً", style: TextStyle(color: Colors.white, fontFamily: 'Cairo')))
+            ? const Center(child: Text("لا يوجد نجوم لعرضهم بالبوستر حالياً لهذه الدورة", style: TextStyle(color: Colors.white, fontFamily: 'Cairo')))
             : Center(
                 child: InteractiveViewer(
                   child: SingleChildScrollView(
@@ -398,10 +459,9 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
     );
   }
 
-  // 📱 تصميم مدمج ومتناسق ومثالي لشاشة الواتساب (WhatsApp Perfect Fit)
   Widget _buildExportablePoster(String todayDate) {
     return Container(
-      width: 500, // 🎯 عرض البوستر متناسب تماماً مع الموبايل
+      width: 500,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -414,7 +474,6 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 👑 هيدر مدمج ومختصر
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
@@ -455,16 +514,15 @@ class _HonorBoardPosterScreenState extends State<HonorBoardPosterScreen> {
 
           const SizedBox(height: 16),
 
-          // 🌟 شبكة مدمجة بدقة 4 طلاب في السطر لتقليل الارتفاع العمودي
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: allStars.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4, // 🎯 4 طلاب بالسطر تجعل الصورة متناسقة وغير طويلة على الموبايل
+              crossAxisCount: 4,
               crossAxisSpacing: 10,
               mainAxisSpacing: 12,
-              childAspectRatio: 0.78, // تناسق الارتفاع مع العرض
+              childAspectRatio: 0.78,
             ),
             itemBuilder: (context, index) {
               var star = allStars[index];

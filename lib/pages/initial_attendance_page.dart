@@ -30,6 +30,9 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
   DateTime now = DateTime.now();
   String get todayDate => DateFormat('yyyy-MM-dd').format(now);
 
+  // 🎯 معرف مستند الحضور المفرّد بالدورة واليوم الحالي
+  String get dailyDocId => "${widget.cycle.id}_$todayDate";
+
   final List<String> excuseReasons = [
     'مرض 🏥',
     'سفر ✈️',
@@ -74,25 +77,36 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
     super.dispose();
   }
 
+  // 🎯 دالة محصنة لتحميل التفقد الخاص بالدورة المحددة حصراً وتفريغ البيانات القديمة
   Future<void> _loadExistingAttendance() async {
+    setState(() {
+      isLoading = true;
+      attendanceData.clear(); // 🚀 تفريغ الذاكرة المحلية لمنع ظهور بيانات الدورة السابقة
+    });
+
     try {
       var snap = await FirebaseFirestore.instance
           .collection('daily_attendance')
-          .doc(todayDate)
+          .doc(dailyDocId)
           .get();
 
       if (snap.exists && snap.data() != null) {
-        var data = snap.data()!['records'] as Map<String, dynamic>? ?? {};
-        data.forEach((studentId, record) {
-          if (record is Map) {
-            attendanceData[studentId] = Map<String, dynamic>.from(record);
-          } else if (record is String) {
-            attendanceData[studentId] = {'status': record};
-          }
-        });
+        var data = snap.data()!;
+        
+        // التحقق من أن المستند ينتمي بالفعل لنفس الدورة الحالية
+        if (data['cycleId'] == widget.cycle.id && data.containsKey('records')) {
+          var records = data['records'] as Map<String, dynamic>? ?? {};
+          records.forEach((studentId, record) {
+            if (record is Map) {
+              attendanceData[studentId] = Map<String, dynamic>.from(record);
+            } else if (record is String) {
+              attendanceData[studentId] = {'status': record};
+            }
+          });
+        }
       }
     } catch (e) {
-      print("خطأ في تحميل تفقد اليوم: $e");
+      debugPrint("خطأ في تحميل تفقد اليوم للدورة الحالية: $e");
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -189,7 +203,9 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
     overlayState.insert(overlayEntry);
     Future.delayed(const Duration(seconds: 3), () {
-      overlayEntry.remove();
+      if (overlayEntry.mounted) {
+        overlayEntry.remove();
+      }
     });
   }
 
@@ -403,7 +419,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
     );
   }
 
-  // 🚀 دالة الحفظ الذكية المحصنة: تحمي جلسات التسميع الحقيقية وتقتصر بالحذف على جلسات الغياب فقط
+  // 🚀 دالة الحفظ الذكية المحصنة والربط بـ cycleId للدورة الحالية
   Future<void> _saveAttendance(bool isDark) async {
     setState(() => isSaving = true);
     try {
@@ -411,9 +427,9 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
       DocumentReference attendanceDoc = FirebaseFirestore.instance
           .collection('daily_attendance')
-          .doc(todayDate);
+          .doc(dailyDocId);
 
-      // 1️⃣ حفظ سجل التفقد المبدئي اليومي
+      // 1️⃣ حفظ سجل التفقد المبدئي اليومي المربوط بـ cycleId
       batch.set(attendanceDoc, {
         'date': todayDate,
         'cycleId': widget.cycle.id,
@@ -435,8 +451,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
         if (status == 'present') {
           presentCount++;
 
-          // 🛡️ فحص حاسم: نحذف الجلسة فقط إذا كانت "جلسة غياب" وتغير الطالب لحاضر
-          // أما لو كانت جلسة تسميع حقيقية (فيها صفحات أو absent == false) فلن نمسها أبداً!
           var existingDoc = await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).get();
           if (existingDoc.exists) {
             var exData = existingDoc.data() ?? {};
@@ -459,6 +473,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
               'studentName': sData['name'] ?? 'طالب',
               'supervisorId': sData['supervisorId'] ?? '',
               'supervisorName': sData['supervisorName'] ?? 'المشرف',
+              'cycleId': widget.cycle.id, // 🎯 ربط الجلسة بـ cycleId الدورة الفعالة
               'date': todayDate,
               'absent': true,
               'absenceType': absenceType,
@@ -479,7 +494,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
               body: "تم تسجيل غياب ولدكم (${sData['name']}) اليوم ($todayDate) - الحالة: $absenceType ($reason).",
               type: "absence_alert",
               context: context,
-            ).catchError((e) => print("فشل إرسال إشعار الغياب لأهل الطالب $studentId: $e"));
+            ).catchError((e) => debugPrint("فشل إرسال إشعار الغياب لأهل الطالب $studentId: $e"));
           }
         }
       }
@@ -492,6 +507,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
       );
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.redAccent,
@@ -630,7 +646,11 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('leave_requests').where('status', isEqualTo: 'approved').snapshots(),
+                          stream: FirebaseFirestore.instance
+                              .collection('leave_requests')
+                              .where('cycleId', isEqualTo: widget.cycle.id)
+                              .where('status', isEqualTo: 'approved')
+                              .snapshots(),
                           builder: (context, leaveSnap) {
                             Map<String, String> approvedLeaveMap = {};
 
@@ -831,7 +851,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
                                                 Row(
                                                   children: [
-                                                    // زر الحضور (صح)
+                                                    // زر الحضور
                                                     InkWell(
                                                       onTap: () {
                                                         setState(() {
@@ -858,7 +878,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                                     ),
                                                     const SizedBox(width: 8),
 
-                                                    // زر الغياب (خطأ)
+                                                    // زر الغياب
                                                     InkWell(
                                                       onTap: () {
                                                         if (currentStatus == 'absent') {

@@ -1,31 +1,19 @@
 class SessionModel {
   final String id;
-
   final String studentId;
-
   final String studentName;
-
   final String supervisorId;
-
   final String supervisorName;
-
   final String date;
-
   final bool absent;
-
   final String newMemorization;
-
   final String review;
-
   final String homework;
-
   final String rating;
-
   final String studentStatus;
-
   final String religiousActivities;
-
   final String notes;
+  final String cycleId; // 👈 1. إضافة حقل ربط الجلسة بالدورة النشطة
 
   SessionModel({
     required this.id,
@@ -42,6 +30,7 @@ class SessionModel {
     required this.studentStatus,
     required this.religiousActivities,
     required this.notes,
+    this.cycleId = '', // 👈 قيمة افتراضية لتجنب الأخطاء مع البيانات القديمة
   });
 
   Map<String, dynamic> toMap() {
@@ -57,9 +46,9 @@ class SessionModel {
       'homework': homework,
       'rating': rating,
       'studentStatus': studentStatus,
-      'religiousActivities':
-          religiousActivities,
+      'religiousActivities': religiousActivities,
       'notes': notes,
+      'cycleId': cycleId, // 👈 2. حفظ معرف الدورة في الفايربيز
     };
   }
 
@@ -70,25 +59,19 @@ class SessionModel {
     return SessionModel(
       id: id,
       studentId: map['studentId'] ?? '',
-      studentName:
-          map['studentName'] ?? '',
-      supervisorId:
-          map['supervisorId'] ?? '',
-      supervisorName:
-          map['supervisorName'] ?? '',
+      studentName: map['studentName'] ?? '',
+      supervisorId: map['supervisorId'] ?? '',
+      supervisorName: map['supervisorName'] ?? '',
       date: map['date'] ?? '',
       absent: map['absent'] ?? false,
-      newMemorization:
-          map['newMemorization'] ?? '',
+      newMemorization: map['newMemorization'] ?? '',
       review: map['review'] ?? '',
       homework: map['homework'] ?? '',
       rating: map['rating'] ?? '',
-      studentStatus:
-          map['studentStatus'] ?? '',
-      religiousActivities:
-          map['religiousActivities'] ??
-              '',
+      studentStatus: map['studentStatus'] ?? '',
+      religiousActivities: map['religiousActivities'] ?? '',
       notes: map['notes'] ?? '',
+      cycleId: map['cycleId'] ?? '', // 👈 3. قراءة معرف الدورة من الفايربيز
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import '../models/cycle_model.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
 
@@ -14,14 +15,12 @@ class LeaveRequestsPage extends StatelessWidget {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
-  // 🔔 🚀 دالة إرسال الإشعار للمدراء فقط (Users مع Role = manager)
   static Future<void> notifyManagersOnly({
     required String studentName,
     required String reason,
     required String date,
   }) async {
     try {
-      // 🔑 البحث فقط في مجموعة users عن الحسابات التي دورها مدير
       var managersSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: 'manager')
@@ -36,11 +35,10 @@ class LeaveRequestsPage extends StatelessWidget {
         );
       }
     } catch (e) {
-      print("❌ خطأ أثناء إرسال إشعارات الاستئذان للمدراء: $e");
+      debugPrint("❌ خطأ أثناء إرسال إشعارات الاستئذان للمدراء: $e");
     }
   }
 
-  // 🔮 🚀 إشعار التنبيه الزجاجي المنزلق
   void _showTopPremiumToast(BuildContext context, {required String message, required IconData icon, required Color statusColor, required bool isDark}) {
     final overlay = Overlay.of(context);
     late OverlayEntry overlayEntry;
@@ -117,6 +115,7 @@ class LeaveRequestsPage extends StatelessWidget {
     required String reason,
     required String requestSupervisorId,
     required bool isDark,
+    String? cycleId,
   }) async {
     try {
       await FirebaseFirestore.instance.collection('leave_requests').doc(docId).update({
@@ -141,7 +140,7 @@ class LeaveRequestsPage extends StatelessWidget {
 
         String customSessionId = "${studentId}_$date";
 
-        await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).set({
+        Map<String, dynamic> sessionData = {
           'studentId': studentId,
           'studentName': studentName,
           'supervisorId': activeSupervisorId,
@@ -160,7 +159,16 @@ class LeaveRequestsPage extends StatelessWidget {
           'homework': '',
           'notes': 'تم توثيق الغياب بعذر بناءً على طلب استئذان مقبول.',
           'timestamp': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        };
+
+        if (cycleId != null && cycleId.isNotEmpty) {
+          sessionData['cycleId'] = cycleId;
+        }
+
+        await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).set(
+          sessionData,
+          SetOptions(merge: true),
+        );
       }
 
       String title = status == 'approved' ? "✅ تم قبول إذن الغياب" : "❌ اعتذر المعهد عن قبول الإذن";
@@ -193,385 +201,409 @@ class LeaveRequestsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        backgroundColor: isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
-        appBar: AppBar(
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          title: Text(
-            "طلبات الاستئذان 📑",
-            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 20),
-          ),
-          centerTitle: true,
-          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-        ),
-        body: Stack(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isDarkMode 
-                      ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
-                      : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-            ),
-            Positioned(
-              top: -60,
-              right: -50,
-              child: Container(
-                width: 280,
-                height: 280,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isDarkMode ? primaryColor.withOpacity(0.2) : primaryColor.withOpacity(0.15),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 80,
-              left: -60,
-              child: Container(
-                width: 250,
-                height: 250,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isDarkMode ? accentGold.withOpacity(0.12) : accentGold.withOpacity(0.2),
-                ),
-              ),
-            ),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('cycles').snapshots(),
+      builder: (context, cycleSnap) {
+        CycleModel? activeCycle;
 
-            SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                        child: Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.45),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white.withOpacity(0.7), width: 1.2),
+        if (cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty) {
+          for (var doc in cycleSnap.data!.docs) {
+            var data = doc.data() as Map<String, dynamic>;
+            bool isCurrent = data['isCurrent'] == true;
+            bool isActive = data['status'] == 'active' || data['active'] == true;
+            bool isNotClosed = data['isClosed'] != true && data['archived'] != true;
+
+            if ((isCurrent || isActive) && isNotClosed) {
+              activeCycle = CycleModel(
+                id: doc.id,
+                name: data['name'] ?? '',
+                type: data['type']?.toString() ?? '',
+                year: int.tryParse(data['year']?.toString() ?? '') ?? DateTime.now().year,
+                cycleNumber: int.tryParse(data['cycleNumber']?.toString() ?? '') ?? 1,
+                startDate: data['startDate']?.toString() ?? '',
+                endDate: data['endDate']?.toString() ?? '',
+                active: data['active'] == true,
+                archived: data['archived'] == true,
+              );
+              break;
+            }
+          }
+        }
+
+        return DefaultTabController(
+          length: 2,
+          child: Scaffold(
+            extendBodyBehindAppBar: true,
+            backgroundColor: isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
+            appBar: AppBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              title: Text(
+                "طلبات الاستئذان 📑",
+                style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 20),
+              ),
+              centerTitle: true,
+              iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+            ),
+            body: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDarkMode 
+                          ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
+                          : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: -60,
+                  right: -50,
+                  child: Container(
+                    width: 280,
+                    height: 280,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDarkMode ? primaryColor.withOpacity(0.2) : primaryColor.withOpacity(0.15),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 80,
+                  left: -60,
+                  child: Container(
+                    width: 250,
+                    height: 250,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDarkMode ? accentGold.withOpacity(0.12) : accentGold.withOpacity(0.2),
+                    ),
+                  ),
+                ),
+
+                SafeArea(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 10),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.45),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white.withOpacity(0.7), width: 1.2),
+                              ),
+                              child: TabBar(
+                                indicator: BoxDecoration(
+                                  color: isDarkMode ? accentGold : primaryColor,
+                                  borderRadius: BorderRadius.circular(15),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.3),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                labelColor: isDarkMode ? Colors.black87 : Colors.white,
+                                unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
+                                labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
+                                tabs: const [
+                                  Tab(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.mark_email_unread_rounded, size: 18),
+                                        SizedBox(width: 8),
+                                        Text("معلقة 📥"),
+                                      ],
+                                    ),
+                                  ),
+                                  Tab(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.inventory_2_rounded, size: 18),
+                                        SizedBox(width: 8),
+                                        Text("السجل 📁"),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                          child: TabBar(
-                            indicator: BoxDecoration(
-                              color: isDarkMode ? accentGold : primaryColor,
-                              borderRadius: BorderRadius.circular(15),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.3),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
+                        ),
+                      ),
+
+                      const SizedBox(height: 15),
+
+                      Expanded(
+                        child: TabBarView(
+                          physics: const BouncingScrollPhysics(),
+                          children: [
+                            _buildRequestsList(context, isDarkMode, isHistory: false, activeCycle: activeCycle),
+                            _buildRequestsList(context, isDarkMode, isHistory: true, activeCycle: activeCycle),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRequestsList(BuildContext context, bool isDarkMode, {required bool isHistory, CycleModel? activeCycle}) {
+    // 🛑 إذا لم تكن هناك دورة نشطة حالياً، لا يتم عرض أي طلبات قديمة
+    if (activeCycle == null) {
+      return _buildNoActiveCycleState(isDarkMode);
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('leave_requests')
+          .where('cycleId', isEqualTo: activeCycle.id) // 🔑 الفلترة حصراً برقم الدورة النشطة
+          .orderBy('timestamp', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text("حدث خطأ: ${snapshot.error}", style: const TextStyle(color: Colors.redAccent, fontFamily: 'Cairo')));
+        }
+        
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return _buildEmptyState(isDarkMode, isHistory);
+        }
+
+        var docs = snapshot.data!.docs.where((doc) {
+          var data = doc.data() as Map<String, dynamic>;
+          String currentStatus = data['status'] ?? 'pending';
+          
+          bool statusMatches = isHistory ? (currentStatus != 'pending') : (currentStatus == 'pending');
+          bool isMyStudent = true; 
+          
+          if (role == 'supervisor') {
+            isMyStudent = data['supervisorId'] == supervisorId;
+          } else if (role == 'manager') {
+            isMyStudent = true;
+          }
+          
+          return statusMatches && isMyStudent;
+        }).toList();
+
+        if (docs.isEmpty) return _buildEmptyState(isDarkMode, isHistory);
+
+        return ListView.builder(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 5, 20, 20),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            var doc = docs[index];
+            var data = doc.data() as Map<String, dynamic>;
+            String currentStatus = data['status'] ?? 'pending';
+            String requestTime = data['requestTime'] ?? 'غير محدد';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                  child: Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.8),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.04),
+                          blurRadius: 15,
+                          offset: const Offset(0, 6),
+                        )
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: (isDarkMode ? accentGold : primaryColor).withOpacity(0.15),
+                                  child: Icon(Icons.person, color: isDarkMode ? accentGold : primaryColor, size: 22),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  data['studentName'] ?? 'طالب',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: isDarkMode ? Colors.white : primaryColor,
+                                    fontFamily: 'Cairo',
+                                  ),
                                 ),
                               ],
                             ),
-                            labelColor: isDarkMode ? Colors.black87 : Colors.white,
-                            unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
-                            labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
-                            tabs: const [
-                              Tab(
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.mark_email_unread_rounded, size: 18),
-                                    SizedBox(width: 8),
-                                    Text("معلقة 📥"),
-                                  ],
-                                ),
+                            if (isHistory) _buildStatusBadge(currentStatus),
+                          ],
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.calendar_today_rounded, size: 16, color: Colors.redAccent),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "التاريخ المطلوب: ${data['date']}",
+                                    style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13),
+                                  ),
+                                ],
                               ),
-                              Tab(
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.inventory_2_rounded, size: 18),
-                                    SizedBox(width: 8),
-                                    Text("السجل 📁"),
-                                  ],
-                                ),
+                              const SizedBox(height: 8),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.notes_rounded, size: 16, color: isDarkMode ? accentGold : primaryColor),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      "السبب: ${data['reason']}",
+                                      style: TextStyle(
+                                        color: isDarkMode ? Colors.white : Colors.black87,
+                                        fontFamily: 'Cairo',
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ),
-                      ),
-                    ),
-                  ),
 
-                  const SizedBox(height: 15),
+                        const SizedBox(height: 10),
 
-                  Expanded(
-                    child: TabBarView(
-                      physics: const BouncingScrollPhysics(),
-                      children: [
-                        _buildRequestsList(context, isDarkMode, isHistory: false),
-                        _buildRequestsList(context, isDarkMode, isHistory: true),
+                        Row(
+                          children: [
+                            Icon(Icons.access_time_rounded, size: 14, color: isDarkMode ? Colors.white54 : Colors.black45),
+                            const SizedBox(width: 6),
+                            Text(
+                              "وقت الطلب: $requestTime",
+                              style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.black45, fontFamily: 'Cairo', fontSize: 11),
+                            ),
+                          ],
+                        ),
+
+                        if (!isHistory) ...[
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.green.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3)),
+                                    ],
+                                  ),
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green.shade600,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: () => _updateRequestStatus(
+                                      context: context,
+                                      docId: doc.id,
+                                      studentId: data['studentId'] ?? '',
+                                      studentName: data['studentName'] ?? 'طالب',
+                                      status: 'approved',
+                                      date: data['date'] ?? '',
+                                      reason: data['reason'] ?? 'بعذر',
+                                      requestSupervisorId: data['supervisorId'] ?? '',
+                                      isDark: isDarkMode,
+                                      cycleId: activeCycle.id,
+                                    ),
+                                    icon: const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                                    label: const Text("قبول العذر", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Container(
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.redAccent.withOpacity(0.25), blurRadius: 8, offset: const Offset(0, 3)),
+                                    ],
+                                  ),
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.redAccent,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: () => _updateRequestStatus(
+                                      context: context,
+                                      docId: doc.id,
+                                      studentId: data['studentId'] ?? '',
+                                      studentName: data['studentName'] ?? 'طالب',
+                                      status: 'rejected',
+                                      date: data['date'] ?? '',
+                                      reason: data['reason'] ?? '',
+                                      requestSupervisorId: data['supervisorId'] ?? '',
+                                      isDark: isDarkMode,
+                                      cycleId: activeCycle.id,
+                                    ),
+                                    icon: const Icon(Icons.cancel_rounded, color: Colors.white, size: 18),
+                                    label: const Text("رفض الإذن", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        ]
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRequestsList(BuildContext context, bool isDarkMode, {required bool isHistory}) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: role == 'manager' 
-          ? FirebaseFirestore.instance.collection('users').doc(supervisorId).get()
-          : Future.value(null),
-      builder: (context, userSnap) {
-        String? linkedSupId;
-        if (userSnap.hasData && userSnap.data != null && userSnap.data!.exists) {
-          var uData = userSnap.data!.data() as Map<String, dynamic>?;
-          linkedSupId = uData?['linkedSupervisorId'];
-        }
-
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('leave_requests')
-              .orderBy('timestamp', descending: true)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(child: Text("حدث خطأ: ${snapshot.error}", style: const TextStyle(color: Colors.redAccent, fontFamily: 'Cairo')));
-            }
-            
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return _buildEmptyState(isDarkMode, isHistory);
-            }
-
-            var docs = snapshot.data!.docs.where((doc) {
-              var data = doc.data() as Map<String, dynamic>;
-              String currentStatus = data['status'] ?? 'pending';
-              
-              bool statusMatches = isHistory ? (currentStatus != 'pending') : (currentStatus == 'pending');
-              bool isMyStudent = true; 
-              
-              // 🔐 فحص الصلاحيات وربط الحسابات
-              if (role == 'supervisor') {
-                isMyStudent = data['supervisorId'] == supervisorId;
-              } else if (role == 'manager') {
-                // المدير يرى كل طلبات الاستئذان لجميع الطلاب دائماً
-                isMyStudent = true;
-              }
-              
-              return statusMatches && isMyStudent;
-            }).toList();
-
-            if (docs.isEmpty) return _buildEmptyState(isDarkMode, isHistory);
-
-            return ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 5, 20, 20),
-              itemCount: docs.length,
-              itemBuilder: (context, index) {
-                var doc = docs[index];
-                var data = doc.data() as Map<String, dynamic>;
-                String currentStatus = data['status'] ?? 'pending';
-                String requestTime = data['requestTime'] ?? 'غير محدد';
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                      child: Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.8),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.04),
-                              blurRadius: 15,
-                              offset: const Offset(0, 6),
-                            )
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 20,
-                                      backgroundColor: (isDarkMode ? accentGold : primaryColor).withOpacity(0.15),
-                                      child: Icon(Icons.person, color: isDarkMode ? accentGold : primaryColor, size: 22),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Text(
-                                      data['studentName'] ?? 'طالب',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: isDarkMode ? Colors.white : primaryColor,
-                                        fontFamily: 'Cairo',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (isHistory) _buildStatusBadge(currentStatus),
-                              ],
-                            ),
-
-                            const SizedBox(height: 14),
-
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.calendar_today_rounded, size: 16, color: Colors.redAccent),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        "التاريخ المطلوب: ${data['date']}",
-                                        style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Icon(Icons.notes_rounded, size: 16, color: isDarkMode ? accentGold : primaryColor),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          "السبب: ${data['reason']}",
-                                          style: TextStyle(
-                                            color: isDarkMode ? Colors.white : Colors.black87,
-                                            fontFamily: 'Cairo',
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 10),
-
-                            Row(
-                              children: [
-                                Icon(Icons.access_time_rounded, size: 14, color: isDarkMode ? Colors.white54 : Colors.black45),
-                                const SizedBox(width: 6),
-                                Text(
-                                  "وقت الطلب: $requestTime",
-                                  style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.black45, fontFamily: 'Cairo', fontSize: 11),
-                                ),
-                              ],
-                            ),
-
-                            if (!isHistory) ...[
-                              const SizedBox(height: 16),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(14),
-                                        boxShadow: [
-                                          BoxShadow(color: Colors.green.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3)),
-                                        ],
-                                      ),
-                                      child: ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.green.shade600,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                          elevation: 0,
-                                        ),
-                                        onPressed: () => _updateRequestStatus(
-                                          context: context,
-                                          docId: doc.id,
-                                          studentId: data['studentId'] ?? '',
-                                          studentName: data['studentName'] ?? 'طالب',
-                                          status: 'approved',
-                                          date: data['date'] ?? '',
-                                          reason: data['reason'] ?? 'بعذر',
-                                          requestSupervisorId: data['supervisorId'] ?? '',
-                                          isDark: isDarkMode,
-                                        ),
-                                        icon: const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                                        label: const Text("قبول العذر", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Container(
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(14),
-                                        boxShadow: [
-                                          BoxShadow(color: Colors.redAccent.withOpacity(0.25), blurRadius: 8, offset: const Offset(0, 3)),
-                                        ],
-                                      ),
-                                      child: ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.redAccent,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                          elevation: 0,
-                                        ),
-                                        onPressed: () => _updateRequestStatus(
-                                          context: context,
-                                          docId: doc.id,
-                                          studentId: data['studentId'] ?? '',
-                                          studentName: data['studentName'] ?? 'طالب',
-                                          status: 'rejected',
-                                          date: data['date'] ?? '',
-                                          reason: data['reason'] ?? '',
-                                          requestSupervisorId: data['supervisorId'] ?? '',
-                                          isDark: isDarkMode,
-                                        ),
-                                        icon: const Icon(Icons.cancel_rounded, color: Colors.white, size: 18),
-                                        label: const Text("رفض الإذن", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            ]
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
             );
           },
         );
@@ -604,6 +636,51 @@ class LeaveRequestsPage extends StatelessWidget {
               fontSize: 12,
               fontFamily: 'Cairo',
               fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoActiveCycleState(bool isDarkMode) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.4),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.event_busy_rounded,
+              size: 70,
+              color: Colors.redAccent.withOpacity(0.7),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "لا توجد دورة نشطة حالياً 🚫",
+            style: TextStyle(
+              color: isDarkMode ? Colors.white : primaryColor,
+              fontFamily: 'Cairo',
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              "تم إغلاق الدورة السابقة، يرجى إنشاء دورة جديدة لعرض استئذاناتها.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                fontFamily: 'Cairo',
+                fontSize: 12,
+              ),
             ),
           ),
         ],

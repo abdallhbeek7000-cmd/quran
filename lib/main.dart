@@ -25,6 +25,8 @@ import 'pages/splash_screen.dart';
 import 'pages/update_checker.dart'; 
 import 'services/theme_provider.dart'; 
 import 'services/prayer_service.dart'; // 🕌 خدمة أوقات الصلاة
+import 'services/cycle_service.dart'; // 🔄 1. استيراد خدمة الدورات
+import 'models/cycle_model.dart';      // 📖 2. استيراد موديل الدورة
 import 'package:shared_preferences/shared_preferences.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -188,9 +190,16 @@ void main() async {
   FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   
+  // 👈 3. استخدام MultiProvider لبث الدورة النشطة + الثيمات لجميع أرجاء التطبيق
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        StreamProvider<CycleModel?>(
+          create: (_) => CycleService().streamCurrentCycle(),
+          initialData: null,
+        ),
+      ],
       child: const MyApp(),
     ),
   );

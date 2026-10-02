@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
+import '../models/cycle_model.dart';
 import 'edit_session_page.dart';
 import '../services/session_service.dart';
 import '../widgets/offline_wrapper.dart'; 
@@ -76,9 +77,27 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     return "";
   }
 
-  // 📊 دالة التصدير للإكسل (محدثة لدعم نظام جزء عمَّ والمشرفين المنفصلين)
-  Future<void> exportSessionsToExcel(BuildContext context) async {
+  String _getJuzName(int juzNum) {
+    switch (juzNum) {
+      case 30: return "جزء عمَّ 👶";
+      case 29: return "جزء تبارك 📖";
+      case 28: return "قد سمع 📜";
+      case 27: return "الذاريات 🌟";
+      case 26: return "الأحقاف ✨";
+      default: return "";
+    }
+  }
+
+  // 📊 دالة التصدير للإكسل بحسب الدورة النشطة
+  Future<void> exportSessionsToExcel(BuildContext context, String? cycleId) async {
     try {
+      if (cycleId == null || cycleId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("عذراً، لا توجد دورة نشطة حالياً لتصدير الجلسات الخاصة بها", style: TextStyle(fontFamily: 'Cairo'))),
+        );
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("جاري تجهيز سجل الجلسات الشامل...", style: TextStyle(fontFamily: 'Cairo'))),
       );
@@ -93,6 +112,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
       final snapshot = await FirebaseFirestore.instance
           .collection('sessions')
           .where('studentId', isEqualTo: widget.studentId)
+          .where('cycleId', isEqualTo: cycleId)
           .get();
 
       final docs = snapshot.docs;
@@ -124,7 +144,8 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         pkg_excel.TextCellValue('رقم الجلسة'),
         pkg_excel.TextCellValue('التاريخ المعتمد'),
         pkg_excel.TextCellValue('اليوم'), 
-        pkg_excel.TextCellValue('وقت التسجيل الفعلي'),
+        pkg_excel.TextCellValue('وقت الإدخال الفعلي'),
+        pkg_excel.TextCellValue('وقت آخر تعديل'),
         pkg_excel.TextCellValue('نوع الجلسة / المنهج'),
         pkg_excel.TextCellValue('مشرف الحفظ الجديد'), 
         pkg_excel.TextCellValue('مشرف المراجعة'), 
@@ -140,6 +161,8 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         pkg_excel.TextCellValue('واجب مراجعة قديم'),
         pkg_excel.TextCellValue('الأنشطة الدينية'), 
         pkg_excel.TextCellValue('إجمالي الحفظ للختمة'), 
+        pkg_excel.TextCellValue('حالة الطالب/السلوك'),
+        pkg_excel.TextCellValue('نوع الغياب / السبب'),
         pkg_excel.TextCellValue('ملاحظات'),
       ]);
 
@@ -154,12 +177,17 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         bool isAbsent = data['absent'] ?? false;
         bool isExam = data['isExam'] ?? false;
         bool didNotRecite = data['didNotRecite'] ?? false;
-        bool isJuzAmma = data['isJuzAmma'] ?? false;
+        int selectedJuz = data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
 
-        String sessionType = isAbsent ? 'غائب' : (isExam ? 'اختبار' : (didNotRecite ? 'بدون تسميع' : (isJuzAmma ? 'حلقة (جزء عمَّ)' : 'حلقة عادية')));
+        String juzName = _getJuzName(selectedJuz);
+        String sessionType = isAbsent 
+            ? 'غائب' 
+            : (isExam ? 'اختبار' : (didNotRecite ? 'بدون تسميع' : (juzName.isNotEmpty ? 'حلقة ($juzName)' : 'حلقة عادية')));
+        
         String dateStr = data['date']?.toString() ?? '';
         String dayName = _getArabicDayName(dateStr);
-        String actualTime = data['actualCreatedAt']?.toString() ?? 'غير مسجل';
+        String actualCreatedTime = data['actualCreatedAt']?.toString() ?? 'غير مسجل';
+        String actualEditedTime = data['actualEditedAt']?.toString() ?? '---';
 
         List<dynamic>? memoSupList = data['newMemoSupervisorNames'] ?? data['supervisorNames'];
         String memoSupResult = (memoSupList != null && memoSupList.isNotEmpty) ? memoSupList.join(' ، ') : (data['supervisorName'] ?? 'غير محدد');
@@ -198,11 +226,16 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           hwOldRev = hwLegacy; 
         }
 
+        String absenceInfo = isAbsent 
+            ? "${data['absenceType'] ?? 'بدون عذر'}${data['absenceReason'] != null && data['absenceReason'].toString().isNotEmpty ? ' (' + data['absenceReason'] + ')' : ''}"
+            : '---';
+
         sheetObject.appendRow([
           pkg_excel.TextCellValue(sessionNum.toString()),
           pkg_excel.TextCellValue(dateStr),
           pkg_excel.TextCellValue(dayName), 
-          pkg_excel.TextCellValue(actualTime),
+          pkg_excel.TextCellValue(actualCreatedTime),
+          pkg_excel.TextCellValue(actualEditedTime),
           pkg_excel.TextCellValue(sessionType),
           pkg_excel.TextCellValue(memoSupResult), 
           pkg_excel.TextCellValue(revSupResult), 
@@ -217,7 +250,9 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwNewRev),
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwOldRev),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['religiousActivities'] ?? '')), 
-          pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (isJuzAmma ? 'جزء عمَّ' : (isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---')))), 
+          pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (selectedJuz > 0 ? 'نظام أجزاء' : (isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---')))), 
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['studentStatus'] ?? 'مهذب')),
+          pkg_excel.TextCellValue(absenceInfo),
           pkg_excel.TextCellValue(data['notes']?.toString() ?? ''),
         ]);
       }
@@ -238,120 +273,158 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    final sessionService = SessionService();
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return OfflineWrapper(
-      child: Scaffold(
-        extendBodyBehindAppBar: true, 
-        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
-        appBar: AppBar(
-          elevation: 0,
-          backgroundColor: Colors.transparent, 
-          title: Text(widget.studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
-          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              icon: Icon(Icons.download_rounded, color: isDarkMode ? accentGold : primaryColor),
-              tooltip: "تصدير إلى Excel",
-              onPressed: () => exportSessionsToExcel(context),
-            ),
-          ],
-        ),
-        body: Stack(
-          children: [
-            Container(
-              width: double.infinity,
-              height: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isDarkMode
-                      ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
-                      : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-            ),
-            
-            AnimatedBuilder(
-              animation: _bgAnimation,
-              builder: (context, child) {
-                return Stack(
-                  children: [
-                    Positioned(
-                      top: -20 + _bgAnimation.value,
-                      left: -50 - (_bgAnimation.value / 2),
-                      child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12))),
-                    ),
-                    Positioned(
-                      bottom: 100 - _bgAnimation.value,
-                      right: -60 + _bgAnimation.value,
-                      child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
-                    ),
-                  ],
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('cycles').snapshots(),
+        builder: (context, cycleSnap) {
+          CycleModel? activeCycle;
+
+          if (cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty) {
+            for (var doc in cycleSnap.data!.docs) {
+              var data = doc.data() as Map<String, dynamic>;
+              bool isCurrent = data['isCurrent'] == true;
+              bool isActive = data['status'] == 'active' || data['active'] == true;
+              bool isNotClosed = data['isClosed'] != true && data['archived'] != true;
+
+              if ((isCurrent || isActive) && isNotClosed) {
+                activeCycle = CycleModel(
+                  id: doc.id,
+                  name: data['name'] ?? '',
+                  type: data['type']?.toString() ?? '',
+                  year: int.tryParse(data['year']?.toString() ?? '') ?? DateTime.now().year,
+                  cycleNumber: int.tryParse(data['cycleNumber']?.toString() ?? '') ?? 1,
+                  startDate: data['startDate']?.toString() ?? '',
+                  endDate: data['endDate']?.toString() ?? '',
+                  active: data['active'] == true,
+                  archived: data['archived'] == true,
                 );
-              },
+                break;
+              }
+            }
+          }
+
+          return Scaffold(
+            extendBodyBehindAppBar: true, 
+            backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+            appBar: AppBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent, 
+              title: Text(widget.studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+              iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+              centerTitle: true,
+              actions: [
+                IconButton(
+                  icon: Icon(Icons.download_rounded, color: isDarkMode ? accentGold : primaryColor),
+                  tooltip: "تصدير إلى Excel",
+                  onPressed: () => exportSessionsToExcel(context, activeCycle?.id),
+                ),
+              ],
             ),
+            body: Stack(
+              children: [
+                Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDarkMode
+                          ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
+                          : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                ),
+                
+                AnimatedBuilder(
+                  animation: _bgAnimation,
+                  builder: (context, child) {
+                    return Stack(
+                      children: [
+                        Positioned(
+                          top: -20 + _bgAnimation.value,
+                          left: -50 - (_bgAnimation.value / 2),
+                          child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12))),
+                        ),
+                        Positioned(
+                          bottom: 100 - _bgAnimation.value,
+                          right: -60 + _bgAnimation.value,
+                          child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                        ),
+                      ],
+                    );
+                  },
+                ),
 
-            SafeArea(
-              child: FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance.collection('students').doc(widget.studentId).get(),
-                builder: (context, studentSnapshot) {
-                  bool isCompletedStudent = false;
-                  if (studentSnapshot.hasData && studentSnapshot.data!.exists) {
-                    var sData = studentSnapshot.data!.data() as Map<String, dynamic>;
-                    isCompletedStudent = sData['studentType'] == 'completed';
-                  }
+                SafeArea(
+                  child: FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance.collection('students').doc(widget.studentId).get(),
+                    builder: (context, studentSnapshot) {
+                      bool isCompletedStudent = false;
+                      if (studentSnapshot.hasData && studentSnapshot.data!.exists) {
+                        var sData = studentSnapshot.data!.data() as Map<String, dynamic>;
+                        isCompletedStudent = sData['studentType'] == 'completed';
+                      }
 
-                  return StreamBuilder<QuerySnapshot>(
-                    stream: sessionService.getStudentSessions(widget.studentId), 
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                      
-                      final sessions = snapshot.data!.docs;
-                      if (sessions.isEmpty) return _buildEmptyState(isDarkMode);
+                      if (activeCycle == null) {
+                        return _buildNoActiveCycleState(isDarkMode);
+                      }
 
-                      List<QueryDocumentSnapshot> sortedSessions = List.from(sessions);
-                      
-                      sortedSessions.sort((a, b) {
-                        var dataA = a.data() as Map<String, dynamic>;
-                        var dataB = b.data() as Map<String, dynamic>;
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('sessions')
+                            .where('studentId', isEqualTo: widget.studentId)
+                            .where('cycleId', isEqualTo: activeCycle.id)
+                            .snapshots(), 
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                          
+                          final sessions = snapshot.data!.docs;
+                          if (sessions.isEmpty) return _buildEmptyState(isDarkMode);
 
-                        DateTime dateAObj = _parseDate(dataA['date'] ?? '');
-                        DateTime dateBObj = _parseDate(dataB['date'] ?? '');
+                          List<QueryDocumentSnapshot> sortedSessions = List.from(sessions);
+                          
+                          sortedSessions.sort((a, b) {
+                            var dataA = a.data() as Map<String, dynamic>;
+                            var dataB = b.data() as Map<String, dynamic>;
 
-                        int dateComparison = dateBObj.compareTo(dateAObj);
+                            DateTime dateAObj = _parseDate(dataA['date'] ?? '');
+                            DateTime dateBObj = _parseDate(dataB['date'] ?? '');
 
-                        if (dateComparison == 0) {
-                          Timestamp? tA = dataA['timestamp'] as Timestamp?;
-                          Timestamp? tB = dataB['timestamp'] as Timestamp?;
-                          if (tA != null && tB != null) return tB.compareTo(tA);
-                          if (tA == null && tB != null) return -1; 
-                          if (tB == null && tA != null) return 1;
-                        }
-                        return dateComparison;
-                      });
+                            int dateComparison = dateBObj.compareTo(dateAObj);
 
-                      return ListView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 30),
-                        itemCount: sortedSessions.length,
-                        itemBuilder: (context, index) {
-                          final session = sortedSessions[index];
-                          final data = session.data() as Map<String, dynamic>;
-                          int sessionNum = sortedSessions.length - index;
-                          return _buildSessionTimelineItem(context, session.id, data, isDarkMode, isCompletedStudent, sessionNum);
+                            if (dateComparison == 0) {
+                              Timestamp? tA = dataA['timestamp'] as Timestamp?;
+                              Timestamp? tB = dataB['timestamp'] as Timestamp?;
+                              if (tA != null && tB != null) return tB.compareTo(tA);
+                              if (tA == null && tB != null) return -1; 
+                              if (tB == null && tA != null) return 1;
+                            }
+                            return dateComparison;
+                          });
+
+                          return ListView.builder(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 30),
+                            itemCount: sortedSessions.length,
+                            itemBuilder: (context, index) {
+                              final session = sortedSessions[index];
+                              final data = session.data() as Map<String, dynamic>;
+                              int sessionNum = sortedSessions.length - index;
+                              return _buildSessionTimelineItem(context, session.id, data, isDarkMode, isCompletedStudent, sessionNum);
+                            },
+                          );
                         },
                       );
                     },
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -360,7 +433,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
     bool didNotRecite = data['didNotRecite'] ?? false;
-    bool isJuzAmma = data['isJuzAmma'] ?? false;
+    int selectedJuz = data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
 
     String sessionDateRaw = data['date'] ?? '';
     String dayName = _getArabicDayName(sessionDateRaw);
@@ -384,7 +457,9 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     String oRevHw = data['oldReviewHomework']?.toString().trim() ?? '';
     String oldHw = data['homework']?.toString().trim() ?? '';
 
-    // 👥 استخراج مشرفي الحفظ والمراجعة بشكل منفصل
+    String absenceType = data['absenceType']?.toString().trim() ?? 'بدون عذر';
+    String absenceReason = data['absenceReason']?.toString().trim() ?? '';
+
     List<dynamic>? memoSupList = data['newMemoSupervisorNames'] ?? data['supervisorNames'];
     String memoSupervisors = (memoSupList != null && memoSupList.isNotEmpty) ? memoSupList.join(' ، ') : (data['supervisorName'] ?? 'غير محدد');
 
@@ -402,6 +477,8 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
       }
       if (sight.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.chrome_reader_mode_rounded, "قراءة نظراً", sight, Colors.indigoAccent, isDarkMode));
     }
+
+    String juzChipTitle = _getJuzName(selectedJuz);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -442,8 +519,8 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       ),
                       Row(
                         children: [
-                          if (isJuzAmma && !isAbsent && !isExam) ...[
-                            _buildBadge("جزء عمَّ 👶", Colors.purple),
+                          if (juzChipTitle.isNotEmpty && !isAbsent && !isExam) ...[
+                            _buildBadge(juzChipTitle, Colors.purple),
                             const SizedBox(width: 4),
                           ],
                           if (isAbsent) 
@@ -485,7 +562,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 🕵️‍♂️👑 شريط التوثيق الزمني الإداري
                   if (widget.role == 'manager' && (actualCreatedAt.isNotEmpty || actualEditedAt.isNotEmpty)) ...[
                     Container(
                       width: double.infinity,
@@ -522,7 +598,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                     ),
                   ],
 
-                  // 👥 عرض المشرفين المنفصلين للحفظ والمراجعة
                   if (nMemo.isNotEmpty && memoSupervisors == revSupervisors) ...[
                     _buildMinimalistDetailRow(Icons.person_outline, "المشرف المسجِّل", memoSupervisors, isDarkMode, isBold: true),
                   ] else ...[
@@ -559,16 +634,16 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: accentGold.withOpacity(isDarkMode ? 0.05 : 0.05),
+                          color: accentGold.withOpacity(isDarkMode ? 0.08 : 0.05),
                           borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: accentGold.withOpacity(0.2)),
+                          border: Border.all(color: accentGold.withOpacity(0.3)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.menu_book, size: 16, color: accentGold),
+                                Icon(Icons.assignment_outlined, size: 16, color: accentGold),
                                 const SizedBox(width: 6),
                                 Text(isCompletedStudent ? "المقدار المطلوب للمرة القادمة:" : "الواجب القادم:", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                               ],
@@ -585,12 +660,12 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                     ],
                   ],
                   
-                  if (data['religiousActivities'] != null && data['religiousActivities'].toString().isNotEmpty) ...[
+                  if (data['religiousActivities'] != null && data['religiousActivities'].toString().trim().isNotEmpty) ...[
                     _buildMinimalistDetailRow(Icons.mosque_outlined, "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
                     Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
                   ],
 
-                  if (!didNotRecite && !isJuzAmma) ...[
+                  if (!didNotRecite && selectedJuz == 0) ...[
                     _buildMinimalistDetailRow(
                       Icons.analytics_outlined, 
                       "إجمالي الحفظ للختمة", 
@@ -600,8 +675,10 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                     Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
                   ],
 
-                  if (data['studentStatus'] != null && data['studentStatus'].toString().isNotEmpty)
+                  if (data['studentStatus'] != null && data['studentStatus'].toString().trim().isNotEmpty && !isAbsent && !isExam) ...[
                     _buildMinimalistDetailRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
+                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                  ],
                   
                   if (isExam && !isAbsent) ...[
                     Container(
@@ -609,19 +686,19 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       margin: const EdgeInsets.symmetric(vertical: 5),
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
                       decoration: BoxDecoration(
-                        color: isDarkMode ? Colors.teal.withOpacity(0.1) : Colors.teal.shade50.withOpacity(0.7),
+                        color: isDarkMode ? Colors.teal.withOpacity(0.12) : Colors.teal.shade50.withOpacity(0.8),
                         borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.teal.withOpacity(0.3), width: 1)
+                        border: Border.all(color: Colors.teal.withOpacity(0.4), width: 1)
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.workspace_premium, color: Colors.teal, size: 30),
+                          const Icon(Icons.workspace_premium, color: Colors.teal, size: 32),
                           const SizedBox(width: 12),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text("نتيجة الاختبار النهائي للجلسة", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.grey, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                              Text("نتيجة الاختبار النهائي للجلسة", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.grey[800], fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                               const SizedBox(height: 4),
                               Text("${data['examScore'] ?? '0'} / 100", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.tealAccent : Colors.teal.shade900, fontFamily: 'Cairo')),
                             ],
@@ -631,12 +708,41 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                     ),
                   ],
 
-                  if (data['notes'] != null && data['notes'].toString().isNotEmpty) ...[
-                    const SizedBox(height: 15),
+                  if (isAbsent) ...[
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.symmetric(vertical: 5),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(isDarkMode ? 0.12 : 0.08),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.info_outline, color: Colors.redAccent, size: 16),
+                              const SizedBox(width: 6),
+                              Text("نوع الغياب: $absenceType", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontFamily: 'Cairo', fontSize: 13)),
+                            ],
+                          ),
+                          if (absenceReason.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text("السبب: $absenceReason", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white70 : Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+                          ]
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  if (data['notes'] != null && data['notes'].toString().trim().isNotEmpty) ...[
+                    const SizedBox(height: 10),
                     _buildNotesBox(data['notes'], isDarkMode),
                   ],
                   
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 12),
                   _buildActionButtons(context, sessionId, data, isDarkMode),
                 ],
               ),
@@ -649,12 +755,12 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
 
   Widget _buildHomeworkRow(String label, String value, bool isDarkMode) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4, right: 12),
+      padding: const EdgeInsets.only(bottom: 4, right: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text("• $label: ", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white54 : Colors.black54, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-          Expanded(child: Text(value, style: TextStyle(fontSize: 13, color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
+          Expanded(child: Text(value, style: TextStyle(fontSize: 12.5, color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
         ],
       ),
     );
@@ -682,7 +788,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           const SizedBox(height: 6),
           Text(
             val.trim().isEmpty ? '---' : val,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', height: 1.5),
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', height: 1.4),
           )
         ],
       ),
@@ -745,15 +851,24 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
   Widget _buildNotesBox(String notes, bool isDarkMode) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.5),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: isDarkMode ? Colors.white12 : Colors.black12),
       ),
-      child: Text(
-        "ملاحظات: $notes", 
-        style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: isDarkMode ? Colors.white70 : Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.w600)
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.comment, size: 16, color: isDarkMode ? accentGold : primaryColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "ملاحظات: $notes", 
+              style: TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic, color: isDarkMode ? Colors.white70 : Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.w600)
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -768,12 +883,12 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
       children: [
         TextButton.icon(
           style: TextButton.styleFrom(
-            backgroundColor: isDarkMode ? Colors.orange.withOpacity(0.1) : Colors.orange.withOpacity(0.05),
+            backgroundColor: isDarkMode ? Colors.orange.withOpacity(0.12) : Colors.orange.withOpacity(0.08),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
           ),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditSessionPage(sessionId: id, data: data))),
           icon: Icon(Icons.edit_rounded, size: 16, color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800),
-          label: Text("تعديل", style: TextStyle(color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+          label: Text("تعديل الجلسة", style: TextStyle(color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12)),
         ),
         if (widget.role == "manager") ...[
           const SizedBox(width: 10),
@@ -783,14 +898,29 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
             ),
             onPressed: () async {
-              await SessionService().deleteSession(id);
-              SessionService().recalculateConsecutiveAbsences(data['studentId']);
-              
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الجلسة", style: TextStyle(fontFamily: 'Cairo'))));
+              bool? confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                  title: Text("حذف الجلسة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : Colors.black)),
+                  content: Text("هل أنت تأكد من رغبتك في حذف هذه الجلسة بشكل نهائي؟", style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black87)),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo'))),
+                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("حذف", style: TextStyle(fontFamily: 'Cairo', color: Colors.redAccent, fontWeight: FontWeight.bold))),
+                  ],
+                )
+              );
+
+              if (confirm == true) {
+                await SessionService().deleteSession(id);
+                SessionService().recalculateConsecutiveAbsences(data['studentId']);
+                
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الجلسة بنجاح", style: TextStyle(fontFamily: 'Cairo'))));
+              }
             },
             icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
-            label: const Text("حذف", style: TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+            label: const Text("حذف", style: TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12)),
           ),
         ]
       ],
@@ -808,6 +938,27 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     );
   }
 
+  Widget _buildNoActiveCycleState(bool isDarkMode) {
+    return Center(
+      child: _buildGlassContainer(
+        isDarkMode: isDarkMode,
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.event_busy_rounded, size: 70, color: isDarkMode ? accentGold.withOpacity(0.6) : primaryColor.withOpacity(0.4)),
+            const SizedBox(height: 15),
+            Text(
+              "لا توجد دورة نشطة حالياً لعرض الجلسات الخاصة بها",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 14, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyState(bool isDarkMode) {
     return Center(
       child: _buildGlassContainer(
@@ -820,7 +971,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
             Icon(Icons.history_toggle_off_rounded, size: 70, color: isDarkMode ? accentGold.withOpacity(0.6) : primaryColor.withOpacity(0.4)),
             const SizedBox(height: 15),
             Text(
-              "لا يوجد سجل جلسات لهذا الطالب حتى الآن", 
+              "لا يوجد سجل جلسات لهذا الطالب في الدورة النشطة الحالية", 
               textAlign: TextAlign.center,
               style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 14, fontFamily: 'Cairo', fontWeight: FontWeight.bold)
             ),

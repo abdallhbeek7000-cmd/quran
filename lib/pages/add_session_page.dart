@@ -428,6 +428,72 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     return parts.join(" | ");
   }
 
+  // 🛠️ دالة محللة ومستخرجة ممتازة لتحويل النصوص المنسقة للواجب إلى مقاطع تلقائية (Ranges)
+  List<Map<String, dynamic>> _parseFormattedTextToRanges(String text) {
+    List<Map<String, dynamic>> results = [];
+    if (text.trim().isEmpty) return results;
+
+    // تقسيم النص بناءً على الفواصل والمقاطع
+    List<String> rawParts = text.split(RegExp(r'\||\n'));
+
+    for (var part in rawParts) {
+      String trimmedPart = part.trim();
+      if (trimmedPart.isEmpty) continue;
+
+      String surahFrom = '';
+      String surahTo = '';
+      String fromPage = '';
+      String toPage = '';
+
+      // استخراج الأرقام من المقطع
+      RegExp digitsExp = RegExp(r'\d+');
+      var matches = digitsExp.allMatches(trimmedPart).map((m) => m.group(0)!).toList();
+
+      if (matches.length >= 2) {
+        fromPage = matches[0];
+        toPage = matches[1];
+      } else if (matches.length == 1) {
+        fromPage = matches[0];
+        toPage = matches[0];
+      }
+
+      // البحث عن أسماء السور المذكورة بالنص
+      for (var surah in quranSurahs) {
+        String sName = surah['name'];
+        if (trimmedPart.contains("من سورة $sName") || trimmedPart.contains("سورة $sName")) {
+          if (surahFrom.isEmpty) {
+            surahFrom = sName;
+          } else {
+            surahTo = sName;
+          }
+        } else if (trimmedPart.contains("إلى $sName") || trimmedPart.contains("إلى سورة $sName")) {
+          surahTo = sName;
+        }
+      }
+
+      // إذا لم يتم العثور على اسم سورة صريح، يتم جلبها عبر رقم الصفحة تلقائياً
+      if (surahFrom.isEmpty && fromPage.isNotEmpty) {
+        surahFrom = _getStartSurahByPage(fromPage);
+      }
+      if (surahTo.isEmpty && toPage.isNotEmpty) {
+        surahTo = _getEndSurahByPage(toPage);
+      }
+
+      var fromController = TextEditingController(text: fromPage);
+      var toController = TextEditingController(text: toPage);
+
+      results.add({
+        'surah': surahFrom,
+        'toSurah': surahTo.isNotEmpty ? surahTo : surahFrom,
+        'isFullSurah': fromPage.isEmpty && toPage.isEmpty,
+        'from': fromController,
+        'to': toController,
+      });
+    }
+
+    return results;
+  }
+
   void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode, List<Map<String, String>> targetList, String title) {
     showModalBottomSheet(
       context: context,
@@ -604,18 +670,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
-  void _parseRangeIntoControllers(String text, TextEditingController fromCtrl, TextEditingController toCtrl) {
-    if (text.isEmpty) return;
-    RegExp exp = RegExp(r'\d+');
-    var matches = exp.allMatches(text).map((m) => m.group(0)).toList();
-    if (matches.length >= 2) {
-      fromCtrl.text = matches[0]!;
-      toCtrl.text = matches[1]!;
-    } else if (matches.length == 1) {
-      fromCtrl.text = matches[0]!;
-    }
-  }
-
   DateTime _parseDate(String dateStr) {
     try {
       List<String> parts = dateStr.split('-');
@@ -659,29 +713,51 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
         var lastSession = docs.first.data();
 
-        bool hasHw = (lastSession['newHomework']?.toString().isNotEmpty ?? false) ||
-            (lastSession['newReviewHomework']?.toString().isNotEmpty ?? false) ||
-            (lastSession['oldReviewHomework']?.toString().isNotEmpty ?? false) ||
-            (lastSession['homework']?.toString().isNotEmpty ?? false);
+        String rawNewHW = lastSession['newHomework']?.toString() ?? '';
+        String rawNewRevHW = lastSession['newReviewHomework']?.toString() ?? '';
+        String rawOldRevHW = lastSession['oldReviewHomework']?.toString() ?? '';
+        String rawCombinedHW = lastSession['homework']?.toString() ?? '';
 
-        if (hasHw && mounted) {
+        // إذا كان هناك واجب مدمج، نقوم بفك تشفيره إذا كانت الحقول المنفصلة فارغة
+        if (rawNewHW.isEmpty && rawNewRevHW.isEmpty && rawOldRevHW.isEmpty && rawCombinedHW.isNotEmpty) {
+          List<String> lines = rawCombinedHW.split('\n');
+          for (var line in lines) {
+            if (line.contains("حفظ:")) {
+              rawNewHW = line.replaceAll("حفظ:", "").trim();
+            } else if (line.contains("مراجعة:")) {
+              rawNewRevHW = line.replaceAll("مراجعة:", "").trim();
+            }
+          }
+        }
+
+        bool hasAnyHw = rawNewHW.isNotEmpty || rawNewRevHW.isNotEmpty || rawOldRevHW.isNotEmpty;
+
+        if (hasAnyHw && mounted) {
           setState(() {
-            _parseRangeIntoControllers(
-                lastSession['newHomework'] ?? '', newMemoRanges.first['from'], newMemoRanges.first['to']);
-            _parseRangeIntoControllers(
-                lastSession['newReviewHomework'] ?? '', newRevRanges.first['from'], newRevRanges.first['to']);
-            _parseRangeIntoControllers(
-                lastSession['oldReviewHomework'] ?? '', oldRevRanges.first['from'], oldRevRanges.first['to']);
+            // استخراج وتعبئة مقاطع الحفظ الجديد
+            if (rawNewHW.isNotEmpty) {
+              var parsedMemo = _parseFormattedTextToRanges(rawNewHW);
+              if (parsedMemo.isNotEmpty) {
+                _disposeRanges(newMemoRanges);
+                newMemoRanges = parsedMemo;
+              }
+            }
 
-            for (var list in [newMemoRanges, newRevRanges, oldRevRanges]) {
-              for (var item in list) {
-                TextEditingController fromCtrl = item['from'];
-                if (fromCtrl.text.isNotEmpty) {
-                  String autoSurah = _getStartSurahByPage(fromCtrl.text);
-                  if (autoSurah.isNotEmpty) {
-                    item['surah'] = autoSurah;
-                  }
-                }
+            // استخراج وتعبئة مقاطع المراجعة الجديدة
+            if (rawNewRevHW.isNotEmpty) {
+              var parsedNewRev = _parseFormattedTextToRanges(rawNewRevHW);
+              if (parsedNewRev.isNotEmpty) {
+                _disposeRanges(newRevRanges);
+                newRevRanges = parsedNewRev;
+              }
+            }
+
+            // استخراج وتعبئة مقاطع المراجعة القديمة
+            if (rawOldRevHW.isNotEmpty) {
+              var parsedOldRev = _parseFormattedTextToRanges(rawOldRevHW);
+              if (parsedOldRev.isNotEmpty) {
+                _disposeRanges(oldRevRanges);
+                oldRevRanges = parsedOldRev;
               }
             }
           });
@@ -1545,7 +1621,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                               child: Column(
                                 children: [
                                   if (!isCompletedStudent) ...[
-                                    // 🌟 شريط اختيار الأجزاء الأخيرة 🌟
                                     Container(
                                       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                                       decoration: BoxDecoration(

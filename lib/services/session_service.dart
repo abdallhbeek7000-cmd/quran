@@ -6,8 +6,8 @@ import '../models/session_model.dart';
 class SessionService {
   final firestore = FirebaseFirestore.instance;
 
-  // 🚀 دالة إضافة الجلسة السريعة الفائقة (Offline-First / Instantly Return)
-  Future<void> addSession(dynamic sessionInput) async {
+  // 🚀 دالة إضافة الجلسة السريعة مع دعم cycleId (Offline-First / Instantly Return)
+  Future<void> addSession(dynamic sessionInput, {String? activeCycleId}) async {
     Map<String, dynamic> sessionMap;
     String studentId = '';
 
@@ -20,6 +20,11 @@ class SessionService {
     } else {
       print("❌ نوع البيانات غير مدعوم في addSession");
       return;
+    }
+
+    // 👈 1. إسناد cycleId للجلسة إذا تم تمريرها أو لم تكن موجودة
+    if (activeCycleId != null && activeCycleId.isNotEmpty) {
+      sessionMap['cycleId'] = activeCycleId;
     }
 
     final bool isAbsent = sessionMap['absent'] ?? false;
@@ -45,7 +50,7 @@ class SessionService {
       );
 
       if (studentId.isNotEmpty) {
-        recalculateConsecutiveAbsences(studentId);
+        recalculateConsecutiveAbsences(studentId, cycleId: sessionMap['cycleId']);
       }
       print("✅ تم حفظ الجلسة بنجاح في فايرستور (أونلاين / كاش).");
 
@@ -83,39 +88,53 @@ class SessionService {
     await firestore.collection('sessions').doc(sessionId).delete();
   }
 
-  Stream<QuerySnapshot> getStudentSessions(String studentId) {
-    return firestore.collection('sessions').where('studentId', isEqualTo: studentId).snapshots();
+  // 👈 2. جلب جلسات الطالب مقيدة بالدورة النشطة (اختياري)
+  Stream<QuerySnapshot> getStudentSessions(String studentId, {String? cycleId}) {
+    Query query = firestore.collection('sessions').where('studentId', isEqualTo: studentId);
+    if (cycleId != null && cycleId.isNotEmpty) {
+      query = query.where('cycleId', isEqualTo: cycleId);
+    }
+    return query.snapshots();
   }
 
-  Future<bool> hasSessionToday(String studentId) async {
+  // 👈 3. التحقق من وجود جلسة اليوم محصورة بالدورة الحالية
+  Future<bool> hasSessionToday(String studentId, {String? cycleId}) async {
     final now = DateTime.now();
     final today = "${now.year}-${now.month}-${now.day}";
     try {
-      final result = await firestore.collection('sessions')
+      Query query = firestore.collection('sessions')
           .where('studentId', isEqualTo: studentId)
-          .where('date', isEqualTo: today)
-          .get()
-          .timeout(const Duration(seconds: 2));
+          .where('date', isEqualTo: today);
+      
+      if (cycleId != null && cycleId.isNotEmpty) {
+        query = query.where('cycleId', isEqualTo: cycleId);
+      }
+
+      final result = await query.get().timeout(const Duration(seconds: 2));
       return result.docs.isNotEmpty;
     } catch (_) {
       return false;
     }
   }
 
-  // 🚀 خوارزمية المسح الزمني لحساب الغياب المتكرر بدقة 100%
-  Future<void> recalculateConsecutiveAbsences(String studentId) async {
+  // 👈 4. خوارزمية المسح الزمني لحساب الغياب المتكرر بدقة للدورة الحالية
+  Future<void> recalculateConsecutiveAbsences(String studentId, {String? cycleId}) async {
     try {
-      final snap = await FirebaseFirestore.instance
+      Query query = FirebaseFirestore.instance
           .collection('sessions')
-          .where('studentId', isEqualTo: studentId)
-          .get()
-          .timeout(const Duration(seconds: 2));
+          .where('studentId', isEqualTo: studentId);
+
+      if (cycleId != null && cycleId.isNotEmpty) {
+        query = query.where('cycleId', isEqualTo: cycleId);
+      }
+
+      final snap = await query.get().timeout(const Duration(seconds: 2));
 
       if (snap.docs.isEmpty) {
         await FirebaseFirestore.instance.collection('students').doc(studentId).update({'consecutiveAbsences': 0});
         return;
       }
-      List<Map<String, dynamic>> sessions = snap.docs.map((e) => e.data()).toList();
+      List<Map<String, dynamic>> sessions = snap.docs.map((e) => e.data() as Map<String, dynamic>).toList();
       sessions.sort((a, b) {
         String dateA = a['date'] ?? '';
         String dateB = b['date'] ?? '';

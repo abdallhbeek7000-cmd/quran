@@ -1,21 +1,14 @@
 class CycleModel {
   final String id;
-
   final String name;
-
   final String type;
-
   final int year;
-
   final int cycleNumber;
-
   final String startDate;
-
   final String endDate;
-
   final bool active;
-
   final bool archived;
+  final double totalExpenses; // 👈 إضافة حقل لحفظ مجموع المصروفات عند الأرشفة
 
   CycleModel({
     required this.id,
@@ -27,6 +20,7 @@ class CycleModel {
     required this.endDate,
     required this.active,
     required this.archived,
+    this.totalExpenses = 0.0,
   });
 
   Map<String, dynamic> toMap() {
@@ -39,6 +33,7 @@ class CycleModel {
       'endDate': endDate,
       'active': active,
       'archived': archived,
+      'totalExpenses': totalExpenses,
     };
   }
 
@@ -56,6 +51,28 @@ class CycleModel {
       endDate: map['endDate'] ?? '',
       active: map['active'] ?? false,
       archived: map['archived'] ?? false,
+      totalExpenses: (map['totalExpenses'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  // 🔄 دالة نسخت للتعديل السريع (تسهل إغلاق الدورة بأسلوب نظيف)
+  CycleModel copyWith({
+    bool? active,
+    bool? archived,
+    String? endDate,
+    double? totalExpenses,
+  }) {
+    return CycleModel(
+      id: id,
+      name: name,
+      type: type,
+      year: year,
+      cycleNumber: cycleNumber,
+      startDate: startDate,
+      endDate: endDate ?? this.endDate,
+      active: active ?? this.active,
+      archived: archived ?? this.archived,
+      totalExpenses: totalExpenses ?? this.totalExpenses,
     );
   }
 }

@@ -1,17 +1,17 @@
 import 'dart:io';
-import 'dart:ui'; 
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; 
-import 'package:speech_to_text/speech_to_text.dart' as stt; 
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:intl/intl.dart';
 import '../services/session_service.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
-import '../services/notification_queue_manager.dart'; 
-import '../widgets/offline_wrapper.dart'; 
-import '../widgets/glass_toast.dart'; 
+import '../services/notification_queue_manager.dart';
+import '../widgets/offline_wrapper.dart';
+import '../widgets/glass_toast.dart';
 
 class EditSessionPage extends StatefulWidget {
   final String sessionId;
@@ -29,7 +29,7 @@ class EditSessionPage extends StatefulWidget {
 
 class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProviderStateMixin {
   final sessionService = SessionService();
-  
+
   late AnimationController _bgController;
   late Animation<double> _bgAnimation;
 
@@ -38,7 +38,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   TextEditingController? _activeController;
   String _initialText = '';
 
-  // 📖 قائمة سور القرآن كاملة
+  // 📖 قائمة سور القرآن الكريمة
   final List<Map<String, dynamic>> quranSurahs = const [
     {'id': 1, 'name': 'الفاتحة', 'startPage': 1, 'endPage': 1, 'verses': 7},
     {'id': 2, 'name': 'البقرة', 'startPage': 2, 'endPage': 49, 'verses': 286},
@@ -156,11 +156,11 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     {'id': 114, 'name': 'الناس', 'startPage': 604, 'endPage': 604, 'verses': 6},
   ];
 
-  bool isJuzAmmaMode = false;
+  int selectedJuz = 0;
 
   List<Map<String, dynamic>> newMemoRanges = [];
   List<Map<String, dynamic>> newRevRanges = [];
-  List<Map<String, dynamic>> oldReviewRanges = [];
+  List<Map<String, dynamic>> oldRevRanges = [];
   List<Map<String, dynamic>> readingRanges = [];
   List<Map<String, dynamic>> newHwRanges = [];
   List<Map<String, dynamic>> newRevHwRanges = [];
@@ -168,33 +168,35 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
   late TextEditingController religiousActivities;
   late TextEditingController notes;
+  late TextEditingController absenceReasonController;
+  late TextEditingController examScoreController;
   late TextEditingController totalMemorizedPagesController;
 
+  bool loading = false;
   bool absent = false;
+  bool isExam = false;
   bool didNotRecite = false;
-  
+
   bool hasNewMemorization = true;
   bool hasReview = true;
-  bool hasReading = false; 
+  bool hasReading = false;
 
+  String absenceType = "بدون عذر";
   String memorizationRating = "جيد";
-  String newReviewRating = "جيد"; 
-  String oldReviewRating = "جيد"; 
-  
+  String newReviewRating = "جيد";
+  String oldReviewRating = "جيد";
   String studentStatus = "مهذب";
-  bool loading = false;
 
   late DateTime _selectedDate;
 
   bool isCompletedStudent = false;
   bool checkingStudentType = true;
 
-  // 👥 فصل قائمة المشرفين بين الحفظ والمراجعة
   List<Map<String, String>> selectedNewMemoSupervisors = [];
   List<Map<String, String>> selectedReviewSupervisors = [];
 
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37); 
+  final Color accentGold = const Color(0xffd4af37);
 
   @override
   void initState() {
@@ -204,52 +206,52 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
     _bgAnimation = Tween<double>(begin: -10, end: 20).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine));
 
-    _speech = stt.SpeechToText(); 
+    _speech = stt.SpeechToText();
 
     absent = data['absent'] ?? false;
+    isExam = data['isExam'] ?? false;
     didNotRecite = data['didNotRecite'] ?? false;
-    isJuzAmmaMode = data['isJuzAmma'] ?? false;
-    
-    hasNewMemorization = (data['newMemorization'] ?? '').toString().trim().isNotEmpty;
-    hasReview = (data['nearReview'] ?? '').toString().trim().isNotEmpty || 
-                (data['farReview'] ?? '').toString().trim().isNotEmpty || 
-                (data['review'] ?? '').toString().trim().isNotEmpty;
+    selectedJuz = data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
 
+    hasNewMemorization = (data['newMemorization'] ?? '').toString().trim().isNotEmpty;
+    hasReview = (data['nearReview'] ?? '').toString().trim().isNotEmpty ||
+        (data['farReview'] ?? '').toString().trim().isNotEmpty ||
+        (data['review'] ?? '').toString().trim().isNotEmpty;
     hasReading = (data['readingBySight'] ?? '').toString().trim().isNotEmpty;
 
-    if (!hasNewMemorization && !hasReview && !absent && !didNotRecite) {
+    if (!hasNewMemorization && !hasReview && !absent && !isExam && !didNotRecite) {
       hasNewMemorization = true;
       hasReview = true;
     }
 
     _selectedDate = _parseDate(data['date'] ?? '');
 
-    memorizationRating = data['memorizationRating'] ?? data['rating'] ?? "جيد";
+    memorizationRating = (data['memorizationRating'] ?? data['rating'] ?? "جيد").toString();
     if (memorizationRating.isEmpty) memorizationRating = "جيد";
-    
-    newReviewRating = data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "جيد";
+
+    newReviewRating = (data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "جيد").toString();
     if (newReviewRating.isEmpty) newReviewRating = "جيد";
 
-    oldReviewRating = data['oldReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "جيد";
+    oldReviewRating = (data['oldReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "جيد").toString();
     if (oldReviewRating.isEmpty) oldReviewRating = "جيد";
 
     studentStatus = (data['studentStatus'] == null || data['studentStatus'] == '') ? "مهذب" : data['studentStatus'];
+    absenceType = (data['absenceType'] == null || data['absenceType'] == '') ? "بدون عذر" : data['absenceType'];
 
-    religiousActivities = TextEditingController(text: data['religiousActivities']);
-    notes = TextEditingController(text: data['notes']);
-    
+    religiousActivities = TextEditingController(text: data['religiousActivities'] ?? '');
+    notes = TextEditingController(text: data['notes'] ?? '');
+    absenceReasonController = TextEditingController(text: data['absenceReason'] ?? '');
+    examScoreController = TextEditingController(text: data['examScore'] ?? '');
+
     var initialPages = data['total_memorized_pages']?.toString() ?? '';
-    totalMemorizedPagesController = TextEditingController(text: isJuzAmmaMode ? "0" : initialPages);
+    totalMemorizedPagesController = TextEditingController(text: selectedJuz > 0 ? "0" : initialPages);
 
-    // 👥 استخراج قائمة مشرفي الحفظ الجديد والمراجعة secara منفصل
     _loadSupervisorsFromData(data);
-
     _parseExistingData(data);
     _checkIfStudentIsCompleted();
   }
 
   void _loadSupervisorsFromData(Map<String, dynamic> data) {
-    // 1. مشرفي الحفظ الجديد
     if (data.containsKey('newMemoSupervisorIds') && data['newMemoSupervisorIds'] is List && (data['newMemoSupervisorIds'] as List).isNotEmpty) {
       List ids = data['newMemoSupervisorIds'];
       List names = data['newMemoSupervisorNames'] ?? [];
@@ -260,7 +262,6 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       _loadFallbackSupervisors(data, selectedNewMemoSupervisors);
     }
 
-    // 2. مشرفي المراجعة
     if (data.containsKey('reviewSupervisorIds') && data['reviewSupervisorIds'] is List && (data['reviewSupervisorIds'] as List).isNotEmpty) {
       List ids = data['reviewSupervisorIds'];
       List names = data['reviewSupervisorNames'] ?? [];
@@ -286,24 +287,6 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     }
   }
 
-  String _getSurahNameByPage(String pageStr) {
-    int? page = int.tryParse(pageStr.trim());
-    if (page == null || page < 1 || page > 604) return "";
-    for (var surah in quranSurahs) {
-      int start = surah['startPage'];
-      int end = surah['endPage'];
-      if (page >= start && page <= end) return surah['name'];
-    }
-    return "";
-  }
-
-  void _syncSurahFromPageController(TextEditingController ctrl, Map<String, dynamic> item) {
-    String foundSurah = _getSurahNameByPage(ctrl.text);
-    if (foundSurah.isNotEmpty && foundSurah != item['surah']) {
-      setState(() => item['surah'] = foundSurah);
-    }
-  }
-
   DateTime _parseDate(String dateStr) {
     try {
       List<String> parts = dateStr.split('-');
@@ -311,9 +294,161 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
         return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
       }
     } catch (e) {
-      return DateTime.now(); 
+      return DateTime.now();
     }
     return DateTime.now();
+  }
+
+  void _parseExistingData(Map<String, dynamic> data) {
+    newMemoRanges = _parseFormattedTextToRanges(data['newMemorization'] ?? '');
+
+    String fullReview = data['review'] ?? '';
+    String nearRev = data['nearReview'] ?? '';
+    String farRev = data['farReview'] ?? '';
+
+    if (fullReview.contains('|') && nearRev.isEmpty && farRev.isEmpty) {
+      var parts = fullReview.split('|');
+      nearRev = parts[0].trim();
+      farRev = parts.length > 1 ? parts.sublist(1).join('|').trim() : '';
+    } else if (nearRev.isEmpty && farRev.isEmpty) {
+      nearRev = fullReview;
+    }
+
+    newRevRanges = _parseFormattedTextToRanges(nearRev);
+    oldRevRanges = _parseFormattedTextToRanges(farRev);
+    readingRanges = _parseFormattedTextToRanges(data['readingBySight'] ?? '');
+
+    String oldHw = data['homework'] ?? '';
+    String nHw = data['newHomework'] ?? '';
+    String nRevHw = data['newReviewHomework'] ?? '';
+    String oRevHw = data['oldReviewHomework'] ?? '';
+
+    if (nHw.isEmpty && nRevHw.isEmpty && oRevHw.isEmpty && oldHw.isNotEmpty) {
+      if (oldHw.contains("حفظ:")) {
+        List<String> lines = oldHw.split('\n');
+        for (var line in lines) {
+          if (line.contains("حفظ:")) nHw = line.replaceAll("حفظ:", "").trim();
+          if (line.contains("مراجعة:")) oRevHw = line.replaceAll("مراجعة:", "").trim();
+        }
+      } else {
+        oRevHw = oldHw;
+      }
+    }
+
+    newHwRanges = _parseFormattedTextToRanges(nHw);
+    newRevHwRanges = _parseFormattedTextToRanges(nRevHw);
+    oldRevHwRanges = _parseFormattedTextToRanges(oRevHw);
+
+    for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+      if (list.isEmpty) {
+        list.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()});
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> _parseFormattedTextToRanges(String text) {
+    List<Map<String, dynamic>> results = [];
+    if (text.trim().isEmpty) return results;
+
+    List<String> rawParts = text.split(RegExp(r'\||\n'));
+
+    for (var part in rawParts) {
+      String trimmedPart = part.trim();
+      if (trimmedPart.isEmpty) continue;
+
+      String surahFrom = '';
+      String surahTo = '';
+      String fromPage = '';
+      String toPage = '';
+
+      RegExp digitsExp = RegExp(r'\d+');
+      var matches = digitsExp.allMatches(trimmedPart).map((m) => m.group(0)!).toList();
+
+      if (matches.length >= 2) {
+        fromPage = matches[0];
+        toPage = matches[1];
+      } else if (matches.length == 1) {
+        fromPage = matches[0];
+        toPage = matches[0];
+      }
+
+      for (var surah in quranSurahs) {
+        String sName = surah['name'];
+        if (trimmedPart.contains("من سورة $sName") || trimmedPart.contains("سورة $sName")) {
+          if (surahFrom.isEmpty) {
+            surahFrom = sName;
+          } else {
+            surahTo = sName;
+          }
+        } else if (trimmedPart.contains("إلى $sName") || trimmedPart.contains("إلى سورة $sName")) {
+          surahTo = sName;
+        }
+      }
+
+      if (surahFrom.isEmpty && fromPage.isNotEmpty) {
+        surahFrom = _getStartSurahByPage(fromPage);
+      }
+      if (surahTo.isEmpty && toPage.isNotEmpty) {
+        surahTo = _getEndSurahByPage(toPage);
+      }
+
+      var fromController = TextEditingController(text: fromPage);
+      var toController = TextEditingController(text: toPage);
+
+      results.add({
+        'surah': surahFrom,
+        'toSurah': surahTo.isNotEmpty ? surahTo : surahFrom,
+        'isFullSurah': fromPage.isEmpty && toPage.isEmpty,
+        'from': fromController,
+        'to': toController,
+      });
+    }
+
+    return results;
+  }
+
+  String _getStartSurahByPage(String pageStr) {
+    int? page = int.tryParse(pageStr.trim());
+    if (page == null || page < 1 || page > 604) return "";
+
+    var matches = quranSurahs.where((s) => s['startPage'] == page).toList();
+    if (matches.isNotEmpty) return matches.first['name'];
+
+    for (var surah in quranSurahs) {
+      if (page >= surah['startPage'] && page <= surah['endPage']) return surah['name'];
+    }
+    return "";
+  }
+
+  String _getEndSurahByPage(String pageStr) {
+    int? page = int.tryParse(pageStr.trim());
+    if (page == null || page < 1 || page > 604) return "";
+
+    var matches = quranSurahs.where((s) => s['endPage'] == page).toList();
+    if (matches.isNotEmpty) return matches.last['name'];
+
+    for (var surah in quranSurahs) {
+      if (page >= surah['startPage'] && page <= surah['endPage']) return surah['name'];
+    }
+    return "";
+  }
+
+  void _syncSurahFromPageController(TextEditingController ctrl, Map<String, dynamic> item, bool isFromPage) {
+    if (selectedJuz > 0) return;
+    String pageVal = ctrl.text.trim();
+    if (pageVal.isEmpty) return;
+
+    if (isFromPage) {
+      String foundSurah = _getStartSurahByPage(pageVal);
+      if (foundSurah.isNotEmpty && foundSurah != item['surah']) {
+        setState(() => item['surah'] = foundSurah);
+      }
+    } else {
+      String foundSurah = _getEndSurahByPage(pageVal);
+      if (foundSurah.isNotEmpty && foundSurah != item['toSurah']) {
+        setState(() => item['toSurah'] = foundSurah);
+      }
+    }
   }
 
   Future<void> _pickDate(BuildContext context, bool isDarkMode) async {
@@ -326,9 +461,9 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: accentGold, 
-              onPrimary: Colors.white, 
-              onSurface: isDarkMode ? Colors.white : primaryColor, 
+              primary: accentGold,
+              onPrimary: Colors.white,
+              onSurface: isDarkMode ? Colors.white : primaryColor,
             ),
             dialogBackgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
             textButtonTheme: TextButtonThemeData(
@@ -346,100 +481,9 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     }
   }
 
-  void _parseExistingData(Map<String, dynamic> data) {
-    _parseTextToRanges(data['newMemorization'] ?? '', newMemoRanges);
-
-    String fullReview = data['review'] ?? '';
-    String nearRev = data['nearReview'] ?? '';
-    String farRev = data['farReview'] ?? '';
-
-    if (fullReview.contains('|') && nearRev.isEmpty && farRev.isEmpty) {
-      var parts = fullReview.split('|');
-      nearRev = parts[0].trim();
-      farRev = parts.length > 1 ? parts.sublist(1).join('|').trim() : '';
-    } else if (nearRev.isEmpty && farRev.isEmpty) {
-      nearRev = fullReview;
-    }
-
-    _parseTextToRanges(nearRev, newRevRanges);
-    _parseTextToRanges(farRev, oldReviewRanges);
-    _parseTextToRanges(data['readingBySight'] ?? '', readingRanges);
-
-    String oldHw = data['homework'] ?? '';
-    String nHw = data['newHomework'] ?? '';
-    String nRevHw = data['newReviewHomework'] ?? '';
-    String oRevHw = data['oldReviewHomework'] ?? '';
-
-    if (nHw.isEmpty && nRevHw.isEmpty && oRevHw.isEmpty && oldHw.isNotEmpty) {
-      String rHwLegacy = data['reviewHomework'] ?? ''; 
-      if (rHwLegacy.isNotEmpty) {
-        oRevHw = rHwLegacy; 
-      } else {
-        if (oldHw.contains('جديد:') || oldHw.contains('مراجعة:')) {
-          var parts = oldHw.split(RegExp(r'\n|\|'));
-          for (var p in parts) {
-            if (p.contains('حفظ:') || p.contains('جديد:')) nHw = p.replaceAll(RegExp(r'حفظ:|جديد:'), '').trim();
-            if (p.contains('مراجعة:')) oRevHw = p.replaceAll('مراجعة:', '').trim();
-          }
-        } else {
-          oRevHw = oldHw; 
-        }
-      }
-    }
-
-    _parseTextToRanges(nHw, newHwRanges);
-    _parseTextToRanges(nRevHw, newRevHwRanges);
-    _parseTextToRanges(oRevHw, oldRevHwRanges);
-
-    // إضافة شريحة افتراضية إذا كانت قائمة فارغة
-    for (var list in [newMemoRanges, newRevRanges, oldReviewRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
-      if (list.isEmpty) {
-        list.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()});
-      }
-    }
-  }
-
-  void _parseTextToRanges(String text, List<Map<String, dynamic>> targetList) {
-    targetList.clear();
-    if (text.trim().isEmpty) return;
-
-    List<String> segments = text.split('|');
-    for (var seg in segments) {
-      String trimmed = seg.trim();
-      if (trimmed.isEmpty) continue;
-
-      String detectedSurah = isJuzAmmaMode ? 'النبأ' : 'البقرة';
-      TextEditingController fromCtrl = TextEditingController();
-      TextEditingController toCtrl = TextEditingController();
-
-      // البحث عن اسم السورة في النص
-      for (var s in quranSurahs) {
-        if (trimmed.contains(s['name'])) {
-          detectedSurah = s['name'];
-          break;
-        }
-      }
-
-      RegExp exp = RegExp(r'\d+');
-      var matches = exp.allMatches(trimmed).map((m) => m.group(0)!).toList();
-      if (matches.length >= 2) {
-        fromCtrl.text = matches[0];
-        toCtrl.text = matches[1];
-      } else if (matches.length == 1) {
-        fromCtrl.text = matches[0];
-      }
-
-      targetList.add({
-        'surah': detectedSurah,
-        'from': fromCtrl,
-        'to': toCtrl,
-      });
-    }
-  }
-
   void _updateTotalPages() {
-    if (isCompletedStudent || absent || didNotRecite || isJuzAmmaMode) {
-      if (isJuzAmmaMode) totalMemorizedPagesController.text = "0";
+    if (isCompletedStudent || absent || isExam || didNotRecite || selectedJuz > 0) {
+      if (selectedJuz > 0) totalMemorizedPagesController.text = "0";
       return;
     }
     int maxPage = 0;
@@ -454,41 +498,55 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     }
   }
 
-  // 🛠️ التعديل لمنع ظهور "سورة كاملة" عند ترك الآيات فارغة
   String _buildFormattedSectionText(List<Map<String, dynamic>> ranges) {
     List<String> parts = [];
     for (var item in ranges) {
-      String surah = item['surah'] ?? '';
+      String surahFrom = item['surah'] ?? '';
+      String surahTo = item['toSurah'] ?? surahFrom;
+      bool isFull = item['isFullSurah'] ?? true;
       String from = (item['from'] as TextEditingController).text.trim();
       String to = (item['to'] as TextEditingController).text.trim();
 
-      if (from.isEmpty && to.isEmpty) continue; // يتخطى الجزء عند عدم كتابة أي آيات/صفحات
+      if (surahFrom.isEmpty && from.isEmpty && to.isEmpty) continue;
 
-      if (isJuzAmmaMode) {
-        if (from.isNotEmpty && to.isNotEmpty) {
-          if (from == to) {
-            parts.add("سورة $surah (آية $from)");
+      if (selectedJuz > 0) {
+        if (surahFrom.isEmpty) continue;
+
+        if (isFull) {
+          if (surahFrom == surahTo || surahTo.isEmpty) {
+            parts.add("سورة $surahFrom");
           } else {
-            parts.add("سورة $surah (من آية $from إلى $to)");
+            parts.add("من سورة $surahFrom إلى سورة $surahTo");
           }
-        } else if (from.isNotEmpty) {
-          parts.add("سورة $surah (آية $from)");
-        } else if (to.isNotEmpty) {
-          parts.add("سورة $surah (إلى آية $to)");
+        } else {
+          if (from.isNotEmpty && to.isNotEmpty) {
+            parts.add(from == to ? "سورة $surahFrom (آية $from)" : "سورة $surahFrom (من آية $from إلى $to)");
+          } else if (from.isNotEmpty) {
+            parts.add("سورة $surahFrom (من آية $from)");
+          } else {
+            parts.add("سورة $surahFrom");
+          }
         }
       } else {
-        String sName = surah.isNotEmpty ? surah : _getSurahNameByPage(from);
-        String prefix = sName.isNotEmpty ? "سورة $sName " : "";
+        String startSurahName = surahFrom.isNotEmpty ? surahFrom : _getStartSurahByPage(from);
+        String endSurahName = surahTo.isNotEmpty ? surahTo : _getEndSurahByPage(to);
+
         if (from.isNotEmpty && to.isNotEmpty) {
           if (from == to) {
-            parts.add("$prefix(ص $from)");
+            parts.add("سورة $startSurahName (ص $from)");
           } else {
-            parts.add("$prefix(ص $from - $to)");
+            if (startSurahName == endSurahName || endSurahName.isEmpty) {
+              parts.add("سورة $startSurahName (ص $from - $to)");
+            } else {
+              parts.add("من سورة $startSurahName إلى $endSurahName (ص $from - $to)");
+            }
           }
         } else if (from.isNotEmpty) {
-          parts.add("$prefix(ص $from)");
+          parts.add("سورة $startSurahName (ص $from)");
         } else if (to.isNotEmpty) {
-          parts.add("$prefix(ص $to)");
+          parts.add("سورة $endSurahName (ص $to)");
+        } else if (startSurahName.isNotEmpty) {
+          parts.add("سورة $startSurahName");
         }
       }
     }
@@ -503,18 +561,16 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
             .collection('students')
             .doc(studentId)
             .get();
-            
+
         if (studentDoc.exists && studentDoc.data() != null) {
           Map<String, dynamic> sData = studentDoc.data() as Map<String, dynamic>;
           if (sData['studentType'] == 'completed') {
-            setState(() {
-              isCompletedStudent = true;
-            });
+            setState(() => isCompletedStudent = true);
           }
         }
       }
     } catch (e) {
-      print("Error checking student type in edit page: $e");
+      print("Error checking student type: $e");
     } finally {
       if (mounted) setState(() => checkingStudentType = false);
     }
@@ -522,10 +578,10 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
   @override
   void dispose() {
-    _bgController.dispose(); 
+    _bgController.dispose();
     _disposeRanges(newMemoRanges);
     _disposeRanges(newRevRanges);
-    _disposeRanges(oldReviewRanges);
+    _disposeRanges(oldRevRanges);
     _disposeRanges(readingRanges);
     _disposeRanges(newHwRanges);
     _disposeRanges(newRevHwRanges);
@@ -533,7 +589,9 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
     religiousActivities.dispose();
     notes.dispose();
-    totalMemorizedPagesController.dispose(); 
+    absenceReasonController.dispose();
+    examScoreController.dispose();
+    totalMemorizedPagesController.dispose();
     super.dispose();
   }
 
@@ -557,7 +615,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
         setState(() {
           _isListening = true;
           _activeController = controller;
-          _initialText = controller.text; 
+          _initialText = controller.text;
         });
         _speech.listen(
           onResult: (val) {
@@ -568,7 +626,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
               });
             }
           },
-          localeId: 'ar-SA', 
+          localeId: 'ar-SA',
         );
       }
     } else {
@@ -580,13 +638,14 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   Widget _buildMicButton(TextEditingController controller, bool isDarkMode) {
     bool isActive = _isListening && _activeController == controller;
     return IconButton(
+      key: ValueKey('mic_${controller.hashCode}'),
       tooltip: "تحدث للإدخال",
       icon: Icon(
         isActive ? Icons.mic : Icons.mic_none,
         color: isActive ? Colors.redAccent : (isDarkMode ? Colors.white60 : Colors.black54),
       ),
       onPressed: () {
-        HapticFeedback.lightImpact(); 
+        HapticFeedback.lightImpact();
         _listen(controller);
       },
     );
@@ -605,7 +664,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     );
   }
 
-  Widget _buildMiniNumberInput(TextEditingController ctrl, bool isDarkMode, {String hint = "---", Map<String, dynamic>? itemToSync}) {
+  Widget _buildMiniNumberInput(TextEditingController ctrl, bool isDarkMode, {String hint = "---", Map<String, dynamic>? itemToSync, bool isFromPage = true}) {
     return SizedBox(
       height: 42,
       child: TextField(
@@ -616,9 +675,9 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
         style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
         onChanged: (val) {
           if (itemToSync != null) {
-            _syncSurahFromPageController(ctrl, itemToSync);
+            _syncSurahFromPageController(ctrl, itemToSync, isFromPage);
           } else {
-            setState(() {}); 
+            setState(() {});
           }
           _updateTotalPages();
         },
@@ -631,96 +690,6 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
         ),
       ),
-    );
-  }
-
-  // 👥 نافذة مرنة لاختيار مشرفين لقسم محدد
-  void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode, List<Map<String, String>> targetList, String title) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.7,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-            border: Border.all(color: isDarkMode ? Colors.white12 : Colors.black12),
-          ),
-          child: StatefulBuilder(
-            builder: (context, setModalState) {
-              return Column(
-                children: [
-                  Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
-                  const SizedBox(height: 20),
-                  Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
-                  const SizedBox(height: 15),
-                  Expanded(
-                    child: FutureBuilder<List<QuerySnapshot>>(
-                      future: Future.wait([
-                        FirebaseFirestore.instance.collection('users').get(const GetOptions(source: Source.cache)),
-                        FirebaseFirestore.instance.collection('supervisors').get(const GetOptions(source: Source.cache))
-                      ]),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                        
-                        List<Map<String, String>> allStaff = [];
-                        if (snapshot.hasData) {
-                          for (var doc in snapshot.data![0].docs) {
-                            allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
-                          }
-                          for (var doc in snapshot.data![1].docs) {
-                            allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
-                          }
-                        }
-
-                        return ListView.builder(
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: allStaff.length,
-                          itemBuilder: (context, index) {
-                            final staff = allStaff[index];
-                            final isSelected = targetList.any((s) => s['id'] == staff['id']);
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              decoration: BoxDecoration(
-                                color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
-                                borderRadius: BorderRadius.circular(15),
-                                border: Border.all(color: isSelected ? accentGold : Colors.transparent),
-                              ),
-                              child: CheckboxListTile(
-                                activeColor: accentGold,
-                                title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
-                                value: isSelected,
-                                onChanged: (val) {
-                                  setModalState(() {
-                                    if (val == true) {
-                                      targetList.add(staff);
-                                    } else {
-                                      if (targetList.length > 1) {
-                                        targetList.removeWhere((s) => s['id'] == staff['id']);
-                                      } else {
-                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب اختيار مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
-                                      }
-                                    }
-                                  });
-                                  setState(() {}); 
-                                },
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              );
-            }
-          ),
-        );
-      }
     );
   }
 
@@ -769,6 +738,95 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     );
   }
 
+  void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode, List<Map<String, String>> targetList, String title) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border.all(color: isDarkMode ? Colors.white12 : Colors.black12),
+          ),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Column(
+                children: [
+                  Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
+                  const SizedBox(height: 20),
+                  Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                  const SizedBox(height: 15),
+                  Expanded(
+                    child: FutureBuilder<List<QuerySnapshot>>(
+                      future: Future.wait([
+                        FirebaseFirestore.instance.collection('users').get(),
+                        FirebaseFirestore.instance.collection('supervisors').get()
+                      ]),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+                        List<Map<String, String>> allStaff = [];
+                        if (snapshot.hasData) {
+                          for (var doc in snapshot.data![0].docs) {
+                            allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مدير'});
+                          }
+                          for (var doc in snapshot.data![1].docs) {
+                            allStaff.add({'id': doc.id, 'name': (doc.data() as Map)['name'] ?? 'مشرف'});
+                          }
+                        }
+
+                        return ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: allStaff.length,
+                          itemBuilder: (context, index) {
+                            final staff = allStaff[index];
+                            final isSelected = targetList.any((s) => s['id'] == staff['id']);
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected ? accentGold.withOpacity(0.2) : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(color: isSelected ? accentGold : Colors.transparent),
+                              ),
+                              child: CheckboxListTile(
+                                activeColor: accentGold,
+                                title: Text(staff['name']!, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isDarkMode ? Colors.white : Colors.black87)),
+                                value: isSelected,
+                                onChanged: (val) {
+                                  setModalState(() {
+                                    if (val == true) {
+                                      targetList.add(staff);
+                                    } else {
+                                      if (targetList.length > 1) {
+                                        targetList.removeWhere((s) => s['id'] == staff['id']);
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب اختيار مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
+                                      }
+                                    }
+                                  });
+                                  setState(() {});
+                                },
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            }
+          ),
+        );
+      }
+    );
+  }
+
   void _showSurahPagesPicker(BuildContext context, Map<String, dynamic> surah, TextEditingController fromCtrl, TextEditingController toCtrl, bool isDarkMode) {
     int start = surah['startPage'];
     int end = surah['endPage'];
@@ -776,50 +834,81 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                "صفحات سورة ${surah['name']} (من $start إلى $end)",
-                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor, fontSize: 16),
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.85,
+          builder: (context, scrollController) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              decoration: BoxDecoration(
+                color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  )
+                ]
               ),
-              const SizedBox(height: 15),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: pages.map((p) {
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        fromCtrl.text = p.toString();
-                        toCtrl.text = p.toString();
-                        _updateTotalPages();
-                      });
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: accentGold.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: accentGold),
-                      ),
-                      child: Text("ص $p", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 45,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? Colors.white30 : Colors.black26,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                  );
-                }).toList(),
+                  ),
+                  const SizedBox(height: 15),
+                  Text(
+                    "صفحات سورة ${surah['name']} (من $start إلى $end)",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.white : primaryColor, fontSize: 16),
+                  ),
+                  const SizedBox(height: 15),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      physics: const BouncingScrollPhysics(),
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        alignment: WrapAlignment.center,
+                        children: pages.map((p) {
+                          return InkWell(
+                            onTap: () {
+                              setState(() {
+                                fromCtrl.text = p.toString();
+                                toCtrl.text = p.toString();
+                                _updateTotalPages();
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: accentGold.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: accentGold),
+                              ),
+                              child: Text("ص $p", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
               ),
-              const SizedBox(height: 20),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -833,9 +922,21 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     required VoidCallback onRemove,
     required bool isDarkMode,
   }) {
-    List<Map<String, dynamic>> filteredSurahs = isJuzAmmaMode
-        ? quranSurahs.where((s) => (s['id'] as int) >= 78).toList()
-        : quranSurahs;
+    List<Map<String, dynamic>> filteredSurahs;
+
+    if (selectedJuz == 30) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 78).toList();
+    } else if (selectedJuz == 29) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 67 && (s['id'] as int) <= 77).toList();
+    } else if (selectedJuz == 28) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 58 && (s['id'] as int) <= 66).toList();
+    } else if (selectedJuz == 27) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 51 && (s['id'] as int) <= 57).toList();
+    } else if (selectedJuz == 26) {
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 46 && (s['id'] as int) <= 50).toList();
+    } else {
+      filteredSurahs = quranSurahs;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
@@ -887,17 +988,26 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
           ...ranges.asMap().entries.map((entry) {
             int index = entry.key;
             var item = entry.value;
-            
+
             TextEditingController fromCtrl = item['from'];
-            if (!isJuzAmmaMode && fromCtrl.text.isNotEmpty) {
-              String autoSurah = _getSurahNameByPage(fromCtrl.text);
-              if (autoSurah.isNotEmpty) {
-                item['surah'] = autoSurah;
+            TextEditingController toCtrl = item['to'];
+
+            if (selectedJuz == 0) {
+              if (fromCtrl.text.isNotEmpty) {
+                String autoSurah = _getStartSurahByPage(fromCtrl.text);
+                if (autoSurah.isNotEmpty) item['surah'] = autoSurah;
+              }
+              if (toCtrl.text.isNotEmpty) {
+                String autoToSurah = _getEndSurahByPage(toCtrl.text);
+                if (autoToSurah.isNotEmpty) item['toSurah'] = autoToSurah;
               }
             }
 
-            String currentSurah = item['surah'] ?? filteredSurahs.first['name'];
-            var selectedSurahData = quranSurahs.firstWhere((s) => s['name'] == currentSurah, orElse: () => quranSurahs.first);
+            String currentSurah = item['surah'] ?? '';
+            String currentToSurah = item['toSurah'] ?? '';
+            bool isFullSurah = item['isFullSurah'] ?? true;
+
+            var selectedSurahData = quranSurahs.firstWhere((s) => s['name'] == currentSurah, orElse: () => {'name': '', 'startPage': 1, 'endPage': 1});
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 12.0),
@@ -906,60 +1016,167 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                 children: [
                   if (ranges.length > 1)
                     Text("المقطع ${index + 1}:", style: TextStyle(color: accentGold, fontWeight: FontWeight.bold, fontSize: 11, fontFamily: 'Cairo')),
-                  
-                  DropdownButtonFormField<String>(
-                    value: filteredSurahs.any((s) => s['name'] == currentSurah) ? currentSurah : filteredSurahs.first['name'],
-                    dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: "اختر السورة",
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      filled: true,
-                      fillColor: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.7),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+
+                  if (selectedJuz > 0) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("النطاق:", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold)),
+                        Row(
+                          children: [
+                            Text(isFullSurah ? "السورة كاملة 📜" : "آيات محددة 🔢", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: accentGold, fontWeight: FontWeight.bold)),
+                            Switch(
+                              value: isFullSurah,
+                              activeColor: accentGold,
+                              onChanged: (val) {
+                                setState(() {
+                                  item['isFullSurah'] = val;
+                                  if (val) {
+                                    fromCtrl.clear();
+                                    toCtrl.clear();
+                                  }
+                                });
+                              },
+                            ),
+                          ],
+                        )
+                      ],
                     ),
-                    items: filteredSurahs.map((s) => DropdownMenuItem(
-                      value: s['name'].toString(),
-                      child: Text("${s['id']}- سورة ${s['name']}"),
-                    )).toList(),
-                    onChanged: (v) {
-                      setState(() {
-                        item['surah'] = v;
-                        if (!isJuzAmmaMode) {
-                          var sData = quranSurahs.firstWhere((element) => element['name'] == v);
-                          (item['from'] as TextEditingController).text = sData['startPage'].toString();
-                          (item['to'] as TextEditingController).text = sData['endPage'].toString();
-                          _updateTotalPages();
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 8),
 
-                  Row(
-                    children: [
-                      Text(isJuzAmmaMode ? "من آية:" : "من ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 6),
-                      Expanded(child: _buildMiniNumberInput(item['from'], isDarkMode, hint: isJuzAmmaMode ? "آية" : "صفحة", itemToSync: isJuzAmmaMode ? null : item)),
-                      const SizedBox(width: 10),
-                      Text(isJuzAmmaMode ? "إلى آية:" : "إلى ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 6),
-                      Expanded(child: _buildMiniNumberInput(item['to'], isDarkMode, hint: isJuzAmmaMode ? "آية" : "صفحة", itemToSync: isJuzAmmaMode ? null : item)),
-                    ],
-                  ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: filteredSurahs.any((s) => s['name'] == currentSurah) ? currentSurah : '',
+                            dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12),
+                            decoration: InputDecoration(
+                              labelText: isFullSurah ? "من سورة" : "السورة",
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              filled: true,
+                              fillColor: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.7),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: '', child: Text("-- غير محدد --", style: TextStyle(color: Colors.grey))),
+                              ...filteredSurahs.map((s) => DropdownMenuItem(
+                                value: s['name'].toString(),
+                                child: Text(s['name'].toString()),
+                              )),
+                            ],
+                            onChanged: (v) {
+                              setState(() {
+                                item['surah'] = v ?? '';
+                                if (isFullSurah && (item['toSurah'] == null || item['toSurah'].toString().isEmpty)) {
+                                  item['toSurah'] = v ?? '';
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                        if (isFullSurah) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: filteredSurahs.any((s) => s['name'] == currentToSurah) ? currentToSurah : '',
+                              dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                              style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12),
+                              decoration: InputDecoration(
+                                labelText: "إلى سورة",
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                filled: true,
+                                fillColor: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.7),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                              ),
+                              items: [
+                                const DropdownMenuItem(value: '', child: Text("-- غير محدد --", style: TextStyle(color: Colors.grey))),
+                                ...filteredSurahs.map((s) => DropdownMenuItem(
+                                  value: s['name'].toString(),
+                                  child: Text(s['name'].toString()),
+                                )),
+                              ],
+                              onChanged: (v) {
+                                setState(() {
+                                  item['toSurah'] = v ?? '';
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
 
-                  if (!isJuzAmmaMode) ...[
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                        onPressed: () => _showSurahPagesPicker(context, selectedSurahData, item['from'], item['to'], isDarkMode),
-                        icon: const Icon(Icons.menu_book_rounded, size: 14, color: Colors.orangeAccent),
-                        label: Text("عرض صفحات سورة ${selectedSurahData['name']}", style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                    if (!isFullSurah) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text("من آية:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 6),
+                          Expanded(child: _buildMiniNumberInput(item['from'], isDarkMode, hint: "بداية")),
+                          const SizedBox(width: 10),
+                          Text("إلى آية:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 6),
+                          Expanded(child: _buildMiniNumberInput(item['to'], isDarkMode, hint: "نهاية")),
+                        ],
                       ),
+                    ],
+                  ] else ...[
+                    DropdownButtonFormField<String>(
+                      value: filteredSurahs.any((s) => s['name'] == currentSurah) ? currentSurah : '',
+                      dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: "اختر السورة (تتغير تلقائياً حسب الصفحات)",
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        filled: true,
+                        fillColor: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.7),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: '', child: Text("-- غير محدد --", style: TextStyle(color: Colors.grey))),
+                        ...filteredSurahs.map((s) => DropdownMenuItem(
+                          value: s['name'].toString(),
+                          child: Text("${s['id']}- سورة ${s['name']}"),
+                        )),
+                      ],
+                      onChanged: (v) {
+                        setState(() {
+                          item['surah'] = v ?? '';
+                          if (v != null && v.isNotEmpty) {
+                            var sData = quranSurahs.firstWhere((element) => element['name'] == v);
+                            (item['from'] as TextEditingController).text = sData['startPage'].toString();
+                            (item['to'] as TextEditingController).text = sData['endPage'].toString();
+                            _updateTotalPages();
+                          }
+                        });
+                      },
                     ),
-                  ]
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text("من ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 6),
+                        Expanded(child: _buildMiniNumberInput(item['from'], isDarkMode, hint: "صفحة", itemToSync: item, isFromPage: true)),
+                        const SizedBox(width: 10),
+                        Text("إلى ص:", style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 6),
+                        Expanded(child: _buildMiniNumberInput(item['to'], isDarkMode, hint: "صفحة", itemToSync: item, isFromPage: false)),
+                      ],
+                    ),
+
+                    if (selectedSurahData['name'].toString().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                          onPressed: () => _showSurahPagesPicker(context, selectedSurahData, item['from'], item['to'], isDarkMode),
+                          icon: const Icon(Icons.menu_book_rounded, size: 14, color: Colors.orangeAccent),
+                          label: Text("عرض صفحات سورة ${selectedSurahData['name']}", style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ]
+                  ],
                 ],
               ),
             );
@@ -969,10 +1186,61 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     );
   }
 
+  Widget _buildJuzChip(int juzNum, String title, bool isDarkMode) {
+    bool isSelected = selectedJuz == juzNum;
+    return ChoiceChip(
+      label: Text(
+        title,
+        style: TextStyle(
+          fontFamily: 'Cairo',
+          fontSize: 11,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? Colors.black : (isDarkMode ? Colors.white70 : Colors.black87),
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: accentGold,
+      backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
+      elevation: isSelected ? 2 : 0,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() {
+            selectedJuz = juzNum;
+            for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+              for (var item in list) {
+                item['surah'] = '';
+                item['toSurah'] = '';
+                item['isFullSurah'] = true;
+                (item['from'] as TextEditingController).clear();
+                (item['to'] as TextEditingController).clear();
+              }
+            }
+            if (selectedJuz > 0) {
+              totalMemorizedPagesController.text = "0";
+            }
+          });
+        }
+      },
+    );
+  }
+
   save() async {
+    if (loading) return;
+
+    if (isExam && !absent && examScoreController.text.trim().isEmpty) {
+      GlassToast.show(
+        context,
+        title: "بيانات ناقصة",
+        message: "يرجى إدخال علامة الاختبار أولاً ❌",
+        icon: Icons.error_outline_rounded,
+        color: Colors.redAccent,
+      );
+      return;
+    }
+
     setState(() => loading = true);
 
-    double totalPages = (isJuzAmmaMode) ? 0.0 : (isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0));
+    double totalPages = (selectedJuz > 0) ? 0.0 : (isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0));
     String studentId = widget.data['studentId'] ?? '';
 
     final String monthStr = _selectedDate.month.toString().padLeft(2, '0');
@@ -982,25 +1250,23 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     DateTime realNow = DateTime.now();
     String actualEditedTimeFormatted = DateFormat('yyyy-MM-dd hh:mm a').format(realNow);
 
-    String finalNewMemo = (!hasNewMemorization || absent || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newMemoRanges);
-    String finalNearReview = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevRanges);
-    String finalFarReview = (!hasReview || absent || didNotRecite) ? '' : _buildFormattedSectionText(oldReviewRanges);
-    
-    String finalReading = (!hasReading || absent || didNotRecite) ? '' : _buildFormattedSectionText(readingRanges);
+    String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newMemoRanges);
+    String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevRanges);
+    String finalFarReview = (!hasReview || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(oldRevRanges);
+    String finalReading = (!hasReading || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(readingRanges);
 
-    String finalMemoRating = (!hasNewMemorization || absent || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
-    
-    String finalNewRevRating = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
-    String finalOldRevRating = (!hasReview || absent || isCompletedStudent || didNotRecite) ? '' : oldReviewRating;
+    String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
+    String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
+    String finalOldRevRating = (!hasReview || absent || isExam || didNotRecite) ? '' : oldReviewRating;
     String finalFallbackRevRating = isCompletedStudent ? newReviewRating : (finalNewRevRating.isNotEmpty ? finalNewRevRating : finalOldRevRating);
 
-    String finalNewHW = (absent || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newHwRanges);
-    String finalNewRevHW = (absent || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevHwRanges);
-    String finalOldRevHW = (absent || didNotRecite) ? '' : _buildFormattedSectionText(oldRevHwRanges);
-    
+    String finalNewHW = (isCompletedStudent) ? '' : _buildFormattedSectionText(newHwRanges);
+    String finalNewRevHW = (isCompletedStudent) ? '' : _buildFormattedSectionText(newRevHwRanges);
+    String finalOldRevHW = _buildFormattedSectionText(oldRevHwRanges);
+
     String combinedHW = "";
     if (isCompletedStudent) {
-      combinedHW = finalOldRevHW; 
+      combinedHW = finalOldRevHW;
     } else {
       if (finalNewHW.isNotEmpty) combinedHW += "حفظ: $finalNewHW";
       List<String> revParts = [];
@@ -1022,174 +1288,130 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     final Map<String, dynamic> updateData = {
       'studentId': studentId,
       'studentName': widget.data['studentName'] ?? '',
-      'date': date, 
-      'actualEditedAt': actualEditedTimeFormatted, 
-      'lastUpdatedTimestamp': FieldValue.serverTimestamp(), 
+      'date': date,
+      'actualEditedAt': actualEditedTimeFormatted,
+      'lastUpdatedTimestamp': FieldValue.serverTimestamp(),
       'absent': absent,
+      'isExam': isExam,
       'didNotRecite': didNotRecite,
-      'isJuzAmma': isJuzAmmaMode,
-      'supervisorId': newMemoSupIds.isNotEmpty ? newMemoSupIds.first : widget.data['supervisorId'], 
-      'supervisorName': newMemoSupNames.isNotEmpty ? newMemoSupNames.first : widget.data['supervisorName'], 
+      'isJuzAmma': selectedJuz == 30,
+      'selectedJuz': selectedJuz,
+      'examScore': isExam && !absent ? examScoreController.text.trim() : '',
+      'supervisorId': newMemoSupIds.isNotEmpty ? newMemoSupIds.first : widget.data['supervisorId'],
+      'supervisorName': newMemoSupNames.isNotEmpty ? newMemoSupNames.first : widget.data['supervisorName'],
       'newMemoSupervisorIds': newMemoSupIds,
       'newMemoSupervisorNames': newMemoSupNames,
       'reviewSupervisorIds': reviewSupIds,
       'reviewSupervisorNames': reviewSupNames,
       'newMemorization': finalNewMemo,
-      'review': (absent || didNotRecite || !hasReview) ? '' : (isCompletedStudent ? finalFarReview : "$finalNearReview | $finalFarReview"),
-      'nearReview': finalNearReview, 
-      'farReview': finalFarReview,   
+      'review': (absent || isExam || didNotRecite || !hasReview) ? '' : (isCompletedStudent ? finalFarReview : "$finalNearReview | $finalFarReview"),
+      'nearReview': finalNearReview,
+      'farReview': finalFarReview,
       'homework': combinedHW,
       'newHomework': finalNewHW,
       'newReviewHomework': finalNewRevHW,
       'oldReviewHomework': finalOldRevHW,
-      'readingBySight': finalReading, 
+      'readingBySight': finalReading,
       'memorizationRating': finalMemoRating,
-      'newReviewRating': finalNewRevRating, 
-      'oldReviewRating': finalOldRevRating, 
-      'reviewRating': (absent || didNotRecite) ? '' : finalFallbackRevRating, 
-      'rating': (absent || didNotRecite) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)), 
-      'studentStatus': absent ? '' : studentStatus,
-      'religiousActivities': absent ? '' : religiousActivities.text.trim(),
+      'newReviewRating': finalNewRevRating,
+      'oldReviewRating': finalOldRevRating,
+      'reviewRating': (absent || isExam || didNotRecite) ? '' : finalFallbackRevRating,
+      'rating': (absent || isExam || didNotRecite) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)),
+      'studentStatus': (absent || isExam) ? '' : studentStatus,
+      'religiousActivities': (absent || isExam) ? '' : religiousActivities.text.trim(),
       'notes': notes.text.trim(),
-      if (!absent && !didNotRecite) 'total_memorized_pages': totalPages,
+      'absenceType': absent ? absenceType : '',
+      'absenceReason': absent ? absenceReasonController.text.trim() : '',
+      if (!absent && !isExam && !didNotRecite) 'total_memorized_pages': totalPages,
     };
 
-    FirebaseFirestore.instance.collection('sessions').doc(widget.sessionId).set(updateData, SetOptions(merge: true)).then((_) {
+    try {
+      await FirebaseFirestore.instance.collection('sessions').doc(widget.sessionId).set(updateData, SetOptions(merge: true));
       sessionService.recalculateConsecutiveAbsences(studentId);
-    }).catchError((e) {
-      print("خطأ في تحديث الجلسة: $e");
-    });
 
-    if (!absent && !didNotRecite && studentId.isNotEmpty && !isCompletedStudent) {
-      FirebaseFirestore.instance.collection('students').doc(studentId).update({
-        'memorizedPages': totalPages,
-      }).catchError((e) {
-        print("خطأ في تحديث الطالب: $e");
-      });
-    }
-
-    if (studentId.isNotEmpty) {
-      String notifyTitle = "✏️ تعديل في بيانات الحلقة";
-      String notifyBody = "";
-      String notifyType = "regular";
-
-      if (absent) {
-        notifyTitle = "🚨 تعديل: تسجيل غياب طالب";
-        notifyBody = "تم تعديل الجلسة وتوثيق غياب الطالب اليوم بـ السجل الإداري.";
-        notifyType = "absent";
-      } else if (didNotRecite) {
-        notifyTitle = "ℹ️ تعديل: حضور بدون تسميع";
-        notifyBody = "تم تعديل الجلسة وتوثيق أن الطالب حضر ولكنه لم يسمّع أو يقرأ شيئاً.";
-        notifyType = "info";
-      } else {
-        String bodyText = isCompletedStudent
-            ? "تم تحديث وتعديل سجل مراجعة الختمة الشاملة بنجاح"
-            : "تم تعديل بيانات الإنجاز اليومي بنجاح";
-            
-        if (hasNewMemorization && finalMemoRating.isNotEmpty) {
-          bodyText += "، الحفظ: ($finalMemoRating)";
-        }
-        if (hasReview) {
-          if (isCompletedStudent) {
-            bodyText += "، المراجعة: ($finalFallbackRevRating)";
-          } else {
-            if (finalNewRevRating.isNotEmpty) bodyText += "، مراجعة الجديد: ($finalNewRevRating)";
-            if (finalOldRevRating.isNotEmpty) bodyText += "، مراجعة القديم: ($finalOldRevRating)";
-          }
-        }
-        
-        notifyBody = bodyText;
-        notifyType = "regular";
+      if (!absent && !isExam && !didNotRecite && studentId.isNotEmpty && !isCompletedStudent) {
+        FirebaseFirestore.instance.collection('students').doc(studentId).update({
+          'memorizedPages': totalPages,
+        }).catchError((e) => print("خطأ في تحديث الطالب: $e"));
       }
 
-      NotificationService.sendAndSaveNotification(
-        studentId: studentId,
-        title: notifyTitle,
-        body: notifyBody,
-        type: notifyType,
-        context: context, 
-      ).then((_) {
-        print("✅ تم إرسال إشعار التعديل فوراً (أونلاين)");
-      }).catchError((error) async {
-        print("⚠️ فشل الإرسال أوفلاين، جاري تحويل إشعار التعديل لطابور الانتظار: $error");
-        await NotificationQueueManager.addToQueue(
+      if (studentId.isNotEmpty) {
+        String notifyTitle = "✏️ تعديل في بيانات الحلقة";
+        String notifyBody = absent
+            ? "تم تعديل الجلسة وتسجيل غياب الطالب اليوم ($absenceType)."
+            : (isExam ? "تم تعديل الجلسة وتحديث درجة الاختبار (${examScoreController.text.trim()} من 100)" : "تم تعديل وتحديث بيانات يومية الطالب بنجاح.");
+        String notifyType = absent ? "absent" : (isExam ? "exam" : "regular");
+
+        NotificationService.sendAndSaveNotification(
           studentId: studentId,
           title: notifyTitle,
           body: notifyBody,
           type: notifyType,
-        );
-      });
+          context: context,
+        ).catchError((error) async {
+          await NotificationQueueManager.addToQueue(
+            studentId: studentId,
+            title: notifyTitle,
+            body: notifyBody,
+            type: notifyType,
+          );
+        });
+      }
+
+      if (!mounted) return;
+
+      GlassToast.show(
+        context,
+        title: "تم التحديث",
+        message: "تم تحديث بيانات الجلسة بنجاح 🔄",
+        icon: Icons.edit_note_rounded,
+        color: Colors.lightBlueAccent,
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      print("خطأ في تحديث الجلسة: $e");
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
-
-    if (!mounted) return;
-    setState(() => loading = false);
-
-    GlassToast.show(
-      context,
-      title: "تم التحديث",
-      message: "تم تحديث بيانات الجلسة بنجاح 🔄",
-      icon: Icons.edit_note_rounded,
-      color: Colors.lightBlueAccent,
-    );
-
-    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+    final String studentName = widget.data['studentName'] ?? 'الطالب';
 
     return OfflineWrapper(
       child: Scaffold(
-        extendBodyBehindAppBar: true, 
+        extendBodyBehindAppBar: true,
         backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
         appBar: AppBar(
           elevation: 0,
-          backgroundColor: Colors.transparent, 
-          title: Text("تعديل بيانات الجلسة", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
+          backgroundColor: Colors.transparent,
+          title: Text(studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
           iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
         ),
         body: checkingStudentType
-            ? const Center(child: CircularProgressIndicator()) 
+            ? const Center(child: CircularProgressIndicator())
             : Stack(
                 children: [
                   Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isDarkMode
-                            ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
-                            : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
+                    width: double.infinity, height: double.infinity,
+                    decoration: BoxDecoration(gradient: LinearGradient(colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
                   ),
-                  
                   AnimatedBuilder(
                     animation: _bgAnimation,
                     builder: (context, child) {
                       return Stack(
                         children: [
                           Positioned(
-                            top: -20 + _bgAnimation.value,
-                            left: -50 - (_bgAnimation.value / 2),
-                            child: Container(
-                              width: 250,
-                              height: 250,
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)),
-                            ),
+                            top: -50 + _bgAnimation.value, right: -50 - (_bgAnimation.value / 2),
+                            child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12)))
                           ),
                           Positioned(
-                            bottom: 100 - _bgAnimation.value,
-                            right: -60 + _bgAnimation.value,
-                            child: Container(
-                              width: 300,
-                              height: 300,
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)),
-                            ),
+                            bottom: 100 - _bgAnimation.value, left: -80 + _bgAnimation.value,
+                            child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2)))
                           ),
                         ],
                       );
@@ -1209,7 +1431,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                               children: [
                                 Container(
                                   decoration: BoxDecoration(
-                                    color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.6), 
+                                    color: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.6),
                                     borderRadius: BorderRadius.circular(15)
                                   ),
                                   child: ListTile(
@@ -1230,15 +1452,20 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
                                 Container(
                                   decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
-                                  child: SwitchListTile(
-                                    activeColor: Colors.orangeAccent,
+                                  child: CheckboxListTile(
+                                    activeColor: Colors.orange,
                                     value: absent,
-                                    title: Text("تسجيل غياب في هذا اليوم", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 15)),
+                                    title: Text("تسجيل الطالب غائب؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                                     secondary: Icon(absent ? Icons.person_off : Icons.person, color: isDarkMode ? Colors.white70 : primaryColor),
-                                    onChanged: (v) => setState(() {
-                                      absent = v;
-                                      if (absent) didNotRecite = false; 
-                                    }),
+                                    onChanged: (v) {
+                                      setState(() {
+                                        absent = v ?? false;
+                                        if (absent) {
+                                          isExam = false;
+                                          didNotRecite = false;
+                                        }
+                                      });
+                                    },
                                   ),
                                 ),
                                 if (!absent) ...[
@@ -1246,14 +1473,32 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                   Container(
                                     decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
                                     child: SwitchListTile(
+                                      activeColor: Colors.teal,
+                                      value: isExam,
+                                      title: Text("تسجيل كـ (جلسة اختبار) ؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                      secondary: Icon(Icons.assignment_turned_in, color: isExam ? Colors.teal : (isDarkMode ? Colors.white70 : primaryColor)),
+                                      onChanged: (v) {
+                                        setState(() {
+                                          isExam = v;
+                                          if (isExam) didNotRecite = false;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
+                                    child: SwitchListTile(
                                       activeColor: Colors.blueGrey,
                                       value: didNotRecite,
-                                      title: Text("حضر لكن لم يقرأ/يسمّع شيء؟", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 15)),
+                                      title: Text("حضر لكن لم يقرأ/يسمّع شيء?", style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                                       secondary: Icon(Icons.speaker_notes_off_outlined, color: didNotRecite ? Colors.blueGrey : (isDarkMode ? Colors.white70 : primaryColor)),
-                                      onChanged: (v) => setState(() {
-                                        didNotRecite = v;
-                                        if (didNotRecite) absent = false;
-                                      }),
+                                      onChanged: (v) {
+                                        setState(() {
+                                          didNotRecite = v;
+                                          if (didNotRecite) isExam = false;
+                                        });
+                                      },
                                     ),
                                   ),
                                 ],
@@ -1262,39 +1507,60 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                           ),
                           const SizedBox(height: 20),
 
-                          if (!absent && !didNotRecite) ...[
+                          if (!absent && !isExam && !didNotRecite) ...[
                             _buildSectionCard(
-                              title: isCompletedStudent ? "تعديل مراجعة الختمة الشاملة 👑" : "تعديل الإنجاز القرآني",
-                              icon: Icons.edit_calendar,
+                              title: isCompletedStudent ? "منظومة مراجعة الختمة الشاملة 👑" : "الإنجاز القرآني اليومي",
+                              icon: Icons.menu_book,
                               isDarkMode: isDarkMode,
                               child: Column(
                                 children: [
                                   if (!isCompletedStudent) ...[
                                     Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                                       decoration: BoxDecoration(
-                                        color: isJuzAmmaMode ? accentGold.withOpacity(0.18) : (isDarkMode ? Colors.black26 : Colors.white30),
+                                        color: isDarkMode ? Colors.black26 : Colors.white30,
                                         borderRadius: BorderRadius.circular(15),
-                                        border: Border.all(color: isJuzAmmaMode ? accentGold : Colors.transparent),
+                                        border: Border.all(color: selectedJuz > 0 ? accentGold : Colors.transparent, width: 1.2),
                                       ),
-                                      child: SwitchListTile(
-                                        activeColor: accentGold,
-                                        value: isJuzAmmaMode,
-                                        title: const Text("طالب في (جزء عمَّ) 👶", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                                        subtitle: const Text("لتسجيل أسماء السور ورقم الآيات لكافة الأقسام والواجبات", style: TextStyle(fontFamily: 'Cairo', fontSize: 11)),
-                                        onChanged: (v) {
-                                          setState(() {
-                                            isJuzAmmaMode = v;
-                                            String defaultSurah = isJuzAmmaMode ? 'النبأ' : 'البقرة';
-                                            for (var list in [newMemoRanges, newRevRanges, oldReviewRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
-                                              for (var item in list) {
-                                                item['surah'] = defaultSurah;
-                                                (item['from'] as TextEditingController).clear();
-                                                (item['to'] as TextEditingController).clear();
-                                              }
-                                            }
-                                            if (isJuzAmmaMode) totalMemorizedPagesController.text = "0";
-                                          });
-                                        },
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(Icons.style_rounded, size: 16, color: accentGold),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                "حدد نظام التسميع:",
+                                                style: TextStyle(
+                                                  fontFamily: 'Cairo',
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                  color: isDarkMode ? Colors.white70 : primaryColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            physics: const BouncingScrollPhysics(),
+                                            child: Row(
+                                              children: [
+                                                _buildJuzChip(0, "العادي (صفحات)", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(30, "جزء عمَّ 👶", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(29, "جزء تبارك", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(28, "قد سمع", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(27, "الذاريات", isDarkMode),
+                                                const SizedBox(width: 6),
+                                                _buildJuzChip(26, "الأحقاف", isDarkMode),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                     const SizedBox(height: 12),
@@ -1317,19 +1583,19 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                       title: "الحفظ الجديد",
                                       icon: Icons.star_border,
                                       ranges: newMemoRanges,
-                                      onAdd: () => setState(() => newMemoRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onAdd: () => setState(() => newMemoRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
                                       onRemove: () { if (newMemoRanges.length > 1) setState(() { var r = newMemoRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
                                       isDarkMode: isDarkMode,
                                     ),
                                   ],
-                                  
+
                                   if (hasReview) ...[
                                     if (!isCompletedStudent) ...[
                                       _buildUniversalQuranSection(
                                         title: "مراجعة جديد",
                                         icon: Icons.auto_stories_outlined,
                                         ranges: newRevRanges,
-                                        onAdd: () => setState(() => newRevRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                        onAdd: () => setState(() => newRevRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
                                         onRemove: () { if (newRevRanges.length > 1) setState(() { var r = newRevRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
                                         isDarkMode: isDarkMode,
                                       ),
@@ -1337,9 +1603,9 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                     _buildUniversalQuranSection(
                                       title: isCompletedStudent ? "المقدار المسموع من مراجعة الختمة الشاملة" : "مراجعة قديم",
                                       icon: isCompletedStudent ? Icons.verified_user_rounded : Icons.history_outlined,
-                                      ranges: oldReviewRanges,
-                                      onAdd: () => setState(() => oldReviewRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
-                                      onRemove: () { if (oldReviewRanges.length > 1) setState(() { var r = oldReviewRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                      ranges: oldRevRanges,
+                                      onAdd: () => setState(() => oldRevRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onRemove: () { if (oldRevRanges.length > 1) setState(() { var r = oldRevRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
                                       isDarkMode: isDarkMode,
                                     ),
                                   ],
@@ -1349,86 +1615,86 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                       title: "المقدار المقروء نظراً من المصحف",
                                       icon: Icons.menu_book_outlined,
                                       ranges: readingRanges,
-                                      onAdd: () => setState(() => readingRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onAdd: () => setState(() => readingRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
                                       onRemove: () { if (readingRanges.length > 1) setState(() { var r = readingRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
                                       isDarkMode: isDarkMode,
                                     ),
                                   ],
-                                  
-                                  if (!isCompletedStudent && !isJuzAmmaMode) ...[
-                                    const SizedBox(height: 10), 
+
+                                  if (!isCompletedStudent && selectedJuz == 0) ...[
+                                    const SizedBox(height: 10),
                                     Divider(color: isDarkMode ? Colors.white24 : Colors.black12),
                                     const SizedBox(height: 10),
                                     TextField(
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'), 
-                                      controller: totalMemorizedPagesController, 
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                      controller: totalMemorizedPagesController,
                                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"^\d+\.?\d*"))],
+                                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
                                       decoration: _glassInputDecoration("إجمالي عدد الصفحات المحفوظة حتى الآن", Icons.analytics_outlined, isDarkMode)
                                     ),
                                   ],
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 15),
-
-                            _buildSectionCard(
-                              title: "الواجب المطلوب للمرة القادمة",
-                              icon: Icons.next_plan_outlined,
-                              isDarkMode: isDarkMode,
-                              child: Column(
-                                children: [
-                                  if (isCompletedStudent) ...[
-                                    _buildUniversalQuranSection(
-                                      title: "المقدار المطلوب للمرة القادمة",
-                                      icon: Icons.edit_note,
-                                      ranges: oldRevHwRanges,
-                                      onAdd: () => setState(() => oldRevHwRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
-                                      onRemove: () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
-                                      isDarkMode: isDarkMode,
-                                    ),
-                                  ] else ...[
-                                    _buildUniversalQuranSection(
-                                      title: "واجب الحفظ الجديد القادم",
-                                      icon: Icons.edit_document,
-                                      ranges: newHwRanges,
-                                      onAdd: () => setState(() => newHwRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
-                                      onRemove: () { if (newHwRanges.length > 1) setState(() { var r = newHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
-                                      isDarkMode: isDarkMode,
-                                    ),
-                                    _buildUniversalQuranSection(
-                                      title: "واجب المراجعة الجديد القادم",
-                                      icon: Icons.menu_book_rounded,
-                                      ranges: newRevHwRanges,
-                                      onAdd: () => setState(() => newRevHwRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
-                                      onRemove: () { if (newRevHwRanges.length > 1) setState(() { var r = newRevHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
-                                      isDarkMode: isDarkMode,
-                                    ),
-                                    _buildUniversalQuranSection(
-                                      title: "واجب المراجعة القديم القادم",
-                                      icon: Icons.history_edu_rounded,
-                                      ranges: oldRevHwRanges,
-                                      onAdd: () => setState(() => oldRevHwRanges.add({'surah': isJuzAmmaMode ? 'النبأ' : 'البقرة', 'from': TextEditingController(), 'to': TextEditingController()})),
-                                      onRemove: () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
-                                      isDarkMode: isDarkMode,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 15),
+                            const SizedBox(height: 20),
                           ],
 
-                          if (!absent) ...[
+                          _buildSectionCard(
+                            title: "الواجب المطلوب للمرة القادمة",
+                            icon: Icons.next_plan_outlined,
+                            isDarkMode: isDarkMode,
+                            child: Column(
+                              children: [
+                                if (isCompletedStudent) ...[
+                                  _buildUniversalQuranSection(
+                                    title: "المقدار المطلوب للمرة القادمة",
+                                    icon: Icons.edit_note,
+                                    ranges: oldRevHwRanges,
+                                    onAdd: () => setState(() => oldRevHwRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
+                                    onRemove: () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                    isDarkMode: isDarkMode,
+                                  ),
+                                ] else ...[
+                                  _buildUniversalQuranSection(
+                                    title: "واجب الحفظ الجديد القادم",
+                                    icon: Icons.edit_document,
+                                    ranges: newHwRanges,
+                                    onAdd: () => setState(() => newHwRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
+                                    onRemove: () { if (newHwRanges.length > 1) setState(() { var r = newHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                    isDarkMode: isDarkMode,
+                                  ),
+                                  _buildUniversalQuranSection(
+                                    title: "واجب المراجعة الجديد القادم",
+                                    icon: Icons.menu_book_rounded,
+                                    ranges: newRevHwRanges,
+                                    onAdd: () => setState(() => newRevHwRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
+                                    onRemove: () { if (newRevHwRanges.length > 1) setState(() { var r = newRevHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                    isDarkMode: isDarkMode,
+                                  ),
+                                  _buildUniversalQuranSection(
+                                    title: "واجب المراجعة القديم القادم",
+                                    icon: Icons.history_edu_rounded,
+                                    ranges: oldRevHwRanges,
+                                    onAdd: () => setState(() => oldRevHwRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
+                                    onRemove: () { if (oldRevHwRanges.length > 1) setState(() { var r = oldRevHwRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                    isDarkMode: isDarkMode,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          if (!absent && !isExam) ...[
                             _buildSectionCard(
-                              title: "تعديل السلوك والتقييم",
+                              title: "التقييم والسلوك",
                               icon: Icons.thumbs_up_down_outlined,
                               isDarkMode: isDarkMode,
                               child: Column(
                                 children: [
                                   if (!didNotRecite && !isCompletedStudent && hasNewMemorization) ...[
                                     DropdownButtonFormField<String>(
-                                      value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(memorizationRating) ? memorizationRating : "جيد",
+                                      value: memorizationRating,
                                       dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
                                       style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                                       decoration: _glassInputDecoration("تقييم الحفظ الجديد", Icons.stars, isDarkMode),
@@ -1437,11 +1703,11 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                     ),
                                     const SizedBox(height: 15),
                                   ],
-                                  
+
                                   if (!didNotRecite && hasReview) ...[
                                     if (isCompletedStudent) ...[
                                       DropdownButtonFormField<String>(
-                                        value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(newReviewRating) ? newReviewRating : "جيد",
+                                        value: newReviewRating,
                                         dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
                                         style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                                         decoration: _glassInputDecoration("تقييم مراجعة الختمة", Icons.rate_review_outlined, isDarkMode),
@@ -1450,7 +1716,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                       ),
                                     ] else ...[
                                       DropdownButtonFormField<String>(
-                                        value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(newReviewRating) ? newReviewRating : "جيد",
+                                        value: newReviewRating,
                                         dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
                                         style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                                         decoration: _glassInputDecoration("تقييم مراجعة جديد", Icons.rate_review_outlined, isDarkMode),
@@ -1459,7 +1725,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                       ),
                                       const SizedBox(height: 15),
                                       DropdownButtonFormField<String>(
-                                        value: ["ممتاز", "جيد جداً", "جيد", "مقبول", "ضعيف"].contains(oldReviewRating) ? oldReviewRating : "جيد",
+                                        value: oldReviewRating,
                                         dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
                                         style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                                         decoration: _glassInputDecoration("تقييم مراجعة قديم", Icons.history_edu, isDarkMode),
@@ -1471,7 +1737,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                   ],
 
                                   DropdownButtonFormField<String>(
-                                    value: ["مهذب", "منضبط", "مشاغب", "كثير الحركة"].contains(studentStatus) ? studentStatus : "مهذب",
+                                    value: studentStatus,
                                     dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
                                     style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                                     decoration: _glassInputDecoration("حالة الطالب", Icons.mood, isDarkMode),
@@ -1481,23 +1747,17 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 15),
-
+                            const SizedBox(height: 20),
                             _buildSectionCard(
                               title: "نشاطات إضافية",
                               icon: Icons.mosque_outlined,
                               isDarkMode: isDarkMode,
-                              child: TextField(
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                controller: religiousActivities, 
-                                decoration: _glassInputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode, suffixIcon: _buildMicButton(religiousActivities, isDarkMode))
-                              ),
+                              child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: religiousActivities, decoration: _glassInputDecoration("نشاطات دينية", Icons.volunteer_activism, isDarkMode, suffixIcon: _buildMicButton(religiousActivities, isDarkMode))),
                             ),
                           ],
 
-                          const SizedBox(height: 15),
+                          const SizedBox(height: 20),
 
-                          // 👥 قسم المشرفين المعدّل لقسمين
                           _buildSectionCard(
                             title: "المشرفين المشاركين بالتسميع",
                             icon: Icons.groups_rounded,
@@ -1522,33 +1782,81 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                             ),
                           ),
 
-                          const SizedBox(height: 15),
-                          _buildSectionCard(
-                            title: "ملاحظات إضافية",
-                            icon: Icons.comment_bank_outlined,
-                            isDarkMode: isDarkMode,
-                            child: Column(
-                              children: [
-                                if (absent) const SizedBox(height: 5),
-                                TextField(
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), 
-                                  controller: notes, 
-                                  maxLines: 3, 
-                                  decoration: _glassInputDecoration("الملاحظات العامة", Icons.comment, isDarkMode, suffixIcon: _buildMicButton(notes, isDarkMode))
-                                ),
-                              ],
+                          if (isExam && !absent) ...[
+                            const SizedBox(height: 20),
+                            _buildSectionCard(
+                              title: "نتائج اختبار الطالب",
+                              icon: Icons.quiz,
+                              isDarkMode: isDarkMode,
+                              child: TextField(
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                controller: examScoreController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
+                                decoration: _glassInputDecoration("علامة الطالب من 100", Icons.percent, isDarkMode),
+                              ),
                             ),
+                          ],
+
+                          if (absent) ...[
+                            const SizedBox(height: 20),
+                            _buildSectionCard(
+                              title: "تفاصيل الغياب",
+                              icon: Icons.person_off_outlined,
+                              isDarkMode: isDarkMode,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("نوع الغياب:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      ChoiceChip(
+                                        label: const Text("بدون عذر", style: TextStyle(fontFamily: 'Cairo')),
+                                        selected: absenceType == "بدون عذر",
+                                        selectedColor: Colors.red.shade400,
+                                        backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
+                                        labelStyle: TextStyle(color: absenceType == "بدون عذر" ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold),
+                                        onSelected: (val) => setState(() => absenceType = "بدون عذر"),
+                                      ),
+                                      const SizedBox(width: 15),
+                                      ChoiceChip(
+                                        label: const Text("بعذر", style: TextStyle(fontFamily: 'Cairo')),
+                                        selected: absenceType == "بعذر",
+                                        selectedColor: Colors.green.shade400,
+                                        backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
+                                        labelStyle: TextStyle(color: absenceType == "بعذر" ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold),
+                                        onSelected: (val) => setState(() => absenceType = "بعذر"),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 15),
+                                  TextField(
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                    controller: absenceReasonController,
+                                    decoration: _glassInputDecoration("سبب الغياب (العذر بالتفصيل...)", Icons.help_outline, isDarkMode, suffixIcon: _buildMicButton(absenceReasonController, isDarkMode)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          const SizedBox(height: 20),
+                          _buildSectionCard(
+                            title: "ملاحظات المشرف",
+                            icon: Icons.note_alt_outlined,
+                            isDarkMode: isDarkMode,
+                            child: TextField(style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold), controller: notes, maxLines: 3, decoration: _glassInputDecoration("اكتب ملاحظاتك هنا...", Icons.comment, isDarkMode, suffixIcon: _buildMicButton(notes, isDarkMode))),
                           ),
-                          
+
                           const SizedBox(height: 35),
-                          
                           SizedBox(
                             width: double.infinity,
                             height: 55,
                             child: ElevatedButton(
                               onPressed: loading ? null : save,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (didNotRecite ? Colors.blueGrey.withOpacity(0.9) : (isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9))),
+                                backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (isExam ? Colors.teal.withOpacity(0.9) : (didNotRecite ? Colors.blueGrey.withOpacity(0.9) : (isDarkMode ? Colors.orange.withOpacity(0.9) : primaryColor.withOpacity(0.9)))),
                                 foregroundColor: Colors.white,
                                 elevation: 5,
                                 shadowColor: Colors.black38,
@@ -1556,10 +1864,10 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                               ),
                               child: loading
                                   ? const CircularProgressIndicator(color: Colors.white)
-                                  : const Text("تحديث البيانات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo', letterSpacing: 0.5)),
+                                  : const Text("حفظ التعديلات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5, fontFamily: 'Cairo')),
                             ),
                           ),
-                          const SizedBox(height: 30),
+                          const SizedBox(height: 40),
                         ],
                       ),
                     ),
@@ -1571,30 +1879,24 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   }
 
   Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = const EdgeInsets.all(16)}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(25),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4),
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.03),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: child,
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(
+          color: isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.75),
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDarkMode ? 0.25 : 0.03),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
+      child: child,
     );
   }
 
@@ -1625,15 +1927,15 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), 
+      fillColor: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
       contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15), 
+        borderRadius: BorderRadius.circular(15),
         borderSide: BorderSide(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15), 
+        borderRadius: BorderRadius.circular(15),
         borderSide: BorderSide(color: isDarkMode ? accentGold : primaryColor, width: 1.5),
       ),
     );
