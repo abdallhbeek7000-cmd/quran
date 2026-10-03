@@ -39,6 +39,7 @@ import 'qiblah_page.dart';
 import '../services/prayer_service.dart';
 import 'institute_expenses_page.dart'; 
 import 'all_cycles_students_page.dart';
+import 'archived_student_sessions_page.dart'; // 👈 استيراد صفحة أرشيف الجلسات
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -375,7 +376,6 @@ class _HomePageState extends State<HomePage> {
     final String currentCollection = widget.role == "manager" ? "users" : "supervisors";
     final bool isDark = themeProvider.isDarkMode;
 
-    // 🚀 بث مباشر وحي للدورات النشطة حصراً
     return OfflineWrapper(
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -392,19 +392,18 @@ class _HomePageState extends State<HomePage> {
               bool isNotClosed = data['isClosed'] != true && data['archived'] != true;
 
               if ((isCurrent || isActive) && isNotClosed) {
-                // ✅ الحل المباشر والصحيح 100%
-var data = doc.data() as Map<String, dynamic>;
-activeCycleModel = CycleModel(
-  id: doc.id,
-  name: data['name'] ?? '',
-  type: data['type']?.toString() ?? '',
-  year: int.tryParse(data['year']?.toString() ?? '') ?? DateTime.now().year,
-  cycleNumber: int.tryParse(data['cycleNumber']?.toString() ?? '') ?? 1,
-  startDate: data['startDate']?.toString() ?? '',
-  endDate: data['endDate']?.toString() ?? '',
-  active: data['active'] == true,
-  archived: data['archived'] == true,
-);
+                var data = doc.data() as Map<String, dynamic>;
+                activeCycleModel = CycleModel(
+                  id: doc.id,
+                  name: data['name'] ?? '',
+                  type: data['type']?.toString() ?? '',
+                  year: int.tryParse(data['year']?.toString() ?? '') ?? DateTime.now().year,
+                  cycleNumber: int.tryParse(data['cycleNumber']?.toString() ?? '') ?? 1,
+                  startDate: data['startDate']?.toString() ?? '',
+                  endDate: data['endDate']?.toString() ?? '',
+                  active: data['active'] == true,
+                  archived: data['archived'] == true,
+                );
                 break;
               }
             }
@@ -448,6 +447,9 @@ activeCycleModel = CycleModel(
                         break;
                       case 'all_cycles_students':
                         _nav(const AllCyclesStudentsPage());
+                        break;
+                      case 'archived_sessions':
+                        _nav(const ArchivedStudentSessionsPage()); // 👈 توجيه لصفحة أرشيف الجلسات
                         break;
                       case 'create_cycle':
                         _nav(const CreateCyclePage());
@@ -500,6 +502,17 @@ activeCycleModel = CycleModel(
                             const Icon(Icons.badge_rounded, color: Colors.blueAccent, size: 20),
                             const SizedBox(width: 10),
                             Text('جميع طلاب الدورات 🎒', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      // 🔒 خيار خاص بالمدير لفتح أرشيف كافة جلسات الطلاب
+                      PopupMenuItem(
+                        value: 'archived_sessions',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.history_edu_rounded, color: Colors.orangeAccent, size: 20),
+                            const SizedBox(width: 10),
+                            Text('أرشيف الجلسات 📜', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
                           ],
                         ),
                       ),

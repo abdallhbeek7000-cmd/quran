@@ -210,12 +210,10 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
     _speech = stt.SpeechToText();
 
-    _initEmptyRanges();
     _fetchActiveCycleId();
     _checkIfStudentIsCompletedAndLoadData();
   }
 
-  // 🎯 دالة جلب ID الدورة الفعالة بمختلف الأحتمالات
   Future<String> _fetchActiveCycleId() async {
     if (activeCycleId.isNotEmpty) return activeCycleId;
     if (widget.cycleId != null && widget.cycleId!.isNotEmpty) {
@@ -224,82 +222,192 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
 
     try {
-      // 1. تجربة البحث بـ isActive: true
-      var snapshot = await FirebaseFirestore.instance
-          .collection('cycles')
-          .where('isActive', isEqualTo: true)
-          .limit(1)
-          .get();
-
+      var snapshot = await FirebaseFirestore.instance.collection('cycles').where('isActive', isEqualTo: true).limit(1).get();
       if (snapshot.docs.isNotEmpty) {
         activeCycleId = snapshot.docs.first.id;
         if (mounted) setState(() {});
         return activeCycleId;
       }
-
-      // 2. تجربة البحث بـ status == 'active'
-      var statusSnapshot = await FirebaseFirestore.instance
-          .collection('cycles')
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .get();
-
+      var statusSnapshot = await FirebaseFirestore.instance.collection('cycles').where('status', isEqualTo: 'active').limit(1).get();
       if (statusSnapshot.docs.isNotEmpty) {
         activeCycleId = statusSnapshot.docs.first.id;
-        if (mounted) setState(() {});
-        return activeCycleId;
-      }
-
-      // 3. في حال عدم وجود أي شروط، يجلب آخر دورة مضافة
-      var latestSnapshot = await FirebaseFirestore.instance
-          .collection('cycles')
-          .limit(1)
-          .get();
-
-      if (latestSnapshot.docs.isNotEmpty) {
-        activeCycleId = latestSnapshot.docs.first.id;
         if (mounted) setState(() {});
         return activeCycleId;
       }
     } catch (e) {
       print("خطأ في جلب الدورة الفعالة: $e");
     }
-
     return "";
   }
 
-  void _initEmptyRanges() {
-    for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
-      list.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()});
-    }
-  }
-
+  // 🎯 جلب الجلسة السابقة واستعادة نظام الجزء المحدد (عم/تبارك...) بجميع خياراته
   Future<void> _checkIfStudentIsCompletedAndLoadData() async {
     try {
       if (widget.studentId.isNotEmpty) {
-        DocumentSnapshot studentDoc = await FirebaseFirestore.instance
-            .collection('students')
-            .doc(widget.studentId)
-            .get();
+        // 1. جلب بيانات الطالب
+        DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(widget.studentId).get();
 
         if (studentDoc.exists && studentDoc.data() != null) {
           Map<String, dynamic> sData = studentDoc.data() as Map<String, dynamic>;
 
+          String supId = sData['supervisorId']?.toString() ?? '';
+          String supName = sData['supervisorName']?.toString() ?? '';
+          if (supName.isNotEmpty) {
+            var defaultSup = {'id': supId, 'name': supName};
+            selectedNewMemoSupervisors = [defaultSup];
+            selectedReviewSupervisors = [defaultSup];
+          }
+
           if (sData['studentType'] == 'completed') {
-            setState(() {
-              isCompletedStudent = true;
-              totalMemorizedPagesController.text = "604";
-            });
+            isCompletedStudent = true;
+            totalMemorizedPagesController.text = "604";
           } else {
             String pages = sData['memorizedPages']?.toString() ?? sData['total_memorized_pages']?.toString() ?? '0';
             totalMemorizedPagesController.text = pages;
           }
         }
+
+        // 2. جلب آخر جلسة مسجلة
+        var sessionsSnap = await FirebaseFirestore.instance
+            .collection('sessions')
+            .where('studentId', isEqualTo: widget.studentId)
+            .get();
+
+        if (sessionsSnap.docs.isNotEmpty) {
+          var docs = sessionsSnap.docs;
+          docs.sort((a, b) {
+            String dateA = a.data()['date']?.toString() ?? '';
+            String dateB = b.data()['date']?.toString() ?? '';
+            return dateB.compareTo(dateA);
+          });
+
+          var lastData = docs.first.data();
+
+          // 🎯 استعادة الجزء المحدد (selectedJuz) إذا كان الطالب يتعامل مع نظام الأجزاء
+          if (lastData.containsKey('selectedJuz') && lastData['selectedJuz'] != null) {
+            int prevJuz = int.tryParse(lastData['selectedJuz'].toString()) ?? 0;
+            if (prevJuz > 0) {
+              selectedJuz = prevJuz;
+            }
+          } else if (lastData['isJuzAmma'] == true) {
+            selectedJuz = 30;
+          }
+
+          String lastNewHw = lastData['newHomework']?.toString() ?? '';
+          String lastNewRevHw = lastData['newReviewHomework']?.toString() ?? '';
+          String lastOldRevHw = lastData['oldReviewHomework']?.toString() ?? '';
+          String generalHw = lastData['homework']?.toString() ?? '';
+
+          if (lastNewHw.isEmpty && lastNewRevHw.isEmpty && lastOldRevHw.isEmpty && generalHw.isNotEmpty) {
+            if (generalHw.contains("حفظ:")) {
+              var parts = generalHw.split("مراجعة:");
+              lastNewHw = parts[0].replaceAll("حفظ:", "").trim();
+              if (parts.length > 1) lastOldRevHw = parts[1].trim();
+            } else if (generalHw.contains("مراجعة:")) {
+              lastOldRevHw = generalHw.replaceAll("مراجعة:", "").trim();
+            } else {
+              lastNewHw = generalHw;
+            }
+          }
+
+          // تفكيك وتمرير نصوص الواجب السابق إلى خانات التسميع الحالية
+          _parseFormattedTextToRanges(lastNewHw, newMemoRanges);
+          _parseFormattedTextToRanges(lastNewRevHw, newRevRanges);
+          _parseFormattedTextToRanges(lastOldRevHw, oldRevRanges);
+        }
       }
     } catch (e) {
-      print("Error fetching student details: $e");
+      print("خطأ في جلب الجلسة السابقة: $e");
     } finally {
-      if (mounted) setState(() => checkingStudentType = false);
+      _ensureNonEmptyRanges();
+      if (mounted) {
+        setState(() {
+          checkingStudentType = false;
+        });
+      }
+    }
+  }
+
+  void _ensureNonEmptyRanges() {
+    for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+      if (list.isEmpty) {
+        list.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()});
+      }
+    }
+  }
+
+  // 🎯 تفكيك النص واكتشاف إذا كان الخيار "سورة كاملة" أم "آيات محددة"
+  void _parseFormattedTextToRanges(String formattedText, List<Map<String, dynamic>> targetList) {
+    if (formattedText.trim().isEmpty) return;
+    targetList.clear();
+
+    List<String> segments = formattedText.split('|');
+    for (var seg in segments) {
+      String text = seg.trim();
+      if (text.isEmpty) continue;
+
+      String surahFrom = '';
+      String surahTo = '';
+      String fromVal = '';
+      String toVal = '';
+      bool isFull = true;
+
+      // 1. مطابقة أرقام الآيات (نظام الأجزاء)
+      RegExp regAyah = RegExp(r'\(آية\s*(\d+)\)|\(من آية\s*(\d+)\s*إلى\s*(\d+)\)', caseSensitive: false);
+      var ayahMatch = regAyah.firstMatch(text);
+
+      if (ayahMatch != null) {
+        isFull = false;
+        if (ayahMatch.group(1) != null) {
+          fromVal = ayahMatch.group(1)!;
+          toVal = fromVal;
+        } else {
+          fromVal = ayahMatch.group(2) ?? '';
+          toVal = ayahMatch.group(3) ?? fromVal;
+        }
+      } else {
+        // 2. مطابقة أرقام الصفحات (النظام العادي)
+        RegExp regPages = RegExp(r'\(ص\s*(\d+)(?:\s*-\s*(\d+))?\)', caseSensitive: false);
+        var pageMatch = regPages.firstMatch(text);
+
+        if (pageMatch != null) {
+          isFull = false;
+          fromVal = pageMatch.group(1) ?? '';
+          toVal = pageMatch.group(2) ?? fromVal;
+        }
+      }
+
+      // 3. استخراج أسماء السور
+      RegExp regSurahBetween = RegExp(r'من سورة\s+([^\(]+?)\s+إلى\s+(?:سورة\s+)?([^\(]+)');
+      RegExp regSingleSurah = RegExp(r'سورة\s+([^\(]+)');
+
+      var betweenMatch = regSurahBetween.firstMatch(text);
+      if (betweenMatch != null) {
+        surahFrom = betweenMatch.group(1)!.trim();
+        surahTo = betweenMatch.group(2)!.trim();
+      } else {
+        var singleMatch = regSingleSurah.firstMatch(text);
+        if (singleMatch != null) {
+          surahFrom = singleMatch.group(1)!.trim();
+          surahTo = surahFrom;
+        } else {
+          for (var s in quranSurahs) {
+            if (text.contains(s['name'])) {
+              surahFrom = s['name'];
+              surahTo = surahFrom;
+              break;
+            }
+          }
+        }
+      }
+
+      targetList.add({
+        'surah': surahFrom,
+        'toSurah': surahTo,
+        'isFullSurah': isFull,
+        'from': TextEditingController(text: fromVal),
+        'to': TextEditingController(text: toVal),
+      });
     }
   }
 
@@ -866,11 +974,11 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
             if (selectedJuz == 0) {
               if (fromCtrl.text.isNotEmpty) {
                 String autoSurah = _getStartSurahByPage(fromCtrl.text);
-                if (autoSurah.isNotEmpty) item['surah'] = autoSurah;
+                if (autoSurah.isNotEmpty && (item['surah'] == null || item['surah'].isEmpty)) item['surah'] = autoSurah;
               }
               if (toCtrl.text.isNotEmpty) {
                 String autoToSurah = _getEndSurahByPage(toCtrl.text);
-                if (autoToSurah.isNotEmpty) item['toSurah'] = autoToSurah;
+                if (autoToSurah.isNotEmpty && (item['toSurah'] == null || item['toSurah'].isEmpty)) item['toSurah'] = autoToSurah;
               }
             }
 
@@ -1111,7 +1219,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
     setState(() => loading = true);
 
-    // ⚡️ انتظار حتمي لجلب ID الدورة الحالية من Firestore
     String currentCycleId = await _fetchActiveCycleId();
 
     double totalPages = (selectedJuz > 0) ? 0.0 : (isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0));
@@ -1162,7 +1269,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'studentId': widget.studentId,
       'studentName': widget.studentName,
       'date': date,
-      'cycleId': currentCycleId, // 👈 لن يعود فارغاً بأي شكل
+      'cycleId': currentCycleId,
       'actualCreatedAt': actualCreatedAtFormatted,
       'createdTimestamp': FieldValue.serverTimestamp(),
       'absent': absent,

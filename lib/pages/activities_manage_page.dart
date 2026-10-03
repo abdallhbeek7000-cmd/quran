@@ -25,6 +25,48 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
+  String activeCycleId = '';
+  bool isLoadingCycle = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchActiveCycleId();
+  }
+
+  // 🎯 جلب المعرّف الخاص بالدورة النشطة (Active Cycle)
+  Future<String> _fetchActiveCycleId() async {
+    try {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('cycles')
+          .where('isActive', isEqualTo: true)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        activeCycleId = snapshot.docs.first.id;
+      } else {
+        var statusSnapshot = await FirebaseFirestore.instance
+            .collection('cycles')
+            .where('status', isEqualTo: 'active')
+            .limit(1)
+            .get();
+        if (statusSnapshot.docs.isNotEmpty) {
+          activeCycleId = statusSnapshot.docs.first.id;
+        }
+      }
+    } catch (e) {
+      print("خطأ في جلب الدورة الفعالة: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoadingCycle = false;
+        });
+      }
+    }
+    return activeCycleId;
+  }
+
   // 🗺️ دالة فتح الموقع في خرائط جوجل
   Future<void> _openLocationInMaps(String locationText) async {
     if (locationText.trim().isEmpty) return;
@@ -82,47 +124,59 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
               ),
             ),
             SafeArea(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('activities').orderBy('createdAt', descending: true).snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+              child: isLoadingCycle
+                  ? const Center(child: CircularProgressIndicator())
+                  : StreamBuilder<QuerySnapshot>(
+                      // 🎯 تصفية الاستعلام لعرض أنشطة الدورة النشطة فقط
+                      stream: activeCycleId.isNotEmpty
+                          ? FirebaseFirestore.instance
+                              .collection('activities')
+                              .where('cycleId', isEqualTo: activeCycleId)
+                              .orderBy('createdAt', descending: true)
+                              .snapshots()
+                          : FirebaseFirestore.instance
+                              .collection('activities')
+                              .orderBy('createdAt', descending: true)
+                              .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
 
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.directions_bus_filled_rounded, size: 70, color: isDark ? accentGold.withOpacity(0.5) : primaryColor.withOpacity(0.4)),
-                          const SizedBox(height: 15),
-                          Text("لا توجد رحلات أو أنشطة مضافة حتى الآن", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : primaryColor, fontSize: 15)),
-                        ],
-                      ),
-                    );
-                  }
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.directions_bus_filled_rounded, size: 70, color: isDark ? accentGold.withOpacity(0.5) : primaryColor.withOpacity(0.4)),
+                                const SizedBox(height: 15),
+                                Text("لا توجد رحلات أو أنشطة مضافة لهذه الدورة حتى الآن", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : primaryColor, fontSize: 15)),
+                              ],
+                            ),
+                          );
+                        }
 
-                  final docs = snapshot.data!.docs;
+                        final docs = snapshot.data!.docs;
 
-                  return ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      var data = docs[index].data() as Map<String, dynamic>;
-                      String activityId = docs[index].id;
+                        return ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            var data = docs[index].data() as Map<String, dynamic>;
+                            String activityId = docs[index].id;
 
-                      DateTime? deadline;
-                      if (data['deadlineTimestamp'] != null) {
-                        deadline = (data['deadlineTimestamp'] as Timestamp).toDate();
-                      }
-                      bool isExpired = deadline != null ? DateTime.now().isAfter(deadline) : false;
+                            DateTime? deadline;
+                            if (data['deadlineTimestamp'] != null) {
+                              deadline = (data['deadlineTimestamp'] as Timestamp).toDate();
+                            }
+                            bool isExpired = deadline != null ? DateTime.now().isAfter(deadline) : false;
 
-                      return _buildActivityCard(activityId, data, isExpired, isDark);
-                    },
-                  );
-                },
-              ),
+                            return _buildActivityCard(activityId, data, isExpired, isDark);
+                          },
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -138,7 +192,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     String location = data['location'] ?? '';
     String targetType = data['targetType'] == 'all' ? 'جميع الطلاب 🌐' : 'طلاب محددون 🎯';
 
-    // 📅 استخراج يوم الأسبوع بالعربية إذا توفر Timestamp
     String dayNameWithDateTime = eventDateTime;
     if (data['eventTimestamp'] != null) {
       DateTime dt = (data['eventTimestamp'] as Timestamp).toDate();
@@ -301,7 +354,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     );
   }
 
-  // 📝 📸 أخذ الحضور وتصدير كشف صورة HD مخصص
   void _showActivityAttendanceSheet(String activityId, String activityTitle, String eventDateTime, bool isDark) {
     final WidgetsToImageController imageController = WidgetsToImageController();
     bool isGeneratingImage = false;
@@ -441,7 +493,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     );
   }
 
-  // 🖼️ 🎨 تصميم كشف البوستر للتصدير كصورة عالية الدقة
   Widget _buildExportableActivityPoster(String title, String eventDateTime, List<QueryDocumentSnapshot> docs) {
     int attendedCount = docs.where((d) => (d.data() as Map)['attended'] == true).length;
     int absentCount = docs.length - attendedCount;
@@ -840,6 +891,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                     String dayName = DateFormat('EEEE', 'ar').format(eventDt);
                                     String eventDtStr = "يوم $dayName (${DateFormat('yyyy-MM-dd').format(eventDt)}) - الساعة ${selectedTime!.format(context)}";
 
+                                    // 🎯 إضافة cycleId الفعالة للبيانات
                                     final Map<String, dynamic> updatePayload = {
                                       'title': titleCtrl.text.trim(),
                                       'details': detailsCtrl.text.trim(),
@@ -850,6 +902,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                       'deadlineTimestamp': Timestamp.fromDate(deadlineDt),
                                       'targetType': targetMode,
                                       'targetStudentIds': targetMode == 'selected' ? selectedStudentIds : [],
+                                      'cycleId': activeCycleId,
                                     };
 
                                     if (isEditing) {
@@ -893,7 +946,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                   }
                                 },
                           icon: isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Icon(isEditing ? Icons.check_circle_outline_rounded : Icons.send_rounded, color: Colors.white),
-                          label: Text(isSaving ? "جاري الحفظ..." : (isEditing ? "تحديث بيانات النشاط ✏️" : "حفظ وبث الدعوة للأهالي 🚀"), style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                          label: Text(isSaving ? "جاري الحفظ..." : (isEditing ? "تحديث بيانات النشاط ✏️️" : "حفظ وبث الدعوة للأهالي 🚀"), style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -908,9 +961,8 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     );
   }
 
-  // 📊 ✨ نافذة سجل الردود المفلترة (مع أزرار التصفية المنفصلة التامة)
   void _showResponsesSummarySheet(String activityId, String activityTitle, Map<String, dynamic> activityData, bool isDark) {
-    String selectedFilter = 'pending'; // 'pending', 'approved', 'rejected'
+    String selectedFilter = 'pending';
 
     showModalBottomSheet(
       context: context,
@@ -991,15 +1043,12 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                               int pendingCount = totalTargetCount - (approvedCount + rejectedCount);
                               if (pendingCount < 0) pendingCount = 0;
 
-                              // 🎯 تصفية الطلاب بحسب الزر المكتوب محدد حالياً
                               List<Map<String, dynamic>> filteredList = allStudentsProcessed.where((item) => item['status'] == selectedFilter).toList();
 
                               return Column(
                                 children: [
-                                  // 🔘 أزرار التصفية التفاعلية
                                   Row(
                                     children: [
-                                      // 1. ⏳ بانتظار الرد (محدد افتراضياً)
                                       Expanded(
                                         child: InkWell(
                                           onTap: () => setSheetState(() => selectedFilter = 'pending'),
@@ -1025,7 +1074,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                       ),
                                       const SizedBox(width: 8),
 
-                                      // 2. ✅ الموافقون
                                       Expanded(
                                         child: InkWell(
                                           onTap: () => setSheetState(() => selectedFilter = 'approved'),
@@ -1051,7 +1099,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                       ),
                                       const SizedBox(width: 8),
 
-                                      // 3. ❌ الرافضون
                                       Expanded(
                                         child: InkWell(
                                           onTap: () => setSheetState(() => selectedFilter = 'rejected'),
@@ -1079,7 +1126,6 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                   ),
                                   const SizedBox(height: 15),
 
-                                  // 📋 عرض قائمة الفئة المختارة فقط
                                   Expanded(
                                     child: filteredList.isEmpty
                                         ? Center(

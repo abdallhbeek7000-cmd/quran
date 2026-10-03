@@ -6,12 +6,21 @@ import '../models/cycle_model.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
 
-class LeaveRequestsPage extends StatelessWidget {
+class LeaveRequestsPage extends StatefulWidget {
   final String supervisorId;
-  final String role; 
+  final String role;
 
-  const LeaveRequestsPage({super.key, required this.supervisorId, required this.role});
+  const LeaveRequestsPage({
+    super.key,
+    required this.supervisorId,
+    required this.role,
+  });
 
+  @override
+  State<LeaveRequestsPage> createState() => _LeaveRequestsPageState();
+}
+
+class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
@@ -39,7 +48,13 @@ class LeaveRequestsPage extends StatelessWidget {
     }
   }
 
-  void _showTopPremiumToast(BuildContext context, {required String message, required IconData icon, required Color statusColor, required bool isDark}) {
+  void _showTopPremiumToast(
+    BuildContext context, {
+    required String message,
+    required IconData icon,
+    required Color statusColor,
+    required bool isDark,
+  }) {
     final overlay = Overlay.of(context);
     late OverlayEntry overlayEntry;
 
@@ -69,25 +84,39 @@ class LeaveRequestsPage extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xff1e293b).withOpacity(0.85) : Colors.white.withOpacity(0.85),
+                      color: isDark
+                          ? const Color(0xff1e293b).withOpacity(0.9)
+                          : Colors.white.withOpacity(0.9),
                       borderRadius: BorderRadius.circular(22),
                       border: Border.all(color: statusColor.withOpacity(0.5), width: 1.5),
                       boxShadow: [
-                        BoxShadow(color: statusColor.withOpacity(0.15), blurRadius: 20, offset: const Offset(0, 8))
+                        BoxShadow(
+                          color: statusColor.withOpacity(0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        )
                       ],
                     ),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: statusColor.withOpacity(0.15), shape: BoxShape.circle),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.15),
+                            shape: BoxShape.circle,
+                          ),
                           child: Icon(icon, color: statusColor, size: 22),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Text(
                             message,
-                            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : primaryColor),
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: isDark ? Colors.white : primaryColor,
+                            ),
                           ),
                         ),
                       ],
@@ -120,15 +149,23 @@ class LeaveRequestsPage extends StatelessWidget {
     try {
       await FirebaseFirestore.instance.collection('leave_requests').doc(docId).update({
         'status': status,
-        'actionByRole': role,
+        'actionByRole': widget.role,
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      String customSessionId = "${studentId}_$date";
+
       if (status == 'approved') {
-        String activeSupervisorId = requestSupervisorId.isNotEmpty ? requestSupervisorId : supervisorId;
+        String activeSupervisorId = requestSupervisorId.isNotEmpty
+            ? requestSupervisorId
+            : widget.supervisorId;
         String activeSupervisorName = "المشرف";
 
         try {
-          var studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
+          var studentDoc = await FirebaseFirestore.instance
+              .collection('students')
+              .doc(studentId)
+              .get();
           if (studentDoc.exists) {
             var sData = studentDoc.data()!;
             activeSupervisorName = sData['supervisorName'] ?? "المشرف";
@@ -137,8 +174,6 @@ class LeaveRequestsPage extends StatelessWidget {
             }
           }
         } catch (_) {}
-
-        String customSessionId = "${studentId}_$date";
 
         Map<String, dynamic> sessionData = {
           'studentId': studentId,
@@ -166,13 +201,21 @@ class LeaveRequestsPage extends StatelessWidget {
         }
 
         await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).set(
-          sessionData,
-          SetOptions(merge: true),
-        );
+              sessionData,
+              SetOptions(merge: true),
+            );
+      } else if (status == 'rejected') {
+        // إلغاء كرت الجلسة إن كان أُنشئ سابقاً بعذر
+        var existingSession = await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).get();
+        if (existingSession.exists && (existingSession.data()?['absenceReason'] == reason)) {
+          await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).delete();
+        }
       }
 
-      String title = status == 'approved' ? "✅ تم قبول إذن الغياب" : "❌ اعتذر المعهد عن قبول الإذن";
-      String body = status == 'approved' 
+      String title = status == 'approved'
+          ? "✅ تم قبول إذن الغياب"
+          : "❌ اعتذر المعهد عن قبول الإذن";
+      String body = status == 'approved'
           ? "تمت الموافقة على إذن الغياب الخاص بالطالب $studentName ليوم $date وتوثيقه تلقائياً بعذر."
           : "نعتذر، لم تتم الموافقة على إذن الغياب للطالب $studentName ليوم $date.";
 
@@ -187,13 +230,24 @@ class LeaveRequestsPage extends StatelessWidget {
       if (!context.mounted) return;
       _showTopPremiumToast(
         context,
-        message: status == 'approved' ? "تم قبول الطلب وتوثيق الاستئذان بنجاح 🎉" : "تم رفض الطلب وإبلاغ عائلة الطالب 📌",
-        icon: status == 'approved' ? Icons.check_circle_rounded : Icons.remove_circle_outline_rounded,
+        message: status == 'approved'
+            ? "تم قبول الطلب وتوثيق الاستئذان بنجاح 🎉"
+            : "تم رفض الطلب وإبلاغ عائلة الطالب 📌",
+        icon: status == 'approved'
+            ? Icons.check_circle_rounded
+            : Icons.remove_circle_outline_rounded,
         statusColor: status == 'approved' ? Colors.green.shade600 : Colors.redAccent,
         isDark: isDark,
       );
     } catch (e) {
-      _showTopPremiumToast(context, message: "حدث خطأ غير متوقع: $e", icon: Icons.error_outline_rounded, statusColor: Colors.redAccent, isDark: isDark);
+      if (!context.mounted) return;
+      _showTopPremiumToast(
+        context,
+        message: "حدث خطأ غير متوقع: $e",
+        icon: Icons.error_outline_rounded,
+        statusColor: Colors.redAccent,
+        isDark: isDark,
+      );
     }
   }
 
@@ -209,7 +263,7 @@ class LeaveRequestsPage extends StatelessWidget {
         if (cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty) {
           for (var doc in cycleSnap.data!.docs) {
             var data = doc.data() as Map<String, dynamic>;
-            bool isCurrent = data['isCurrent'] == true;
+            bool isCurrent = data['isCurrent'] == true || data['isActive'] == true;
             bool isActive = data['status'] == 'active' || data['active'] == true;
             bool isNotClosed = data['isClosed'] != true && data['archived'] != true;
 
@@ -222,8 +276,8 @@ class LeaveRequestsPage extends StatelessWidget {
                 cycleNumber: int.tryParse(data['cycleNumber']?.toString() ?? '') ?? 1,
                 startDate: data['startDate']?.toString() ?? '',
                 endDate: data['endDate']?.toString() ?? '',
-                active: data['active'] == true,
-                archived: data['archived'] == true,
+                active: true,
+                archived: false,
               );
               break;
             }
@@ -240,18 +294,24 @@ class LeaveRequestsPage extends StatelessWidget {
               backgroundColor: Colors.transparent,
               title: Text(
                 "طلبات الاستئذان 📑",
-                style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 20),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : primaryColor,
+                  fontFamily: 'Cairo',
+                  fontSize: 19,
+                ),
               ),
               centerTitle: true,
               iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
             ),
             body: Stack(
               children: [
+                // خلفية متدرجة
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: isDarkMode 
-                          ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] 
+                      colors: isDarkMode
+                          ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
                           : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -266,7 +326,7 @@ class LeaveRequestsPage extends StatelessWidget {
                     height: 280,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isDarkMode ? primaryColor.withOpacity(0.2) : primaryColor.withOpacity(0.15),
+                      color: isDarkMode ? primaryColor.withOpacity(0.18) : primaryColor.withOpacity(0.12),
                     ),
                   ),
                 ),
@@ -278,7 +338,7 @@ class LeaveRequestsPage extends StatelessWidget {
                     height: 250,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isDarkMode ? accentGold.withOpacity(0.12) : accentGold.withOpacity(0.2),
+                      color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15),
                     ),
                   ),
                 ),
@@ -290,23 +350,26 @@ class LeaveRequestsPage extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(22),
                           child: BackdropFilter(
                             filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                             child: Container(
-                              padding: const EdgeInsets.all(5),
+                              padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.45),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white.withOpacity(0.7), width: 1.2),
+                                color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(
+                                  color: isDarkMode ? Colors.white12 : Colors.white.withOpacity(0.8),
+                                  width: 1.2,
+                                ),
                               ),
                               child: TabBar(
                                 indicator: BoxDecoration(
                                   color: isDarkMode ? accentGold : primaryColor,
-                                  borderRadius: BorderRadius.circular(15),
+                                  borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.3),
+                                      color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.35),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -322,7 +385,7 @@ class LeaveRequestsPage extends StatelessWidget {
                                       children: [
                                         Icon(Icons.mark_email_unread_rounded, size: 18),
                                         SizedBox(width: 8),
-                                        Text("معلقة 📥"),
+                                        Text("طلبات معلقة 📥"),
                                       ],
                                     ),
                                   ),
@@ -332,7 +395,7 @@ class LeaveRequestsPage extends StatelessWidget {
                                       children: [
                                         Icon(Icons.inventory_2_rounded, size: 18),
                                         SizedBox(width: 8),
-                                        Text("السجل 📁"),
+                                        Text("السجل والأرشيف 📁"),
                                       ],
                                     ),
                                   ),
@@ -365,51 +428,70 @@ class LeaveRequestsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildRequestsList(BuildContext context, bool isDarkMode, {required bool isHistory, CycleModel? activeCycle}) {
-    // 🛑 إذا لم تكن هناك دورة نشطة حالياً، لا يتم عرض أي طلبات قديمة
+  Widget _buildRequestsList(
+    BuildContext context,
+    bool isDarkMode, {
+    required bool isHistory,
+    CycleModel? activeCycle,
+  }) {
     if (activeCycle == null) {
       return _buildNoActiveCycleState(isDarkMode);
     }
 
+    // 🎯 استعلام الخادم بدون .orderBy للتغلب على خطأ Firestore Index Error
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('leave_requests')
-          .where('cycleId', isEqualTo: activeCycle.id) // 🔑 الفلترة حصراً برقم الدورة النشطة
-          .orderBy('timestamp', descending: true)
+      stream: FirebaseFirestore.instance
+          .collection('leave_requests')
+          .where('cycleId', isEqualTo: activeCycle.id)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text("حدث خطأ: ${snapshot.error}", style: const TextStyle(color: Colors.redAccent, fontFamily: 'Cairo')));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text("حدث خطأ في جلب البيانات: ${snapshot.error}", style: const TextStyle(color: Colors.redAccent, fontFamily: 'Cairo')),
+            ),
+          );
         }
-        
+
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        
+
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return _buildEmptyState(isDarkMode, isHistory);
         }
 
+        // 🎯 تصفية النتائج برمجياً بحسب دور المستلم وواجهة Tab
         var docs = snapshot.data!.docs.where((doc) {
           var data = doc.data() as Map<String, dynamic>;
           String currentStatus = data['status'] ?? 'pending';
-          
+
           bool statusMatches = isHistory ? (currentStatus != 'pending') : (currentStatus == 'pending');
-          bool isMyStudent = true; 
-          
-          if (role == 'supervisor') {
-            isMyStudent = data['supervisorId'] == supervisorId;
-          } else if (role == 'manager') {
-            isMyStudent = true;
+          bool isMyStudent = true;
+
+          if (widget.role == 'supervisor') {
+            isMyStudent = data['supervisorId'] == widget.supervisorId;
           }
-          
+
           return statusMatches && isMyStudent;
         }).toList();
 
         if (docs.isEmpty) return _buildEmptyState(isDarkMode, isHistory);
 
+        // 🎯 ترتيب البرمجة بدلاً من ترتيب قاعدة البيانات لمنع أخطاء Index
+        docs.sort((a, b) {
+          var dataA = a.data() as Map<String, dynamic>;
+          var dataB = b.data() as Map<String, dynamic>;
+          Timestamp? tA = dataA['timestamp'] as Timestamp?;
+          Timestamp? tB = dataB['timestamp'] as Timestamp?;
+          if (tA == null || tB == null) return 0;
+          return tB.compareTo(tA);
+        });
+
         return ListView.builder(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 5, 20, 20),
+          padding: const EdgeInsets.fromLTRB(20, 5, 20, 25),
           itemCount: docs.length,
           itemBuilder: (context, index) {
             var doc = docs[index];
@@ -426,15 +508,19 @@ class LeaveRequestsPage extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.5),
+                      color: isDarkMode
+                          ? Colors.white.withOpacity(0.05)
+                          : Colors.white.withOpacity(0.65),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.8),
+                        color: isDarkMode
+                            ? Colors.white.withOpacity(0.12)
+                            : Colors.white.withOpacity(0.85),
                         width: 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.04),
+                          color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.05),
                           blurRadius: 15,
                           offset: const Offset(0, 6),
                         )
@@ -451,17 +537,27 @@ class LeaveRequestsPage extends StatelessWidget {
                                 CircleAvatar(
                                   radius: 20,
                                   backgroundColor: (isDarkMode ? accentGold : primaryColor).withOpacity(0.15),
-                                  child: Icon(Icons.person, color: isDarkMode ? accentGold : primaryColor, size: 22),
+                                  child: Icon(Icons.person_rounded, color: isDarkMode ? accentGold : primaryColor, size: 22),
                                 ),
                                 const SizedBox(width: 10),
-                                Text(
-                                  data['studentName'] ?? 'طالب',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: isDarkMode ? Colors.white : primaryColor,
-                                    fontFamily: 'Cairo',
-                                  ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      data['studentName'] ?? 'طالب',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: isDarkMode ? Colors.white : primaryColor,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                                    if (data['supervisorName'] != null)
+                                      Text(
+                                        "المشرف: ${data['supervisorName']}",
+                                        style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDarkMode ? Colors.white54 : Colors.black45),
+                                      ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -474,9 +570,9 @@ class LeaveRequestsPage extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+                            color: isDarkMode ? Colors.black.withOpacity(0.22) : Colors.white.withOpacity(0.5),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03)),
+                            border: Border.all(color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04)),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -517,13 +613,36 @@ class LeaveRequestsPage extends StatelessWidget {
                         const SizedBox(height: 10),
 
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(Icons.access_time_rounded, size: 14, color: isDarkMode ? Colors.white54 : Colors.black45),
-                            const SizedBox(width: 6),
-                            Text(
-                              "وقت الطلب: $requestTime",
-                              style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.black45, fontFamily: 'Cairo', fontSize: 11),
+                            Row(
+                              children: [
+                                Icon(Icons.access_time_rounded, size: 14, color: isDarkMode ? Colors.white54 : Colors.black45),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "وقت الطلب: $requestTime",
+                                  style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.black45, fontFamily: 'Cairo', fontSize: 11),
+                                ),
+                              ],
                             ),
+                            if (isHistory)
+                              TextButton.icon(
+                                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                                onPressed: () => _updateRequestStatus(
+                                  context: context,
+                                  docId: doc.id,
+                                  studentId: data['studentId'] ?? '',
+                                  studentName: data['studentName'] ?? 'طالب',
+                                  status: 'pending',
+                                  date: data['date'] ?? '',
+                                  reason: data['reason'] ?? 'بعذر',
+                                  requestSupervisorId: data['supervisorId'] ?? '',
+                                  isDark: isDarkMode,
+                                  cycleId: activeCycle.id,
+                                ),
+                                icon: const Icon(Icons.undo_rounded, size: 14, color: Colors.orangeAccent),
+                                label: const Text("تراجع عن القرار", style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.orangeAccent)),
+                              )
                           ],
                         ),
 
@@ -649,14 +768,14 @@ class LeaveRequestsPage extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
               color: isDarkMode ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.4),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.event_busy_rounded,
-              size: 70,
+              size: 65,
               color: Colors.redAccent.withOpacity(0.7),
             ),
           ),
@@ -674,7 +793,7 @@ class LeaveRequestsPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Text(
-              "تم إغلاق الدورة السابقة، يرجى إنشاء دورة جديدة لعرض استئذاناتها.",
+              "تم إغلاق الدورة السابقة، يرجى تفعيل أو إنشاء دورة جديدة لعرض استئذاناتها.",
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: isDarkMode ? Colors.white60 : Colors.grey[600],
@@ -694,20 +813,20 @@ class LeaveRequestsPage extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
               color: isDarkMode ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.4),
               shape: BoxShape.circle,
             ),
             child: Icon(
-              isHistory ? Icons.folder_off_rounded : Icons.event_available_rounded,
-              size: 70,
+              isHistory ? Icons.folder_off_rounded : Icons.mark_email_read_rounded,
+              size: 65,
               color: isDarkMode ? accentGold.withOpacity(0.6) : primaryColor.withOpacity(0.6),
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            isHistory ? "لا يوجد سجل سابق لطلبات الغياب 📁" : "جميع الطلبات مُعتاذة ولا يوجد معلق ☕", 
+            isHistory ? "لا يوجد سجل سابق لطلبات الغياب 📁" : "جميع الطلبات مُعالجة ولا يوجد معلق ☕",
             style: TextStyle(
               color: isDarkMode ? Colors.white70 : Colors.black54,
               fontFamily: 'Cairo',

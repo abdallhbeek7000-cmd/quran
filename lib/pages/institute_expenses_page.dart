@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 
 class InstituteExpensesPage extends StatefulWidget {
-  final String? activeCycleId; // 👈 نمرر معرف الدورة النشطة
+  final String? activeCycleId; // خياري: إذا لم يمرر سيتم جلبه تلقائياً من Firestore
 
   const InstituteExpensesPage({super.key, this.activeCycleId});
 
@@ -40,7 +40,7 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
     super.dispose();
   }
 
-  void _showAddExpenseDialog(bool isDark) {
+  void _showAddExpenseDialog(bool isDark, String currentCycleId) {
     _titleController.clear();
     _amountController.clear();
     _notesController.clear();
@@ -61,7 +61,9 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
                   child: Container(
                     padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.9),
+                      color: isDark
+                          ? const Color(0xff1e293b).withOpacity(0.92)
+                          : Colors.white.withOpacity(0.92),
                       borderRadius: BorderRadius.circular(28),
                       border: Border.all(color: isDark ? Colors.white12 : Colors.white, width: 1.5),
                     ),
@@ -94,7 +96,6 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
                           ),
                           const SizedBox(height: 20),
 
-                          // بند المصروف
                           TextField(
                             controller: _titleController,
                             style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87),
@@ -109,7 +110,6 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
                           ),
                           const SizedBox(height: 12),
 
-                          // المبلغ
                           TextField(
                             controller: _amountController,
                             keyboardType: TextInputType.number,
@@ -125,7 +125,6 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
                           ),
                           const SizedBox(height: 12),
 
-                          // التصنيف
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                             decoration: BoxDecoration(
@@ -147,7 +146,6 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
                           ),
                           const SizedBox(height: 12),
 
-                          // ملاحظات إضافية
                           TextField(
                             controller: _notesController,
                             style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87),
@@ -189,7 +187,6 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
                                       return;
                                     }
 
-                                    // 👈 إضافة cycleId للمستند الجديد
                                     await FirebaseFirestore.instance.collection('expenses').add({
                                       'title': title,
                                       'amount': amount,
@@ -197,7 +194,7 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
                                       'notes': _notesController.text.trim(),
                                       'timestamp': FieldValue.serverTimestamp(),
                                       'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
-                                      'cycleId': widget.activeCycleId ?? '', // حفظ معرف الدورة الحالية
+                                      'cycleId': currentCycleId, // 🔑 الربط مع الدورة الحالية الفعالة
                                     });
 
                                     if (!mounted) return;
@@ -233,7 +230,7 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
         backgroundColor: Colors.transparent,
         title: Text(
           "المعاملات المالية والمصروفات 💳",
-          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo'),
+          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18),
         ),
         centerTitle: true,
         iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
@@ -254,161 +251,244 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
             ),
           ),
           SafeArea(
+            // 🔹 جلب مستندات الدورات أولاً لمطابقة الدورة النشطة
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('expenses').orderBy('timestamp', descending: true).snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              stream: FirebaseFirestore.instance.collection('cycles').snapshots(),
+              builder: (context, cycleSnap) {
+                String effectiveCycleId = widget.activeCycleId ?? '';
 
-                var docs = snapshot.data!.docs;
+                if (effectiveCycleId.isEmpty && cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty) {
+                  for (var doc in cycleSnap.data!.docs) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    bool isCurrent = data['isCurrent'] == true || data['isActive'] == true;
+                    bool isActive = data['status'] == 'active' || data['active'] == true;
+                    bool isNotClosed = data['isClosed'] != true && data['archived'] != true;
 
-                // 🔹 تجميع المصروفات وحساب المجموعات
-                List<QueryDocumentSnapshot> currentCycleDocs = [];
-                List<QueryDocumentSnapshot> previousCycleDocs = [];
-
-                double currentCycleTotal = 0;
-                double previousCyclesTotal = 0;
-
-                for (var doc in docs) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  double amount = (data['amount'] as num? ?? 0).toDouble();
-                  String docCycleId = data['cycleId'] ?? '';
-
-                  // التمييز بناءً على معرف الدورة النشطة
-                  if (widget.activeCycleId != null && widget.activeCycleId!.isNotEmpty && docCycleId == widget.activeCycleId) {
-                    currentCycleDocs.add(doc);
-                    currentCycleTotal += amount;
-                  } else if (widget.activeCycleId == null || widget.activeCycleId!.isEmpty) {
-                    // في حال عدم تمرير cycleId يعتبر كل شيء ضمن الحالية
-                    currentCycleDocs.add(doc);
-                    currentCycleTotal += amount;
-                  } else {
-                    previousCycleDocs.add(doc);
-                    previousCyclesTotal += amount;
+                    if ((isCurrent || isActive) && isNotClosed) {
+                      effectiveCycleId = doc.id;
+                      break;
+                    }
                   }
                 }
 
-                return Column(
-                  children: [
-                    // 🔴 كارت إجمالي إنفاق الدورة الحالية فقط
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                          child: Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.redAccent.withOpacity(0.12) : Colors.redAccent.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.redAccent.withOpacity(0.4), width: 1.5),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
+                // 🔹 جلب المصروفات مع ترتيب كود الخادم دون أخطاء Index
+                return StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('expenses').snapshots(),
+                  builder: (context, expenseSnap) {
+                    if (!expenseSnap.hasData) return const Center(child: CircularProgressIndicator());
+
+                    var docs = expenseSnap.data!.docs;
+
+                    // ترتيب المصروفات تنازلياً حسب الوقت برمجياً
+                    docs.sort((a, b) {
+                      var dataA = a.data() as Map<String, dynamic>;
+                      var dataB = b.data() as Map<String, dynamic>;
+                      Timestamp? tA = dataA['timestamp'] as Timestamp?;
+                      Timestamp? tB = dataB['timestamp'] as Timestamp?;
+                      if (tA == null || tB == null) return 0;
+                      return tB.compareTo(tA);
+                    });
+
+                    List<QueryDocumentSnapshot> currentCycleDocs = [];
+                    List<QueryDocumentSnapshot> previousCycleDocs = [];
+
+                    double currentCycleTotal = 0;
+                    double previousCyclesTotal = 0;
+
+                    for (var doc in docs) {
+                      var data = doc.data() as Map<String, dynamic>;
+                      double amount = (data['amount'] as num? ?? 0).toDouble();
+                      String docCycleId = data['cycleId'] ?? '';
+
+                      if (effectiveCycleId.isNotEmpty && docCycleId == effectiveCycleId) {
+                        currentCycleDocs.add(doc);
+                        currentCycleTotal += amount;
+                      } else {
+                        previousCycleDocs.add(doc);
+                        previousCyclesTotal += amount;
+                      }
+                    }
+
+                    return Column(
+                      children: [
+                        // 🔴 بطاقة إجمالي إنفاق الدورة الفعالة الحالية
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                              child: Container(
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.redAccent.withOpacity(0.12) : Colors.redAccent.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(color: Colors.redAccent.withOpacity(0.4), width: 1.5),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.redAccent.withOpacity(0.2),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.redAccent, size: 28),
-                                    ),
-                                    const SizedBox(width: 15),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                    Row(
                                       children: [
-                                        Text("إنفاق الدورة الحالية 📍", style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDark ? Colors.white70 : Colors.black87)),
-                                        Text(
-                                          "${currentCycleTotal.toStringAsFixed(0)} ل.س",
-                                          style: TextStyle(fontFamily: 'Cairo', fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor),
+                                        Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.redAccent.withOpacity(0.2),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.redAccent, size: 28),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text("إنفاق الدورة الحالية 📍", style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDark ? Colors.white70 : Colors.black87)),
+                                            Text(
+                                              "${currentCycleTotal.toStringAsFixed(0)} ل.س",
+                                              style: TextStyle(fontFamily: 'Cairo', fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
+                                    FloatingActionButton.small(
+                                      elevation: 3,
+                                      backgroundColor: primaryColor,
+                                      onPressed: () => _showAddExpenseDialog(isDark, effectiveCycleId),
+                                      child: const Icon(Icons.add, color: Colors.white),
+                                    )
                                   ],
                                 ),
-                                FloatingActionButton.small(
-                                  backgroundColor: primaryColor,
-                                  onPressed: () => _showAddExpenseDialog(isDark),
-                                  child: const Icon(Icons.add, color: Colors.white),
-                                )
-                              ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
 
-                    const SizedBox(height: 10),
+                        const SizedBox(height: 10),
 
-                    // 📝 قائمة المصروفات (الحالية أولاً ثم الخط الفاصل ثم السابقة)
-                    Expanded(
-                      child: docs.isEmpty
-                          ? Center(
-                              child: Text(
-                                "لا توجد مصروفات مسجلة حتى الآن 📝",
-                                style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54),
-                              ),
-                            )
-                          : ListView(
-                              physics: const BouncingScrollPhysics(),
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-                              children: [
-                                // 1️⃣ عرض مصروفات الدورة الحالية
-                                ...currentCycleDocs.map((doc) => _buildExpenseCard(doc, isDark, isCurrent: true)),
-
-                                if (currentCycleDocs.isEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.all(16.0),
-                                    child: Center(
-                                      child: Text(
-                                        "لا توجد مصروفات مسجلة في الدورة الحالية",
-                                        style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: isDark ? Colors.white38 : Colors.grey),
-                                      ),
-                                    ),
+                        // 📝 القائمة المصنفة
+                        Expanded(
+                          child: docs.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    "لا توجد مصروفات مسجلة حتى الآن 📝",
+                                    style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54),
                                   ),
-
-                                // 2️⃣ الخط الفاصل المكتوب عليه مجموع الدورات السابقة
-                                if (previousCycleDocs.isNotEmpty) ...[
-                                  const SizedBox(height: 20),
-                                  Row(
-                                    children: [
-                                      Expanded(child: Divider(color: isDark ? Colors.white24 : Colors.grey.shade400, thickness: 1)),
+                                )
+                              : ListView(
+                                  physics: const BouncingScrollPhysics(),
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+                                  children: [
+                                    // 1️⃣ عرض مصروفات الدورة الحالية
+                                    if (currentCycleDocs.isNotEmpty)
+                                      ...currentCycleDocs.map((doc) => _buildExpenseCard(doc, isDark, isCurrent: true))
+                                    else
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                        margin: const EdgeInsets.symmetric(vertical: 10),
+                                        padding: const EdgeInsets.all(16),
                                         decoration: BoxDecoration(
-                                          color: isDark ? Colors.white10 : Colors.grey.shade200,
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade400),
+                                          color: isDark ? Colors.white.withOpacity(0.03) : Colors.white.withOpacity(0.4),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
                                         ),
-                                        child: Text(
-                                          "مصروفات الدورات السابقة: ${previousCyclesTotal.toStringAsFixed(0)} ل.س 🏛️",
-                                          style: TextStyle(
-                                            fontFamily: 'Cairo',
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark ? accentGold : primaryColor,
+                                        child: Center(
+                                          child: Text(
+                                            "🎉 لم يتم تسجيل أي مصروفات في الدورة الحالية بعد (الحساب صافي)",
+                                            style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: isDark ? accentGold : primaryColor, fontWeight: FontWeight.bold),
                                           ),
                                         ),
                                       ),
-                                      Expanded(child: Divider(color: isDark ? Colors.white24 : Colors.grey.shade400, thickness: 1)),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 15),
 
-                                  // 3️⃣ عرض مصروفات الدورات السابقة
-                                  ...previousCycleDocs.map((doc) => _buildExpenseCard(doc, isDark, isCurrent: false)),
-                                ],
-                              ],
-                            ),
-                    ),
-                  ],
+                                    // 2️⃣ فاصل الدورة المنتهية الفخم
+                                    if (previousCycleDocs.isNotEmpty) ...[
+                                      const SizedBox(height: 25),
+                                      _buildCycleDivider(isDark, previousCyclesTotal),
+                                      const SizedBox(height: 18),
+
+                                      // 3️⃣ عرض مصروفات الدورات السابقة
+                                      ...previousCycleDocs.map((doc) => _buildExpenseCard(doc, isDark, isCurrent: false)),
+                                    ],
+                                  ],
+                                ),
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // 🏁 تصميم الفاصل الفخم عند انتهاء الدورة
+  Widget _buildCycleDivider(bool isDark, double previousTotal) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xff1e293b).withOpacity(0.8), const Color(0xff0f172a).withOpacity(0.9)]
+              : [Colors.white.withOpacity(0.9), const Color(0xfff1f5f9).withOpacity(0.9)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accentGold.withOpacity(0.5), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: accentGold.withOpacity(0.12),
+            blurRadius: 15,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.flag_circle_rounded, color: accentGold, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                "انتهت الدورة السابقة وأُغلقت حساباتها",
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: isDark ? Colors.white : primaryColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Divider(color: accentGold.withOpacity(0.3), thickness: 1),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "إجمالي مصروفات الأرشيف:",
+                style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: accentGold.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  "${previousTotal.toStringAsFixed(0)} ل.س",
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: isDark ? accentGold : primaryColor,
+                  ),
+                ),
+              )
+            ],
+          )
         ],
       ),
     );
@@ -430,7 +510,7 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
             decoration: BoxDecoration(
               color: isCurrent
                   ? (isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.65))
-                  : (isDark ? Colors.black.withOpacity(0.2) : Colors.grey.shade100.withOpacity(0.5)), // تمييز الدورات السابقة بشفافية أقل
+                  : (isDark ? Colors.black.withOpacity(0.2) : Colors.grey.shade200.withOpacity(0.5)),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: isDark ? Colors.white12 : Colors.white.withOpacity(0.7)),
             ),
@@ -448,7 +528,7 @@ class _InstituteExpensesPageState extends State<InstituteExpensesPage> {
                           fontSize: 15,
                           color: isCurrent
                               ? (isDark ? Colors.white : primaryColor)
-                              : (isDark ? Colors.white60 : Colors.black54), // لون أهفت للدورات السابقة
+                              : (isDark ? Colors.white60 : Colors.black54),
                         ),
                       ),
                       const SizedBox(height: 4),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -251,7 +252,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                       subtitle: "اضغط لعرض كافة تسميعات اليوم بالتفصيل",
                       icon: Icons.auto_stories_rounded,
                       color: Colors.greenAccent.shade700,
-                      // 💡 تعديل استعلام الجلسات الفعلية باستثناء didNotRecite
                       stream: FirebaseFirestore.instance
                           .collection('sessions')
                           .where('date', isEqualTo: formattedDate)
@@ -574,7 +574,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
         String percentage = "0%";
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
           final docs = snapshot.data!.docs;
-          // 💡 نسبة الحضور تحسب بالنسبة للجلسات المسجلة فعلياً فقط (غير غائب ولم يمتنع)
           int presentCount = docs.where((doc) {
             var d = doc.data() as Map<String, dynamic>;
             return (d['absent'] == false) && (d['didNotRecite'] != true);
@@ -688,7 +687,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 // =========================================================================
 class PendingSessionsPage extends StatefulWidget {
   final String targetDate;
-  const PendingSessionsPage({super.key, required this.targetDate});
+  const PendingSessionsPage({required this.targetDate});
 
   @override
   State<PendingSessionsPage> createState() => _PendingSessionsPageState();
@@ -1166,7 +1165,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
 }
 
 // =========================================================================
-// 🚀 2. واجهة التسميعات والجلسات اليومية (تم تعديل التصميم لتطابق عرض الجلسات الكامل)
+// 🚀 2. واجهة التسميعات والجلسات اليومية
 // =========================================================================
 class DailyRecitationsPage extends StatefulWidget {
   final String targetDate;
@@ -1294,7 +1293,6 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
             ),
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
-                // 💡 استثناء الجلسات التي لم يتم التسميع فيها (didNotRecite == true)
                 stream: FirebaseFirestore.instance
                     .collection('sessions')
                     .where('date', isEqualTo: widget.targetDate)
@@ -1341,7 +1339,6 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
     );
   }
 
-  // 💡 بطاقة الجلسة بنفس تصميم وعرض كود StudentSessionsPage تماماً
   Widget _buildSessionCardItem(BuildContext context, String sessionId,
       Map<String, dynamic> data, bool isDarkMode) {
     String studentName = data['studentName'] ?? 'طالب';
@@ -1353,8 +1350,6 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
 
     String sessionDateRaw = data['date'] ?? '';
     String dayName = _getArabicDayName(sessionDateRaw);
-    String displayDate =
-        dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
 
     String actualCreatedAt = data['actualCreatedAt']?.toString() ?? '';
     String actualEditedAt = data['actualEditedAt']?.toString() ?? '';
@@ -1424,7 +1419,6 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
         isDarkMode: isDarkMode,
         child: Column(
           children: [
-            // الهيدر علوي مخصص لكل حقل مع اسم الطالب
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
@@ -1486,8 +1480,6 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
                 ],
               ),
             ),
-
-            // محتوى تفاصيل الجلسة
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               child: Column(
@@ -1989,7 +1981,7 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
 }
 
 // =========================================================================
-// 🚀 3. واجهة الطلاب الغائبين
+// 🚀 3. واجهة الطلاب الغائبين (مع التصدير بـ HD)
 // =========================================================================
 class DailyAbsentStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -2001,7 +1993,39 @@ class DailyAbsentStudentsPage extends StatefulWidget {
 }
 
 class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
+  final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
+  bool isExporting = false;
+
+  Future<void> _shareAbsentListAsImage(
+      List<QueryDocumentSnapshot> docs) async {
+    if (docs.isEmpty) return;
+    setState(() => isExporting = true);
+    try {
+      final bytes = await controller.capture();
+      if (bytes != null) {
+        final tempDir = await getTemporaryDirectory();
+        final file =
+            await File('${tempDir.path}/قائمة_الغياب_${widget.targetDate}.png')
+                .create();
+        await file.writeAsBytes(bytes);
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text:
+              '🚨 كرت الغياب اليومي (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("حدث خطأ أثناء تصدير الصورة: $e",
+                style: const TextStyle(fontFamily: 'Cairo'))));
+      }
+    } finally {
+      if (mounted) setState(() => isExporting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2073,76 +2097,143 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                     );
                   }
 
-                  return ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.all(18),
-                    itemCount: absentDocs.length,
-                    itemBuilder: (context, index) {
-                      final data =
-                          absentDocs[index].data() as Map<String, dynamic>;
-                      String studentName = data['studentName'] ?? 'طالب';
-                      String reason = data['absenceReason'] ?? 'بدون سبَب مُسجّل';
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: isDarkMode
-                                    ? Colors.white.withOpacity(0.06)
-                                    : Colors.white.withOpacity(0.55),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                    color: Colors.redAccent.withOpacity(0.3),
-                                    width: 1.2),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.redAccent.withOpacity(0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.person_off_rounded,
-                                        color: Colors.redAccent, size: 22),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(studentName,
-                                            style: TextStyle(
-                                                fontFamily: 'Cairo',
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                                color: isDarkMode
-                                                    ? Colors.white
-                                                    : primaryColor)),
-                                        const SizedBox(height: 2),
-                                        Text("سبب الغياب: $reason",
-                                            style: TextStyle(
-                                                fontFamily: 'Cairo',
-                                                fontSize: 11,
-                                                color: isDarkMode
-                                                    ? Colors.white60
-                                                    : Colors.black54)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                  return Stack(
+                    children: [
+                      Offstage(
+                        offstage: true,
+                        child: WidgetsToImage(
+                          controller: controller,
+                          child: SizedBox(
+                            width: 600,
+                            child: _buildExportablePoster(absentDocs),
+                          ),
+                        ),
+                      ),
+                      Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(
+                                left: 18, right: 18, top: 10),
+                            child: SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.redAccent.shade700,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16)),
+                                  elevation: 3,
+                                ),
+                                onPressed: isExporting
+                                    ? null
+                                    : () => _shareAbsentListAsImage(absentDocs),
+                                icon: isExporting
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2))
+                                    : const Icon(Icons.share_rounded,
+                                        color: Colors.white, size: 20),
+                                label: Text(
+                                  isExporting
+                                      ? "جاري الإنشاء..."
+                                      : "مشاركة كرت الغياب اليومي لـ لواتساب 📸",
+                                  style: const TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: Colors.white),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                          Expanded(
+                            child: ListView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.all(18),
+                              itemCount: absentDocs.length,
+                              itemBuilder: (context, index) {
+                                final data = absentDocs[index].data()
+                                    as Map<String, dynamic>;
+                                String studentName =
+                                    data['studentName'] ?? 'طالب';
+                                String reason =
+                                    data['absenceReason'] ?? 'بدون سبَب مُسجّل';
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: BackdropFilter(
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 12, sigmaY: 12),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: isDarkMode
+                                              ? Colors.white.withOpacity(0.06)
+                                              : Colors.white.withOpacity(0.55),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          border: Border.all(
+                                              color: Colors.redAccent
+                                                  .withOpacity(0.3),
+                                              width: 1.2),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(10),
+                                              decoration: BoxDecoration(
+                                                color: Colors.redAccent
+                                                    .withOpacity(0.15),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                  Icons.person_off_rounded,
+                                                  color: Colors.redAccent,
+                                                  size: 22),
+                                            ),
+                                            const SizedBox(width: 14),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(studentName,
+                                                      style: TextStyle(
+                                                          fontFamily: 'Cairo',
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 15,
+                                                          color: isDarkMode
+                                                              ? Colors.white
+                                                              : primaryColor)),
+                                                  const SizedBox(height: 2),
+                                                  Text("سبب الغياب: $reason",
+                                                      style: TextStyle(
+                                                          fontFamily: 'Cairo',
+                                                          fontSize: 11,
+                                                          color: isDarkMode
+                                                              ? Colors.white60
+                                                              : Colors.black54)),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   );
                 },
               ),
@@ -2152,10 +2243,65 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
       ),
     );
   }
+
+  Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
+    return Container(
+      padding: const EdgeInsets.all(30),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xff0f172a), Color(0xff1e293b), Color(0xff0f172a)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text("معهد الشيخ سعيد العبدالله 🕌",
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontFamily: 'Cairo')),
+          const SizedBox(height: 12),
+          Text("🔴 قائمة الطلاب الغائبين يوم: ${widget.targetDate}",
+              style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Cairo')),
+          const SizedBox(height: 20),
+          Table(
+            children: [
+              ...docs.map((doc) {
+                var s = doc.data() as Map<String, dynamic>;
+                return TableRow(children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(s['studentName'] ?? '',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(s['absenceReason'] ?? 'بدون سبب',
+                        style: const TextStyle(
+                            color: Colors.white70, fontFamily: 'Cairo')),
+                  ),
+                ]);
+              })
+            ],
+          )
+        ],
+      ),
+    );
+  }
 }
 
 // =========================================================================
-// 🚀 4. واجهة الطلاب (حضر ولم يسمّع)
+// 🚀 4. واجهة الطلاب (حضر ولم يسمّع مع التصدير بـ HD)
 // =========================================================================
 class DailyDidNotReciteStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -2168,7 +2314,39 @@ class DailyDidNotReciteStudentsPage extends StatefulWidget {
 
 class _DailyDidNotReciteStudentsPageState
     extends State<DailyDidNotReciteStudentsPage> {
+  final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
+  bool isExporting = false;
+
+  Future<void> _shareDidNotReciteListAsImage(
+      List<QueryDocumentSnapshot> docs) async {
+    if (docs.isEmpty) return;
+    setState(() => isExporting = true);
+    try {
+      final bytes = await controller.capture();
+      if (bytes != null) {
+        final tempDir = await getTemporaryDirectory();
+        final file = await File(
+                '${tempDir.path}/حضر_ولم_يسمع_${widget.targetDate}.png')
+            .create();
+        await file.writeAsBytes(bytes);
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text:
+              '⚠️ إشعار الطلاب (حضر ولم يسمّع) اليوم (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("حدث خطأ أثناء تصدير الصورة: $e",
+                style: const TextStyle(fontFamily: 'Cairo'))));
+      }
+    } finally {
+      if (mounted) setState(() => isExporting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2239,66 +2417,200 @@ class _DailyDidNotReciteStudentsPageState
                   );
                 }
 
-                return ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.all(18),
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
-                    String studentName = data['studentName'] ?? 'طالب';
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: isDarkMode
-                                  ? Colors.white.withOpacity(0.06)
-                                  : Colors.white.withOpacity(0.55),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: Colors.blueGrey.withOpacity(0.4),
-                                  width: 1.2),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blueGrey.withOpacity(0.15),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                      Icons.speaker_notes_off_outlined,
-                                      color: Colors.blueGrey,
-                                      size: 22),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Text(studentName,
-                                      style: TextStyle(
-                                          fontFamily: 'Cairo',
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 15,
-                                          color: isDarkMode
-                                              ? Colors.white
-                                              : primaryColor)),
-                                ),
-                              ],
+                return Stack(
+                  children: [
+                    Offstage(
+                      offstage: true,
+                      child: WidgetsToImage(
+                        controller: controller,
+                        child: SizedBox(
+                          width: 600,
+                          child: _buildExportablePoster(docs),
+                        ),
+                      ),
+                    ),
+                    Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              left: 18, right: 18, top: 10),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blueGrey.shade800,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                elevation: 3,
+                              ),
+                              onPressed: isExporting
+                                  ? null
+                                  : () => _shareDidNotReciteListAsImage(docs),
+                              icon: isExporting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          color: Colors.white, strokeWidth: 2))
+                                  : const Icon(Icons.share_rounded,
+                                      color: Colors.white, size: 20),
+                              label: Text(
+                                isExporting
+                                    ? "جاري الإنشاء..."
+                                    : "مشاركة القائمة كصورة لجروب الأهالي 📸",
+                                style: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Colors.white),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                        Expanded(
+                          child: ListView.builder(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.all(18),
+                            itemCount: docs.length,
+                            itemBuilder: (context, index) {
+                              final data =
+                                  docs[index].data() as Map<String, dynamic>;
+                              String studentName =
+                                  data['studentName'] ?? 'طالب';
+                              String supervisorName =
+                                  data['supervisorName'] ?? 'غير محدد';
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(
+                                        sigmaX: 12, sigmaY: 12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: isDarkMode
+                                            ? Colors.white.withOpacity(0.06)
+                                            : Colors.white.withOpacity(0.55),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                            color: Colors.blueGrey
+                                                .withOpacity(0.4),
+                                            width: 1.2),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blueGrey
+                                                  .withOpacity(0.15),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                                Icons.speaker_notes_off_outlined,
+                                                color: Colors.blueGrey,
+                                                size: 22),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(studentName,
+                                                    style: TextStyle(
+                                                        fontFamily: 'Cairo',
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 15,
+                                                        color: isDarkMode
+                                                            ? Colors.white
+                                                            : primaryColor)),
+                                                const SizedBox(height: 2),
+                                                Text("المشرف: $supervisorName",
+                                                    style: TextStyle(
+                                                        fontFamily: 'Cairo',
+                                                        fontSize: 11,
+                                                        color: isDarkMode
+                                                            ? Colors.white60
+                                                            : Colors.black54)),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 );
               },
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
+    return Container(
+      padding: const EdgeInsets.all(30),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xff0f172a), Color(0xff1e293b), Color(0xff0f172a)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text("معهد الشيخ سعيد العبدالله 🕌",
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontFamily: 'Cairo')),
+          const SizedBox(height: 12),
+          Text("⚠️ قائمة الطلاب الذين حضروا ولم يسمّعوا يوم: ${widget.targetDate}",
+              style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.amber,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Cairo')),
+          const SizedBox(height: 20),
+          Table(
+            children: [
+              ...docs.map((doc) {
+                var s = doc.data() as Map<String, dynamic>;
+                return TableRow(children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(s['studentName'] ?? '',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(s['supervisorName'] ?? 'غير محدد',
+                        style: const TextStyle(
+                            color: Colors.white70, fontFamily: 'Cairo')),
+                  ),
+                ]);
+              })
+            ],
+          )
         ],
       ),
     );
