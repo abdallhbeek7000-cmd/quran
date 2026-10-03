@@ -38,6 +38,12 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
   DateTime? birthDate;
   DateTime? startDate;
   bool loading = false;
+  
+  bool _isLoadingCycle = true;
+  bool _isCycleActive = false;
+  String _activeCycleId = '';
+  String _activeCycleName = '';
+
   String studentType = "new";
   
   String selectedNationality = "سوري";
@@ -74,6 +80,7 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
   void initState() {
     super.initState();
     _glowController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
+    _checkActiveCycle();
   }
 
   @override
@@ -88,6 +95,47 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
     memorizedPages.dispose();
     _glowController.dispose();
     super.dispose();
+  }
+
+  // 🚀 التحقق من الدورة النشطة مرة واحدة فقط لمنع إعادة بناء الصفحة مع الكتابة
+  Future<void> _checkActiveCycle() async {
+    try {
+      var cycleSnap = await FirebaseFirestore.instance
+          .collection('cycles')
+          .where('isCurrent', isEqualTo: true)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+
+      if (mounted) {
+        if (cycleSnap.docs.isNotEmpty) {
+          var doc = cycleSnap.docs.first;
+          var data = doc.data();
+          setState(() {
+            _isCycleActive = true;
+            _activeCycleId = doc.id;
+            _activeCycleName = data['name'] ?? widget.cycle.name;
+            _isLoadingCycle = false;
+          });
+        } else {
+          setState(() {
+            _isCycleActive = false;
+            _activeCycleId = widget.cycle.id;
+            _activeCycleName = widget.cycle.name;
+            _isLoadingCycle = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCycleActive = true; // الاعتماد على الدورة الممررة كبديل
+          _activeCycleId = widget.cycle.id;
+          _activeCycleName = widget.cycle.name;
+          _isLoadingCycle = false;
+        });
+      }
+    }
   }
 
   Future<void> _pickImage() async {
@@ -127,7 +175,7 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
     }
   }
 
-  addStudent(String targetCycleId, String targetCycleName) async {
+  addStudent() async {
     if (name.text.trim().isEmpty || phone.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -155,7 +203,7 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
 
       var studentsSnapshot = await FirebaseFirestore.instance
           .collection('students')
-          .where('cycleId', isEqualTo: targetCycleId)
+          .where('cycleId', isEqualTo: _activeCycleId)
           .get(const GetOptions(source: Source.server));
 
       if (studentsSnapshot.docs.isEmpty) {
@@ -192,8 +240,8 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
         studentType: studentType,
         supervisorId: '',
         supervisorName: '',
-        cycleId: targetCycleId,
-        cycleName: targetCycleName,
+        cycleId: _activeCycleId, // 🎯 الحفظ التلقائي للـ cycleId الصحيح والدورة الجديدة
+        cycleName: _activeCycleName,
         startMemorization: startDate?.toString() ?? '',
         memorizedPages: double.tryParse(memorizedPages.text) ?? 0,
         imageUrl: finalImageUrl, 
@@ -264,452 +312,435 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('cycles')
-          .where('isCurrent', isEqualTo: true)
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .snapshots(),
-      builder: (context, cycleSnap) {
-        if (cycleSnap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
+    if (_isLoadingCycle) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
-        bool isCycleActive = cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty;
-        final currentCycleDoc = isCycleActive ? cycleSnap.data!.docs.first : null;
-        final String activeCycleId = currentCycleDoc?.id ?? widget.cycle.id;
-        final String activeCycleName = (currentCycleDoc?.data() as Map<String, dynamic>?)?['name'] ?? widget.cycle.name;
-
-        return Scaffold(
-          extendBodyBehindAppBar: true, 
-          backgroundColor: isDarkMode ? const Color(0xff0a0f1d) : const Color(0xfff8fafc),
-          appBar: AppBar(
-            elevation: 0,
-            backgroundColor: Colors.transparent, 
-            title: Text("إضافة طالب جديد", style: TextStyle(fontWeight: FontWeight.w800, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 19)),
-            iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-            centerTitle: true,
+    return Scaffold(
+      extendBodyBehindAppBar: true, 
+      backgroundColor: isDarkMode ? const Color(0xff0a0f1d) : const Color(0xfff8fafc),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent, 
+        title: Text("إضافة طالب جديد", style: TextStyle(fontWeight: FontWeight.w800, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 19)),
+        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+        centerTitle: true,
+      ),
+      body: Stack(
+        children: [
+          // 🎨 1. خلفية متدرجة حديثة
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDarkMode
+                    ? [const Color(0xff0a0f1d), const Color(0xff151f32), const Color(0xff0a0f1d)]
+                    : [const Color(0xfff1f5f9), const Color(0xffe2e8f0), const Color(0xffcbd5e1)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
           ),
-          body: Stack(
-            children: [
-              // 🎨 1. خلفية متدرجة حديثة
-              Container(
-                width: double.infinity,
-                height: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isDarkMode
-                        ? [const Color(0xff0a0f1d), const Color(0xff151f32), const Color(0xff0a0f1d)]
-                        : [const Color(0xfff1f5f9), const Color(0xffe2e8f0), const Color(0xffcbd5e1)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
+          
+          // ✨ 2. هالات ضوئية عائمة خلف الكروت
+          AnimatedBuilder(
+            animation: _glowController,
+            builder: (context, child) {
+              return Stack(
+                children: [
+                  Positioned(
+                    top: -50 + (_glowController.value * 25),
+                    right: -50,
+                    child: Container(
+                      width: 280,
+                      height: 280,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: accentGlow.withOpacity(isDarkMode ? 0.15 : 0.2),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              
-              // ✨ 2. هالات ضوئية عائمة خلف الكروت
-              AnimatedBuilder(
-                animation: _glowController,
-                builder: (context, child) {
-                  return Stack(
-                    children: [
-                      Positioned(
-                        top: -50 + (_glowController.value * 25),
-                        right: -50,
-                        child: Container(
-                          width: 280,
-                          height: 280,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: accentGlow.withOpacity(isDarkMode ? 0.15 : 0.2),
-                          ),
-                        ),
+                  Positioned(
+                    bottom: 100 - (_glowController.value * 25),
+                    left: -60,
+                    child: Container(
+                      width: 320,
+                      height: 320,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: accentGold.withOpacity(isDarkMode ? 0.12 : 0.18),
                       ),
-                      Positioned(
-                        bottom: 100 - (_glowController.value * 25),
-                        left: -60,
-                        child: Container(
-                          width: 320,
-                          height: 320,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: accentGold.withOpacity(isDarkMode ? 0.12 : 0.18),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
 
-              // 🏢 3. المحتوى الفعلي المنسق بكروت عالية الاحترافية
-              SafeArea(
-                child: !isCycleActive
-                    ? Center(
-                        child: _buildCreativeCard(
+          // 🏢 3. المحتوى الفعلي
+          SafeArea(
+            child: !_isCycleActive
+                ? Center(
+                    child: _buildCreativeCard(
+                      isDarkMode: isDarkMode,
+                      padding: const EdgeInsets.all(25),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.event_busy_rounded, size: 70, color: Colors.orangeAccent),
+                          const SizedBox(height: 15),
+                          Text("لا توجد دورة نشطة حالياً 🚫", style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
+                          const SizedBox(height: 8),
+                          Text("تم إغلاق الدورة، لا يمكنك إضافة طلاب جدد حتى فتح دورة جديدة.", textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Cairo', fontSize: 12.5, color: isDarkMode ? Colors.white60 : Colors.black54)),
+                        ],
+                      ),
+                    ),
+                  )
+                : SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    child: Column(
+                      children: [
+                        // 🌟 1. هيدر اختيار الصورة الملكي
+                        _buildCreativeCard(
                           isDarkMode: isDarkMode,
-                          padding: const EdgeInsets.all(25),
+                          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      width: 125,
+                                      height: 125,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: SweepGradient(
+                                          colors: [accentGold, accentGlow, Colors.amberAccent, accentGold],
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: accentGlow.withOpacity(0.4),
+                                            blurRadius: 25,
+                                            spreadRadius: 2,
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                    CircleAvatar(
+                                      radius: 58,
+                                      backgroundColor: isDarkMode ? const Color(0xff151f32) : Colors.white,
+                                      backgroundImage: _selectedImage != null ? FileImage(_selectedImage!) : null,
+                                      child: _selectedImage == null
+                                          ? Icon(Icons.person_add_alt_1_rounded, size: 50, color: isDarkMode ? Colors.white38 : Colors.grey[400])
+                                          : null,
+                                    ),
+                                    Positioned(
+                                      bottom: 0,
+                                      right: 0,
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          onTap: _pickImage,
+                                          borderRadius: BorderRadius.circular(30),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              gradient: LinearGradient(colors: [accentGlow, accentGold]),
+                                              border: Border.all(color: Colors.white, width: 2.5),
+                                              boxShadow: [
+                                                BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10)
+                                              ],
+                                            ),
+                                            child: const Icon(Icons.camera_alt_rounded, size: 18, color: Colors.white),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  name.text.isEmpty ? "اسم الطالب الجديد" : name.text,
+                                  style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 17,
+                                    color: isDarkMode ? Colors.white : primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // 📝 2. بطاقة نوع التسجيل
+                        _buildSectionHeader(
+                          title: "فئة التسجيل",
+                          icon: Icons.category_rounded,
+                          isDarkMode: isDarkMode,
+                          child: DropdownButtonFormField<String>(
+                            value: studentType,
+                            dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13.5),
+                            decoration: _buildInputDecoration("نوع الطالب بالحلقة", Icons.badge_outlined, isDarkMode),
+                            items: const [
+                              DropdownMenuItem(value: "new", child: Text("طالب جديد")),
+                              DropdownMenuItem(value: "old", child: Text("طالب قديم")),
+                              DropdownMenuItem(value: "completed", child: Text("طالب خاتم لكتاب الله 👑")),
+                            ],
+                            onChanged: (v) => setState(() => studentType = v!),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // 👤 3. البيانات الشخصية
+                        _buildSectionHeader(
+                          title: "المعلومات الشخصية",
+                          icon: Icons.person_rounded,
+                          isDarkMode: isDarkMode,
                           child: Column(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.event_busy_rounded, size: 70, color: Colors.orangeAccent),
-                              const SizedBox(height: 15),
-                              Text("لا توجد دورة نشطة حالياً 🚫", style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
-                              const SizedBox(height: 8),
-                              Text("تم إغلاق الدورة، لا يمكنك إضافة طلاب جدد حتى فتح دورة جديدة.", textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Cairo', fontSize: 12.5, color: isDarkMode ? Colors.white60 : Colors.black54)),
+                              TextField(
+                                controller: name,
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration("اسم الطالب الكامل", Icons.account_circle_outlined, isDarkMode),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                              const SizedBox(height: 14),
+
+                              DropdownButtonFormField<String>(
+                                value: selectedNationality,
+                                dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                decoration: _buildInputDecoration("الجنسية", Icons.flag_outlined, isDarkMode),
+                                items: nationalities.map((nat) {
+                                  return DropdownMenuItem<String>(
+                                    value: nat['name'],
+                                    child: Row(
+                                      children: [
+                                        nat['flag'] == 'custom' 
+                                            ? _buildSyrianRevolutionFlag() 
+                                            : Text(nat['flag'], style: const TextStyle(fontSize: 18)),
+                                        const SizedBox(width: 10),
+                                        Text(nat['name']),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (v) => setState(() => selectedNationality = v!),
+                              ),
+                              const SizedBox(height: 14),
+
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: fatherName,
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                      decoration: _buildInputDecoration("اسم الأب", Icons.face_rounded, isDarkMode),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: motherName,
+                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                      decoration: _buildInputDecoration("اسم الأم", Icons.face_3_rounded, isDarkMode),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+
+                              TextField(
+                                controller: phone,
+                                keyboardType: TextInputType.phone,
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration("رقم هاتف ولي الأمر", Icons.phone_android_rounded, isDarkMode),
+                              ),
                             ],
                           ),
                         ),
-                      )
-                    : SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                        child: Column(
-                          children: [
-                            // 🌟 1. هيدر اختيار الصورة الملكي (Glow Avatar Header)
-                            _buildCreativeCard(
-                              isDarkMode: isDarkMode,
-                              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
-                              child: Center(
-                                child: Column(
-                                  children: [
-                                    Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        Container(
-                                          width: 125,
-                                          height: 125,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            gradient: SweepGradient(
-                                              colors: [accentGold, accentGlow, Colors.amberAccent, accentGold],
-                                            ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: accentGlow.withOpacity(0.4),
-                                                blurRadius: 25,
-                                                spreadRadius: 2,
-                                              )
-                                            ],
-                                          ),
-                                        ),
-                                        CircleAvatar(
-                                          radius: 58,
-                                          backgroundColor: isDarkMode ? const Color(0xff151f32) : Colors.white,
-                                          backgroundImage: _selectedImage != null ? FileImage(_selectedImage!) : null,
-                                          child: _selectedImage == null
-                                              ? Icon(Icons.person_add_alt_1_rounded, size: 50, color: isDarkMode ? Colors.white38 : Colors.grey[400])
-                                              : null,
-                                        ),
-                                        Positioned(
-                                          bottom: 0,
-                                          right: 0,
-                                          child: Material(
-                                            color: Colors.transparent,
-                                            child: InkWell(
-                                              onTap: _pickImage,
-                                              borderRadius: BorderRadius.circular(30),
-                                              child: Container(
-                                                padding: const EdgeInsets.all(10),
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  gradient: LinearGradient(colors: [accentGlow, accentGold]),
-                                                  border: Border.all(color: Colors.white, width: 2.5),
-                                                  boxShadow: [
-                                                    BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10)
-                                                  ],
-                                                ),
-                                                child: const Icon(Icons.camera_alt_rounded, size: 18, color: Colors.white),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      name.text.isEmpty ? "اسم الطالب الجديد" : name.text,
-                                      style: TextStyle(
-                                        fontFamily: 'Cairo',
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 17,
-                                        color: isDarkMode ? Colors.white : primaryColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+
+                        const SizedBox(height: 16),
+
+                        // 🏫 4. قسم الدراسة والصف
+                        _buildSectionHeader(
+                          title: "الدراسة والسكن",
+                          icon: Icons.school_rounded,
+                          isDarkMode: isDarkMode,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              TextField(
+                                controller: schoolGrade,
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration("الصف الدراسي (كتابة حرّة)", Icons.edit_note_rounded, isDarkMode),
                               ),
-                            ),
+                              const SizedBox(height: 12),
 
-                            const SizedBox(height: 16),
+                              Text("اختيار سريع للصف:", style: TextStyle(fontSize: 11.5, color: isDarkMode ? Colors.white60 : Colors.black54, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
 
-                            // 📝 2. بطاقة نوع التسجيل
-                            _buildSectionHeader(
-                              title: "فئة التسجيل",
-                              icon: Icons.category_rounded,
-                              isDarkMode: isDarkMode,
-                              child: DropdownButtonFormField<String>(
-                                value: studentType,
-                                dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13.5),
-                                decoration: _buildInputDecoration("نوع الطالب بالحلقة", Icons.badge_outlined, isDarkMode),
-                                items: const [
-                                  DropdownMenuItem(value: "new", child: Text("طالب جديد")),
-                                  DropdownMenuItem(value: "old", child: Text("طالب قديم")),
-                                  DropdownMenuItem(value: "completed", child: Text("طالب خاتم لكتاب الله 👑")),
-                                ],
-                                onChanged: (v) => setState(() => studentType = v!),
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // 👤 3. البيانات الشخصية
-                            _buildSectionHeader(
-                              title: "المعلومات الشخصية",
-                              icon: Icons.person_rounded,
-                              isDarkMode: isDarkMode,
-                              child: Column(
-                                children: [
-                                  TextField(
-                                    controller: name,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                    decoration: _buildInputDecoration("اسم الطالب الكامل", Icons.account_circle_outlined, isDarkMode),
-                                    onChanged: (_) => setState(() {}),
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  DropdownButtonFormField<String>(
-                                    value: selectedNationality,
-                                    dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                                    decoration: _buildInputDecoration("الجنسية", Icons.flag_outlined, isDarkMode),
-                                    items: nationalities.map((nat) {
-                                      return DropdownMenuItem<String>(
-                                        value: nat['name'],
-                                        child: Row(
-                                          children: [
-                                            nat['flag'] == 'custom' 
-                                                ? _buildSyrianRevolutionFlag() 
-                                                : Text(nat['flag'], style: const TextStyle(fontSize: 18)),
-                                            const SizedBox(width: 10),
-                                            Text(nat['name']),
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (v) => setState(() => selectedNationality = v!),
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: fatherName,
-                                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                          decoration: _buildInputDecoration("اسم الأب", Icons.face_rounded, isDarkMode),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: motherName,
-                                          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                          decoration: _buildInputDecoration("اسم الأم", Icons.face_3_rounded, isDarkMode),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  TextField(
-                                    controller: phone,
-                                    keyboardType: TextInputType.phone,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                    decoration: _buildInputDecoration("رقم هاتف ولي الأمر", Icons.phone_android_rounded, isDarkMode),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // 🏫 4. قسم الدراسة والصف (schoolGrade) مع الشارات الجذابة
-                            _buildSectionHeader(
-                              title: "الدراسة والسكن (schoolGrade)",
-                              icon: Icons.school_rounded,
-                              isDarkMode: isDarkMode,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  TextField(
-                                    controller: schoolGrade,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                    decoration: _buildInputDecoration("الصف الدراسي (كتابة حرّة)", Icons.edit_note_rounded, isDarkMode),
-                                    onChanged: (_) => setState(() {}),
-                                  ),
-                                  const SizedBox(height: 12),
-
-                                  Text("اختيار سريع للصف:", style: TextStyle(fontSize: 11.5, color: isDarkMode ? Colors.white60 : Colors.black54, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 8),
-
-                                  SizedBox(
-                                    height: 42,
-                                    child: ListView.builder(
-                                      scrollDirection: Axis.horizontal,
-                                      physics: const BouncingScrollPhysics(),
-                                      itemCount: quickGradeSuggestions.length,
-                                      itemBuilder: (context, index) {
-                                        final suggestion = quickGradeSuggestions[index];
-                                        final isSelected = schoolGrade.text.trim() == suggestion;
-                                        return Padding(
-                                          padding: const EdgeInsets.only(left: 8),
-                                          child: ChoiceChip(
-                                            label: Text(suggestion, style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: isSelected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87), fontWeight: isSelected ? FontWeight.bold : FontWeight.w600)),
-                                            selected: isSelected,
-                                            selectedColor: accentGlow,
-                                            backgroundColor: isDarkMode ? const Color(0xff1e293b) : const Color(0xffe2e8f0),
-                                            elevation: isSelected ? 4 : 0,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                            onSelected: (bool selected) {
-                                              if (selected) {
-                                                setState(() {
-                                                  schoolGrade.text = suggestion;
-                                                });
-                                              }
-                                            },
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  TextField(
-                                    controller: address,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                    decoration: _buildInputDecoration("مكان السكن / العنوان", Icons.location_on_rounded, isDarkMode),
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  TextField(
-                                    controller: fatherJob,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                    decoration: _buildInputDecoration("عمل الأب", Icons.work_rounded, isDarkMode),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // 📅 5. قسم التواريخ والحفظ
-                            _buildSectionHeader(
-                              title: "التواريخ ومستوى الحفظ",
-                              icon: Icons.history_edu_rounded,
-                              isDarkMode: isDarkMode,
-                              child: Column(
-                                children: [
-                                  if (studentType != "new") ...[
-                                    TextField(
-                                      controller: memorizedPages,
-                                      keyboardType: TextInputType.number,
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                      decoration: _buildInputDecoration("عدد الصفحات المحفوظة مسبقاً", Icons.menu_book_rounded, isDarkMode),
-                                    ),
-                                    const SizedBox(height: 14),
-                                  ],
-                                  Row(
-                                    children: [
-                                      Expanded(child: _buildDatePickerCard(
-                                        label: birthDate == null ? "تاريخ الميلاد" : birthDate.toString().split(" ")[0],
-                                        icon: Icons.cake_rounded,
-                                        isDarkMode: isDarkMode,
-                                        onTap: () async {
-                                          final picked = await _selectDate(context, DateTime(1990), isDarkMode);
-                                          if (picked != null) setState(() => birthDate = picked);
+                              SizedBox(
+                                height: 42,
+                                child: ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  physics: const BouncingScrollPhysics(),
+                                  itemCount: quickGradeSuggestions.length,
+                                  itemBuilder: (context, index) {
+                                    final suggestion = quickGradeSuggestions[index];
+                                    final isSelected = schoolGrade.text.trim() == suggestion;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(left: 8),
+                                      child: ChoiceChip(
+                                        label: Text(suggestion, style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: isSelected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87), fontWeight: isSelected ? FontWeight.bold : FontWeight.w600)),
+                                        selected: isSelected,
+                                        selectedColor: accentGlow,
+                                        backgroundColor: isDarkMode ? const Color(0xff1e293b) : const Color(0xffe2e8f0),
+                                        elevation: isSelected ? 4 : 0,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        onSelected: (bool selected) {
+                                          if (selected) {
+                                            setState(() {
+                                              schoolGrade.text = suggestion;
+                                            });
+                                          }
                                         },
-                                      )),
-                                      const SizedBox(width: 10),
-                                      Expanded(child: _buildDatePickerCard(
-                                        label: startDate == null ? "بدء الحفظ" : startDate.toString().split(" ")[0],
-                                        icon: Icons.play_arrow_rounded,
-                                        isDarkMode: isDarkMode,
-                                        onTap: () async {
-                                          final picked = await _selectDate(context, DateTime(2010), isDarkMode);
-                                          if (picked != null) setState(() => startDate = picked);
-                                        },
-                                      )),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 28),
-
-                            // 🚀 6. زر الحفظ الفخم المصمم بظل ثلاثي الأبعاد (Glowing Submit Button)
-                            SizedBox(
-                              width: double.infinity,
-                              height: 58,
-                              child: ElevatedButton(
-                                onPressed: loading ? null : () => addStudent(activeCycleId, activeCycleName),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  padding: EdgeInsets.zero,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                ),
-                                child: Ink(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: isDarkMode 
-                                          ? [accentGlow, accentGold]
-                                          : [const Color(0xff3b82f6), const Color(0xff1d4ed8)],
-                                    ),
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: (isDarkMode ? accentGlow : Colors.blue).withOpacity(0.4),
-                                        blurRadius: 18,
-                                        offset: const Offset(0, 6),
-                                      )
-                                    ],
-                                  ),
-                                  child: Container(
-                                    alignment: Alignment.center,
-                                    child: loading
-                                        ? const CircularProgressIndicator(color: Colors.white)
-                                        : const Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 22),
-                                              SizedBox(width: 10),
-                                              Text(
-                                                "حفظ وإضافة الطالب",
-                                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
-                                              ),
-                                            ],
-                                          ),
-                                  ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 30),
-                          ],
+                              const SizedBox(height: 14),
+
+                              TextField(
+                                controller: address,
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration("مكان السكن / العنوان", Icons.location_on_rounded, isDarkMode),
+                              ),
+                              const SizedBox(height: 14),
+
+                              TextField(
+                                controller: fatherJob,
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration("عمل الأب", Icons.work_rounded, isDarkMode),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-              ),
-            ],
+
+                        const SizedBox(height: 16),
+
+                        // 📅 5. قسم التواريخ ومستوى الحفظ
+                        _buildSectionHeader(
+                          title: "التواريخ ومستوى الحفظ",
+                          icon: Icons.history_edu_rounded,
+                          isDarkMode: isDarkMode,
+                          child: Column(
+                            children: [
+                              if (studentType != "new") ...[
+                                TextField(
+                                  controller: memorizedPages,
+                                  keyboardType: TextInputType.number,
+                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                  decoration: _buildInputDecoration("عدد الصفحات المحفوظة مسبقاً", Icons.menu_book_rounded, isDarkMode),
+                                ),
+                                const SizedBox(height: 14),
+                              ],
+                              Row(
+                                children: [
+                                  Expanded(child: _buildDatePickerCard(
+                                    label: birthDate == null ? "تاريخ الميلاد" : birthDate.toString().split(" ")[0],
+                                    icon: Icons.cake_rounded,
+                                    isDarkMode: isDarkMode,
+                                    onTap: () async {
+                                      final picked = await _selectDate(context, DateTime(1990), isDarkMode);
+                                      if (picked != null) setState(() => birthDate = picked);
+                                    },
+                                  )),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: _buildDatePickerCard(
+                                    label: startDate == null ? "بدء الحفظ" : startDate.toString().split(" ")[0],
+                                    icon: Icons.play_arrow_rounded,
+                                    isDarkMode: isDarkMode,
+                                    onTap: () async {
+                                      final picked = await _selectDate(context, DateTime(2010), isDarkMode);
+                                      if (picked != null) setState(() => startDate = picked);
+                                    },
+                                  )),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 28),
+
+                        // 🚀 6. زر الحفظ
+                        SizedBox(
+                          width: double.infinity,
+                          height: 58,
+                          child: ElevatedButton(
+                            onPressed: loading ? null : addStudent,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                            child: Ink(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: isDarkMode 
+                                      ? [accentGlow, accentGold]
+                                      : [const Color(0xff3b82f6), const Color(0xff1d4ed8)],
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (isDarkMode ? accentGlow : Colors.blue).withOpacity(0.4),
+                                    blurRadius: 18,
+                                    offset: const Offset(0, 6),
+                                  )
+                                ],
+                              ),
+                              child: Container(
+                                alignment: Alignment.center,
+                                child: loading
+                                    ? const CircularProgressIndicator(color: Colors.white)
+                                    : const Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 22),
+                                          SizedBox(width: 10),
+                                          Text(
+                                            "حفظ وإضافة الطالب",
+                                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                      ],
+                    ),
+                  ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  // 🧊 أداة بناء الكروت الإبداعية (Neumorphic Glass Card)
   Widget _buildCreativeCard({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),

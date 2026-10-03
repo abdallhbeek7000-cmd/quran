@@ -16,11 +16,13 @@ import '../widgets/glass_toast.dart';
 class EditSessionPage extends StatefulWidget {
   final String sessionId;
   final Map<String, dynamic> data;
+  final String? cycleId; // 👈 إضافة cycleId اختياري هنا
 
   const EditSessionPage({
     super.key,
     required this.sessionId,
     required this.data,
+    this.cycleId, // 👈 إمكانية تمريره مباشرة عند التنقل
   });
 
   @override
@@ -1285,10 +1287,14 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     List<String> reviewSupIds = selectedReviewSupervisors.map((e) => e['id']!).toList();
     List<String> reviewSupNames = selectedReviewSupervisors.map((e) => e['name']!).toList();
 
+    // 👈 الحصول على cycleId الممرر في Parameter الشاشة أو من الخريطة
+    String currentCycleId = widget.cycleId ?? widget.data['cycleId'] ?? '';
+
     final Map<String, dynamic> updateData = {
       'studentId': studentId,
       'studentName': widget.data['studentName'] ?? '',
       'date': date,
+      'cycleId': currentCycleId, // 👈 حفظ معرف الدورة عند تعديل الجلسة
       'actualEditedAt': actualEditedTimeFormatted,
       'lastUpdatedTimestamp': FieldValue.serverTimestamp(),
       'absent': absent,

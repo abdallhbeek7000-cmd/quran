@@ -41,11 +41,67 @@ class _StudentsPageState extends State<StudentsPage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
+  final TextEditingController _searchController = TextEditingController();
+
+  bool _isLoadingCycle = true;
+  bool _isCycleActive = false;
+  String _activeCycleId = '';
+  String _activeCycleName = '';
+
   final Map<String, String> _flags = {
     'فلسطيني': '🇵🇸', 'أردني': '🇯🇴', 'لبناني': '🇱🇧', 'عراقي': '🇮🇶',
     'مصري': '🇪🇬', 'سعودي': '🇸🇦', 'يمني': '🇾🇪', 'سوداني': '🇸🇩',
     'تركي': '🇹🇷', 'جنسية أخرى': '🌍',
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _checkActiveCycle();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // 🚀 التحقق من وجود دورة نشطة مرة واحدة فقط عند فتح الصفحة لمنع إعادة التحميل المفاجئ
+  Future<void> _checkActiveCycle() async {
+    try {
+      var cycleSnap = await FirebaseFirestore.instance
+          .collection('cycles')
+          .where('isCurrent', isEqualTo: true)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+
+      if (mounted) {
+        if (cycleSnap.docs.isNotEmpty) {
+          var doc = cycleSnap.docs.first;
+          var data = doc.data();
+          setState(() {
+            _isCycleActive = true;
+            _activeCycleId = doc.id;
+            _activeCycleName = data['name'] ?? 'الدورة الحالية';
+            _isLoadingCycle = false;
+          });
+        } else {
+          setState(() {
+            _isCycleActive = false;
+            _isLoadingCycle = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCycleActive = false;
+          _isLoadingCycle = false;
+        });
+      }
+    }
+  }
 
   void _updateStudentLiveStatus(String studentId, String newStatus, String studentName) async {
     final Map<String, dynamic> updateData = {
@@ -460,196 +516,184 @@ class _StudentsPageState extends State<StudentsPage> {
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
-    // 🚀 جلب الدورة النشطة مباشرة من الفايربيس للتحقق التلقائي
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('cycles')
-          .where('isCurrent', isEqualTo: true)
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .snapshots(),
-      builder: (context, cycleSnap) {
-        if (cycleSnap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
+    if (_isLoadingCycle) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
-        // إذا كانت الدورة مغلقة أو غير موجودة
-        if (!cycleSnap.hasData || cycleSnap.data!.docs.isEmpty) {
-          return OfflineWrapper(
-            child: Scaffold(
-              extendBodyBehindAppBar: true,
-              backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
-              appBar: AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
-                title: Text("قائمة الطلاب", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
-                centerTitle: true,
-              ),
-              body: _buildClosedCycleState(isDarkMode),
-            ),
-          );
-        }
-
-        // الدورة النشطة الحالية
-        final currentCycleDoc = cycleSnap.data!.docs.first;
-        final currentCycleData = currentCycleDoc.data() as Map<String, dynamic>;
-        final String activeCycleId = currentCycleDoc.id;
-        final String activeCycleName = currentCycleData['name'] ?? 'الدورة الحالية';
-
-        final CycleModel activeCycle = widget.cycle; // أو يمكنك إنشاء كائن منها إذا أردت
-
-        Query query = FirebaseFirestore.instance
-            .collection('students')
-            .where('cycleId', isEqualTo: activeCycleId);
-
-        if (!widget.isArchivedFromHistory) {
-          query = query.where('archived', isEqualTo: false);
-        }
-
-        if (widget.role == "supervisor") {
-          query = query.where('supervisorId', isEqualTo: widget.uid);
-        }
-
-        return OfflineWrapper(
-          child: Scaffold(
-            extendBodyBehindAppBar: true,
-            backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
-            appBar: AppBar(
-              elevation: 0,
-              backgroundColor: Colors.transparent,
-              title: Text(
-                widget.isArchivedFromHistory ? "أرشيف: $activeCycleName" : "قائمة الطلاب",
-                style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18),
-              ),
-              iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-              centerTitle: true,
-              actions: [
-                if (!widget.isArchivedFromHistory)
-                  IconButton(
-                    icon: Icon(Icons.archive_outlined, color: isDarkMode ? accentGold : primaryColor),
-                    tooltip: "الطلاب المتوقفين مؤقتاً",
-                    onPressed: () => _internalNav(ArchivedStudentsPage(cycle: activeCycle, role: widget.role, uid: widget.uid)),
-                  ),
-                if (widget.role == "manager")
-                  IconButton(
-                    icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor),
-                    tooltip: "تصدير Excel",
-                    onPressed: () => exportToExcel(activeCycleId, activeCycleName),
-                  ),
-              ],
-            ),
-            floatingActionButton: (widget.role == "manager" && !widget.isArchivedFromHistory)
-                ? FloatingActionButton(
-                    backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9),
-                    onPressed: () => _internalNav(AddStudentPage(cycle: activeCycle)),
-                    child: const Icon(Icons.person_add_alt_1, color: Colors.white),
-                  )
-                : null,
-            body: Stack(
-              children: [
-                Container(
-                  width: double.infinity, height: double.infinity,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                      begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    ),
-                  ),
-                ),
-                Stack(
-                  children: [
-                    Positioned(
-                      top: -50, left: -50,
-                      child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
-                    ),
-                    Positioned(
-                      top: 200, right: -80,
-                      child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
-                    ),
-                  ],
-                ),
-                Positioned.fill(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                    child: Container(color: Colors.transparent),
-                  ),
-                ),
-                SafeArea(
-                  child: Column(
-                    children: [
-                      if (widget.role == "manager" && !widget.isArchivedFromHistory)
-                        _buildAbsentAlertSection(isDarkMode, activeCycleId),
-
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                        child: _buildGlassContainer(
-                          isDarkMode: isDarkMode,
-                          padding: const EdgeInsets.all(15),
-                          child: Column(
-                            children: [
-                              TextField(
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                                decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
-                                onChanged: (v) => setState(() => search = v.trim().toLowerCase()),
-                              ),
-                              if (widget.role == "manager") ...[
-                                const SizedBox(height: 12),
-                                _buildSupervisorFilter(isDarkMode),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      Expanded(
-                        child: StreamBuilder<QuerySnapshot>(
-                          stream: query.snapshots(),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات"));
-                            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-
-                            var docs = snapshot.data!.docs.where((doc) {
-                              final data = doc.data() as Map<String, dynamic>;
-                              final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
-                              final nameMatches = studentName.contains(search);
-                              bool supervisorMatches = true;
-                              if (selectedSupervisor.isNotEmpty) {
-                                final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
-                                final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
-                                supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
-                              }
-                              return nameMatches && supervisorMatches;
-                            }).toList();
-
-                            docs.sort((a, b) {
-                              final aData = a.data() as Map<String, dynamic>;
-                              final bData = b.data() as Map<String, dynamic>;
-                              int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
-                              int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
-                              return sA.compareTo(sB);
-                            });
-
-                            if (docs.isEmpty) return _buildEmptyState(isDarkMode);
-
-                            return ListView.builder(
-                              physics: const BouncingScrollPhysics(),
-                              padding: const EdgeInsets.only(left: 15, right: 15, top: 5, bottom: 80),
-                              itemCount: docs.length,
-                              itemBuilder: (context, index) {
-                                return _buildStudentCard(context, docs[index], isDarkMode);
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+    if (!_isCycleActive) {
+      return OfflineWrapper(
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+          appBar: AppBar(
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            title: Text("قائمة الطلاب", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
+            centerTitle: true,
           ),
-        );
-      },
+          body: _buildClosedCycleState(isDarkMode),
+        ),
+      );
+    }
+
+    final CycleModel activeCycle = widget.cycle;
+
+    Query query = FirebaseFirestore.instance
+        .collection('students')
+        .where('cycleId', isEqualTo: _activeCycleId);
+
+    if (!widget.isArchivedFromHistory) {
+      query = query.where('archived', isEqualTo: false);
+    }
+
+    if (widget.role == "supervisor") {
+      query = query.where('supervisorId', isEqualTo: widget.uid);
+    }
+
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text(
+            widget.isArchivedFromHistory ? "أرشيف: $_activeCycleName" : "قائمة الطلاب",
+            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18),
+          ),
+          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+          actions: [
+            if (!widget.isArchivedFromHistory)
+              IconButton(
+                icon: Icon(Icons.archive_outlined, color: isDarkMode ? accentGold : primaryColor),
+                tooltip: "الطلاب المتوقفين مؤقتاً",
+                onPressed: () => _internalNav(ArchivedStudentsPage(cycle: activeCycle, role: widget.role, uid: widget.uid)),
+              ),
+            if (widget.role == "manager")
+              IconButton(
+                icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor),
+                tooltip: "تصدير Excel",
+                onPressed: () => exportToExcel(_activeCycleId, _activeCycleName),
+              ),
+          ],
+        ),
+        floatingActionButton: (widget.role == "manager" && !widget.isArchivedFromHistory)
+            ? FloatingActionButton(
+                backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9),
+                onPressed: () => _internalNav(AddStudentPage(cycle: activeCycle)),
+                child: const Icon(Icons.person_add_alt_1, color: Colors.white),
+              )
+            : null,
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity, height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            Stack(
+              children: [
+                Positioned(
+                  top: -50, left: -50,
+                  child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                ),
+                Positioned(
+                  top: 200, right: -80,
+                  child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
+                ),
+              ],
+            ),
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+            SafeArea(
+              child: Column(
+                children: [
+                  if (widget.role == "manager" && !widget.isArchivedFromHistory)
+                    _buildAbsentAlertSection(isDarkMode, _activeCycleId),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                    child: _buildGlassContainer(
+                      isDarkMode: isDarkMode,
+                      padding: const EdgeInsets.all(15),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _searchController,
+                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                            decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
+                            onChanged: (v) {
+                              setState(() {
+                                search = v.trim().toLowerCase();
+                              });
+                            },
+                          ),
+                          if (widget.role == "manager") ...[
+                            const SizedBox(height: 12),
+                            _buildSupervisorFilter(isDarkMode),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  Expanded(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: query.snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات"));
+                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+                        var docs = snapshot.data!.docs.where((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
+                          final nameMatches = search.isEmpty || studentName.contains(search);
+                          
+                          bool supervisorMatches = true;
+                          if (selectedSupervisor.isNotEmpty) {
+                            final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
+                            final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
+                            supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
+                          }
+                          return nameMatches && supervisorMatches;
+                        }).toList();
+
+                        docs.sort((a, b) {
+                          final aData = a.data() as Map<String, dynamic>;
+                          final bData = b.data() as Map<String, dynamic>;
+                          int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
+                          int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
+                          return sA.compareTo(sB);
+                        });
+
+                        if (docs.isEmpty) return _buildEmptyState(isDarkMode);
+
+                        return ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.only(left: 15, right: 15, top: 5, bottom: 80),
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            return _buildStudentCard(context, docs[index], isDarkMode);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -671,6 +715,15 @@ class _StudentsPageState extends State<StudentsPage> {
       hintText: hint,
       hintStyle: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontFamily: 'Cairo', fontSize: 13),
       prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
+      suffixIcon: _searchController.text.isNotEmpty
+          ? IconButton(
+              icon: Icon(Icons.clear, color: isDarkMode ? Colors.white60 : Colors.black54, size: 18),
+              onPressed: () {
+                _searchController.clear();
+                setState(() => search = '');
+              },
+            )
+          : null,
       filled: true,
       fillColor: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
       contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -790,7 +843,7 @@ class _StudentsPageState extends State<StudentsPage> {
                 children: [
                   if (!widget.isArchivedFromHistory)
                     _buildActionButton(Icons.add_task, "جلسة جديدة", Colors.greenAccent.shade400, isDarkMode, () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => AddSessionPage(studentId: doc.id, studentName: data['name'] ?? '', supervisorId: data['supervisorId'] ?? '', supervisorName: data['supervisorName'] ?? '')));
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => AddSessionPage(studentId: doc.id, studentName: data['name'] ?? '')));
                     }),
                   _buildActionButton(widget.isArchivedFromHistory ? Icons.folder_open_rounded : Icons.history, widget.isArchivedFromHistory ? "استعراض السجل القديم" : "السجل", isDarkMode ? Colors.lightBlueAccent : Colors.blue, isDarkMode, () {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => StudentSessionsPage(studentId: doc.id, studentName: data['name'] ?? '', role: widget.isArchivedFromHistory ? "readonly" : widget.role)));

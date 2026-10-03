@@ -11,9 +11,6 @@ import '../services/session_service.dart';
 import '../widgets/offline_wrapper.dart';
 import 'edit_session_page.dart';
 
-// ⚙️ معرف الدورة الحالية لتحديد نطاق البيانات والتصفير للدورة الجديد
-const String currentCycleId = 'cycle_2026_q4';
-
 class DailyStatsPage extends StatefulWidget {
   final String role;
 
@@ -254,11 +251,12 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                       subtitle: "اضغط لعرض كافة تسميعات اليوم بالتفصيل",
                       icon: Icons.auto_stories_rounded,
                       color: Colors.greenAccent.shade700,
+                      // 💡 تعديل استعلام الجلسات الفعلية باستثناء didNotRecite
                       stream: FirebaseFirestore.instance
                           .collection('sessions')
-                          .where('cycleId', isEqualTo: currentCycleId)
                           .where('date', isEqualTo: formattedDate)
                           .where('absent', isEqualTo: false)
+                          .where('didNotRecite', isEqualTo: false)
                           .snapshots(),
                       isDarkMode: isDarkMode,
                     ),
@@ -297,7 +295,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                       color: Colors.blueGrey,
                       stream: FirebaseFirestore.instance
                           .collection('sessions')
-                          .where('cycleId', isEqualTo: currentCycleId)
                           .where('date', isEqualTo: formattedDate)
                           .where('didNotRecite', isEqualTo: true)
                           .snapshots(),
@@ -323,7 +320,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                       color: Colors.redAccent.shade200,
                       stream: FirebaseFirestore.instance
                           .collection('sessions')
-                          .where('cycleId', isEqualTo: currentCycleId)
                           .where('date', isEqualTo: formattedDate)
                           .where('absent', isEqualTo: true)
                           .snapshots(),
@@ -346,7 +342,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('daily_attendance')
-          .doc('${currentCycleId}_$targetDate')
+          .doc(targetDate)
           .snapshots(),
       builder: (context, snapshot) {
         int expectedCount = 0;
@@ -378,7 +374,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('daily_attendance')
-          .doc('${currentCycleId}_$targetDate')
+          .doc(targetDate)
           .snapshots(),
       builder: (context, attendanceSnap) {
         int expectedCount = 0;
@@ -397,7 +393,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('sessions')
-              .where('cycleId', isEqualTo: currentCycleId)
               .where('date', isEqualTo: targetDate)
               .where('absent', isEqualTo: false)
               .snapshots(),
@@ -428,12 +423,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                       shape: BoxShape.circle,
                       border: Border.all(
                           color: cardColor.withOpacity(0.5), width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                            color: cardColor.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3)),
-                      ],
                     ),
                     child: Icon(
                       isComplete
@@ -501,9 +490,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                             decoration: BoxDecoration(
                               color: Colors.green.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: Colors.green.withOpacity(0.3),
-                                  width: 1),
                             ),
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
@@ -529,9 +515,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                             decoration: BoxDecoration(
                               color: Colors.orange.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: Colors.orange.withOpacity(0.4),
-                                  width: 1),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -585,15 +568,17 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('sessions')
-          .where('cycleId', isEqualTo: currentCycleId)
           .where('date', isEqualTo: targetDate)
           .snapshots(),
       builder: (context, snapshot) {
         String percentage = "0%";
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
           final docs = snapshot.data!.docs;
-          int presentCount =
-              docs.where((doc) => doc['absent'] == false).length;
+          // 💡 نسبة الحضور تحسب بالنسبة للجلسات المسجلة فعلياً فقط (غير غائب ولم يمتنع)
+          int presentCount = docs.where((doc) {
+            var d = doc.data() as Map<String, dynamic>;
+            return (d['absent'] == false) && (d['didNotRecite'] != true);
+          }).length;
           percentage = "${((presentCount / docs.length) * 100).round()}%";
         }
         return _statsUI(
@@ -699,7 +684,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 }
 
 // =========================================================================
-// 🚀 1. واجهة الطلاب الحاضرين الذين لم تُسجل جلساتهم بعد
+// 🚀 1. واجهة الطلاب الحاضرين الذين لم تُسجل جلساتهم بعد (المتبقين)
 // =========================================================================
 class PendingSessionsPage extends StatefulWidget {
   final String targetDate;
@@ -758,7 +743,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
           elevation: 0,
           backgroundColor: Colors.transparent,
           title: Text(
-            "الطلاب المتبقين للتسميع (${widget.targetDate})",
+            "المتبقين للتسميع (${widget.targetDate}) ⏳",
             style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: isDarkMode ? Colors.white : primaryColor,
@@ -796,7 +781,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
               child: StreamBuilder<DocumentSnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('daily_attendance')
-                    .doc('${currentCycleId}_${widget.targetDate}')
+                    .doc(widget.targetDate)
                     .snapshots(),
                 builder: (context, attendanceSnap) {
                   if (attendanceSnap.connectionState ==
@@ -845,7 +830,6 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                   return StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('sessions')
-                        .where('cycleId', isEqualTo: currentCycleId)
                         .where('date', isEqualTo: widget.targetDate)
                         .snapshots(),
                     builder: (context, sessionsSnap) {
@@ -897,7 +881,6 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                       return StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('students')
-                            .where('cycleId', isEqualTo: currentCycleId)
                             .where('archived', isEqualTo: false)
                             .snapshots(),
                         builder: (context, studentsSnap) {
@@ -1009,17 +992,10 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                         String studentName = student['name'];
                                         String supervisorName =
                                             student['supervisorName'];
-                                        String imageUrl = student['imageUrl'];
-                                        String firstLetter =
-                                            studentName.isNotEmpty
-                                                ? studentName
-                                                    .trim()
-                                                    .substring(0, 1)
-                                                : "?";
 
                                         return Container(
                                           margin:
-                                              const EdgeInsets.only(bottom: 14),
+                                              const EdgeInsets.only(bottom: 12),
                                           child: ClipRRect(
                                             borderRadius:
                                                 BorderRadius.circular(22),
@@ -1052,17 +1028,17 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                                     Container(
                                                       padding: const EdgeInsets
                                                           .symmetric(
-                                                          horizontal: 12,
-                                                          vertical: 6),
+                                                          horizontal: 10,
+                                                          vertical: 5),
                                                       decoration: BoxDecoration(
                                                         color: Colors.orange
                                                             .withOpacity(0.15),
                                                         borderRadius:
                                                             BorderRadius.circular(
-                                                                14),
+                                                                12),
                                                       ),
                                                       child: const Text(
-                                                          "بانتظار التسميع",
+                                                          "بانتظار التسميع ⏳",
                                                           style: TextStyle(
                                                               fontSize: 11,
                                                               fontWeight:
@@ -1089,13 +1065,13 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                                                           .bold,
                                                                   fontFamily:
                                                                       'Cairo',
-                                                                  fontSize: 15,
+                                                                  fontSize: 14,
                                                                   color: isDarkMode
                                                                       ? Colors
                                                                           .white
                                                                       : primaryColor)),
                                                           const SizedBox(
-                                                              height: 3),
+                                                              height: 2),
                                                           Text(
                                                               "المشرف: $supervisorName",
                                                               textAlign:
@@ -1151,7 +1127,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text("معهد الشيخ سعيد العبدالله",
+          const Text("معهد الشيخ سعيد العبدالله 🕌",
               style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -1164,16 +1140,22 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                   color: Colors.orange,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Cairo')),
-          const SizedBox(height: 25),
+          const SizedBox(height: 20),
           Table(
             children: [
               ...students.map((s) => TableRow(children: [
-                    Text(s['name'] ?? '',
-                        style: const TextStyle(
-                            color: Colors.white, fontFamily: 'Cairo')),
-                    Text(s['supervisorName'] ?? '',
-                        style: const TextStyle(
-                            color: Colors.white70, fontFamily: 'Cairo')),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(s['name'] ?? '',
+                          style: const TextStyle(
+                              color: Colors.white, fontFamily: 'Cairo')),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(s['supervisorName'] ?? '',
+                          style: const TextStyle(
+                              color: Colors.white70, fontFamily: 'Cairo')),
+                    ),
                   ]))
             ],
           )
@@ -1184,22 +1166,84 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
 }
 
 // =========================================================================
-// 🚀 2. واجهة الطلاب الغائبين
+// 🚀 2. واجهة التسميعات والجلسات اليومية (تم تعديل التصميم لتطابق عرض الجلسات الكامل)
 // =========================================================================
-class DailyAbsentStudentsPage extends StatefulWidget {
+class DailyRecitationsPage extends StatefulWidget {
   final String targetDate;
-  const DailyAbsentStudentsPage({super.key, required this.targetDate});
+  final String role;
+
+  const DailyRecitationsPage({
+    super.key,
+    required this.targetDate,
+    this.role = 'supervisor',
+  });
 
   @override
-  State<DailyAbsentStudentsPage> createState() =>
-      _DailyAbsentStudentsPageState();
+  State<DailyRecitationsPage> createState() => _DailyRecitationsPageState();
 }
 
-class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
-  final WidgetsToImageController controller = WidgetsToImageController();
+class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
-  bool isExporting = false;
+
+  String _getArabicDayName(String dateString) {
+    try {
+      List<String> parts = dateString.split('-');
+      if (parts.length == 3) {
+        int year = int.parse(parts[0]);
+        int month = int.parse(parts[1]);
+        int day = int.parse(parts[2]);
+        DateTime date = DateTime(year, month, day);
+        List<String> arabicDays = [
+          'الإثنين',
+          'الثلاثاء',
+          'الأربعاء',
+          'الخميس',
+          'الجمعة',
+          'السبت',
+          'الأحد'
+        ];
+        return arabicDays[date.weekday - 1];
+      }
+    } catch (e) {
+      return "";
+    }
+    return "";
+  }
+
+  String _getJuzName(int juzNum) {
+    switch (juzNum) {
+      case 30:
+        return "جزء عمَّ 👶";
+      case 29:
+        return "جزء تبارك 📖";
+      case 28:
+        return "قد سمع 📜";
+      case 27:
+        return "الذاريات 🌟";
+      case 26:
+        return "الأحقاف ✨";
+      default:
+        return "";
+    }
+  }
+
+  Color _getRatingColor(String? rating) {
+    switch (rating) {
+      case "ممتاز":
+        return Colors.green;
+      case "جيد جداً":
+        return Colors.teal;
+      case "جيد":
+        return Colors.orange;
+      case "مقبول":
+        return Colors.blueGrey;
+      case "ضعيف":
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1211,54 +1255,733 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
         backgroundColor:
             isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
         appBar: AppBar(
-          title: Text("الطلاب الغائبين (${widget.targetDate}) 🔴",
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : primaryColor,
-                  fontFamily: 'Cairo',
-                  fontSize: 16)),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text(
+            "جلسات التسميع (${widget.targetDate}) 📝",
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isDarkMode ? Colors.white : primaryColor,
+                fontFamily: 'Cairo',
+                fontSize: 16),
+          ),
+          iconTheme:
+              IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
         ),
-        body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('sessions')
-              .where('cycleId', isEqualTo: currentCycleId)
-              .where('date', isEqualTo: widget.targetDate)
-              .where('absent', isEqualTo: true)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final absentDocs = snapshot.data!.docs;
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode
+                      ? [
+                          const Color(0xff0f172a),
+                          const Color(0xff1e293b),
+                          const Color(0xff0f172a)
+                        ]
+                      : [
+                          const Color(0xffe2e8f0),
+                          const Color(0xffcfdef3),
+                          const Color(0xffe0eafc)
+                        ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: StreamBuilder<QuerySnapshot>(
+                // 💡 استثناء الجلسات التي لم يتم التسميع فيها (didNotRecite == true)
+                stream: FirebaseFirestore.instance
+                    .collection('sessions')
+                    .where('date', isEqualTo: widget.targetDate)
+                    .where('absent', isEqualTo: false)
+                    .where('didNotRecite', isEqualTo: false)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-            if (absentDocs.isEmpty) {
-              return Center(
-                child: Text("لا يوجد غياب مسجل في هذا اليوم 🎉",
-                    style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.white70 : primaryColor,
-                        fontSize: 15)),
-              );
-            }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Center(
+                      child: Text("لا توجد جلسات تسميع مسجلة في هذا اليوم 🍃",
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.white70 : primaryColor,
+                              fontSize: 14)),
+                    );
+                  }
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(20),
-              itemCount: absentDocs.length,
-              itemBuilder: (context, index) {
-                final data = absentDocs[index].data() as Map<String, dynamic>;
-                return ListTile(
-                  title: Text(data['studentName'] ?? 'طالب',
+                  final sessions = snapshot.data!.docs;
+
+                  return ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.only(
+                        left: 20, right: 20, top: 10, bottom: 30),
+                    itemCount: sessions.length,
+                    itemBuilder: (context, index) {
+                      final sessionDoc = sessions[index];
+                      final data = sessionDoc.data() as Map<String, dynamic>;
+
+                      return _buildSessionCardItem(
+                          context, sessionDoc.id, data, isDarkMode);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 💡 بطاقة الجلسة بنفس تصميم وعرض كود StudentSessionsPage تماماً
+  Widget _buildSessionCardItem(BuildContext context, String sessionId,
+      Map<String, dynamic> data, bool isDarkMode) {
+    String studentName = data['studentName'] ?? 'طالب';
+    bool isAbsent = data['absent'] ?? false;
+    bool isExam = data['isExam'] ?? false;
+    bool didNotRecite = data['didNotRecite'] ?? false;
+    int selectedJuz =
+        data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
+
+    String sessionDateRaw = data['date'] ?? '';
+    String dayName = _getArabicDayName(sessionDateRaw);
+    String displayDate =
+        dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
+
+    String actualCreatedAt = data['actualCreatedAt']?.toString() ?? '';
+    String actualEditedAt = data['actualEditedAt']?.toString() ?? '';
+
+    String nMemo = data['newMemorization']?.toString().trim() ?? '';
+    String nRev = data['nearReview']?.toString().trim() ?? '';
+    String fRev = data['farReview']?.toString().trim() ??
+        (data['review']?.toString().trim() ?? '');
+    String sight = data['readingBySight']?.toString().trim() ?? '';
+
+    String memRating = data['memorizationRating'] ?? data['rating'] ?? "";
+    String newRevRating =
+        data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
+    String oldRevRating =
+        data['oldReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
+
+    String nHw = data['newHomework']?.toString().trim() ?? '';
+    String nRevHw = data['newReviewHomework']?.toString().trim() ?? '';
+    String oRevHw = data['oldReviewHomework']?.toString().trim() ?? '';
+    String oldHw = data['homework']?.toString().trim() ?? '';
+
+    List<dynamic>? memoSupList =
+        data['newMemoSupervisorNames'] ?? data['supervisorNames'];
+    String memoSupervisors = (memoSupList != null && memoSupList.isNotEmpty)
+        ? memoSupList.join(' ، ')
+        : (data['supervisorName'] ?? 'غير محدد');
+
+    List<dynamic>? revSupList =
+        data['reviewSupervisorNames'] ?? data['supervisorNames'];
+    String revSupervisors = (revSupList != null && revSupList.isNotEmpty)
+        ? revSupList.join(' ، ')
+        : (data['supervisorName'] ?? 'غير محدد');
+
+    List<Widget> activeBoxes = [];
+    if (!didNotRecite && !isAbsent && !isExam) {
+      if (nMemo.isNotEmpty)
+        activeBoxes.add(_buildGridInfoBox(
+            Icons.star_rounded, "الحفظ الجديد", nMemo, Colors.amber, isDarkMode));
+      if (nRev.isNotEmpty)
+        activeBoxes.add(_buildGridInfoBox(
+            Icons.menu_book_rounded,
+            "مراجعة جديد",
+            nRev,
+            isDarkMode ? Colors.tealAccent : Colors.teal,
+            isDarkMode));
+      if (fRev.isNotEmpty)
+        activeBoxes.add(_buildGridInfoBox(
+            Icons.history_toggle_off_rounded,
+            "مراجعة قديم",
+            fRev,
+            Colors.blueGrey,
+            isDarkMode));
+      if (sight.isNotEmpty)
+        activeBoxes.add(_buildGridInfoBox(
+            Icons.chrome_reader_mode_rounded,
+            "قراءة نظراً",
+            sight,
+            Colors.indigoAccent,
+            isDarkMode));
+    }
+
+    String juzChipTitle = _getJuzName(selectedJuz);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      child: _buildGlassContainer(
+        isDarkMode: isDarkMode,
+        child: Column(
+          children: [
+            // الهيدر علوي مخصص لكل حقل مع اسم الطالب
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? Colors.white.withOpacity(0.05)
+                    : primaryColor.withOpacity(0.05),
+                borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: accentGold.withOpacity(0.2),
+                            child: Icon(Icons.person_rounded,
+                                color: accentGold, size: 16),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            studentName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.white : primaryColor,
+                              fontFamily: 'Cairo',
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (juzChipTitle.isNotEmpty)
+                        _buildBadge(juzChipTitle, Colors.purple),
+                    ],
+                  ),
+                  if (!isAbsent && !isExam && !didNotRecite) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        if (nMemo.isNotEmpty && memRating.isNotEmpty)
+                          _buildBadge(
+                              "حفظ: $memRating", _getRatingColor(memRating)),
+                        if (nRev.isNotEmpty && newRevRating.isNotEmpty)
+                          _buildBadge("م.جديد: $newRevRating",
+                              _getRatingColor(newRevRating)),
+                        if (fRev.isNotEmpty && oldRevRating.isNotEmpty)
+                          _buildBadge("م.قديم: $oldRevRating",
+                              _getRatingColor(oldRevRating)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // محتوى تفاصيل الجلسة
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.role == 'manager' &&
+                      (actualCreatedAt.isNotEmpty ||
+                          actualEditedAt.isNotEmpty)) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber
+                            .withOpacity(isDarkMode ? 0.12 : 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.amber.withOpacity(0.4), width: 1),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time_filled_rounded,
+                              color: Colors.amber, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (actualCreatedAt.isNotEmpty)
+                                  Text(
+                                    "تاريخ ووقت الإدخال الفعلي: $actualCreatedAt",
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'Cairo',
+                                        color: isDarkMode
+                                            ? Colors.amberAccent
+                                            : Colors.orange.shade900),
+                                  ),
+                                if (actualEditedAt.isNotEmpty)
+                                  Text(
+                                    "تاريخ آخر تعديل: $actualEditedAt",
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'Cairo',
+                                        color: isDarkMode
+                                            ? Colors.orangeAccent
+                                            : Colors.deepOrange.shade800),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  if (nMemo.isNotEmpty && memoSupervisors == revSupervisors) ...[
+                    _buildMinimalistDetailRow(Icons.person_outline,
+                        "المشرف المسجِّل", memoSupervisors, isDarkMode,
+                        isBold: true),
+                  ] else ...[
+                    if (nMemo.isNotEmpty)
+                      _buildMinimalistDetailRow(Icons.person_pin_rounded,
+                          "مشرف الحفظ الجديد", memoSupervisors, isDarkMode,
+                          isBold: true),
+                    if (fRev.isNotEmpty || nRev.isNotEmpty) ...[
+                      if (nMemo.isNotEmpty) const SizedBox(height: 6),
+                      _buildMinimalistDetailRow(
+                          Icons.supervisor_account_rounded,
+                          "مشرف المراجعة",
+                          revSupervisors,
+                          isDarkMode,
+                          isBold: true),
+                    ],
+                  ],
+
+                  Divider(
+                      color: isDarkMode ? Colors.white24 : Colors.black12,
+                      height: 20),
+
+                  if (activeBoxes.isNotEmpty) ...[
+                    for (int i = 0; i < activeBoxes.length; i += 2)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: [
+                            Expanded(child: activeBoxes[i]),
+                            const SizedBox(width: 10),
+                            if (i + 1 < activeBoxes.length)
+                              Expanded(child: activeBoxes[i + 1])
+                            else
+                              Expanded(child: const SizedBox()),
+                          ],
+                        ),
+                      ),
+                    Divider(
+                        color: isDarkMode ? Colors.white24 : Colors.black12,
+                        height: 20),
+                  ],
+
+                  if (nHw.isNotEmpty ||
+                      nRevHw.isNotEmpty ||
+                      oRevHw.isNotEmpty ||
+                      oldHw.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: accentGold
+                            .withOpacity(isDarkMode ? 0.08 : 0.05),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(
+                            color: accentGold.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.assignment_outlined,
+                                  size: 16, color: accentGold),
+                              const SizedBox(width: 6),
+                              Text("الواجب القادم:",
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDarkMode
+                                          ? Colors.white70
+                                          : Colors.black87,
+                                      fontWeight: FontWeight.bold,
+                                      fontFamily: 'Cairo')),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (nHw.isNotEmpty)
+                            _buildHomeworkRow("حفظ جديد", nHw, isDarkMode),
+                          if (nRevHw.isNotEmpty)
+                            _buildHomeworkRow("مراجعة جديد", nRevHw, isDarkMode),
+                          if (oRevHw.isNotEmpty)
+                            _buildHomeworkRow("مراجعة قديم", oRevHw, isDarkMode),
+                          if (oldHw.isNotEmpty &&
+                              nHw.isEmpty &&
+                              nRevHw.isEmpty &&
+                              oRevHw.isEmpty)
+                            _buildHomeworkRow("الواجب", oldHw, isDarkMode),
+                        ],
+                      ),
+                    ),
+                    Divider(
+                        color: isDarkMode ? Colors.white24 : Colors.black12,
+                        height: 20),
+                  ],
+
+                  if (data['religiousActivities'] != null &&
+                      data['religiousActivities']
+                          .toString()
+                          .trim()
+                          .isNotEmpty) ...[
+                    _buildMinimalistDetailRow(Icons.mosque_outlined,
+                        "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
+                    Divider(
+                        color: isDarkMode ? Colors.white24 : Colors.black12,
+                        height: 20),
+                  ],
+
+                  if (selectedJuz == 0) ...[
+                    _buildMinimalistDetailRow(
+                        Icons.analytics_outlined,
+                        "إجمالي الحفظ للختمة",
+                        data['total_memorized_pages'] != null
+                            ? "${data['total_memorized_pages']} صفحة"
+                            : "---",
+                        isDarkMode),
+                    Divider(
+                        color: isDarkMode ? Colors.white24 : Colors.black12,
+                        height: 20),
+                  ],
+
+                  if (data['studentStatus'] != null &&
+                      data['studentStatus'].toString().trim().isNotEmpty) ...[
+                    _buildMinimalistDetailRow(Icons.mood, "حالة الطالب",
+                        data['studentStatus'], isDarkMode),
+                    Divider(
+                        color: isDarkMode ? Colors.white24 : Colors.black12,
+                        height: 20),
+                  ],
+
+                  if (data['notes'] != null &&
+                      data['notes'].toString().trim().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _buildNotesBox(data['notes'], isDarkMode),
+                  ],
+
+                  const SizedBox(height: 12),
+                  _buildActionButtons(context, sessionId, data, isDarkMode),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeworkRow(String label, String value, bool isDarkMode) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4, right: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("• $label: ",
+              style: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode ? Colors.white54 : Colors.black54,
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold)),
+          Expanded(
+              child: Text(value,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      color: isDarkMode ? Colors.white : Colors.black87,
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGridInfoBox(IconData icon, String title, String val,
+      Color iconColor, bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? Colors.black.withOpacity(0.2)
+            : const Color(0xfff8fafc).withOpacity(0.6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: isDarkMode ? Colors.white12 : const Color(0xffe2e8f0),
+            width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 15, color: iconColor),
+              const SizedBox(width: 6),
+              Expanded(
+                  child: Text(title,
                       style: TextStyle(
-                          color: isDarkMode ? Colors.white : primaryColor)),
-                  subtitle: Text(data['absenceReason'] ?? 'بدون سبب',
-                      style: TextStyle(
-                          color: isDarkMode ? Colors.white60 : Colors.black54)),
-                );
-              },
-            );
-          },
+                          fontSize: 11,
+                          color: isDarkMode ? Colors.white60 : Colors.grey[700],
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Cairo'),
+                      overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            val.trim().isEmpty ? '---' : val,
+            style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+                color: isDarkMode ? Colors.white : primaryColor,
+                fontFamily: 'Cairo',
+                height: 1.4),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMinimalistDetailRow(
+      IconData icon, String label, String value, bool isDarkMode,
+      {bool isBold = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon,
+              size: 17,
+              color: isDarkMode ? accentGold : primaryColor.withOpacity(0.6)),
+        ),
+        const SizedBox(width: 8),
+        Text("$label: ",
+            style: TextStyle(
+                fontSize: 12,
+                color: isDarkMode ? Colors.white60 : Colors.grey[700],
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.bold)),
+        Expanded(
+          child: Text(
+            value.trim().isEmpty ? '---' : value,
+            style: TextStyle(
+                fontSize: 13,
+                color: isBold
+                    ? (isDarkMode ? Colors.white : primaryColor)
+                    : (isDarkMode ? Colors.white70 : Colors.black87),
+                fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+                fontFamily: 'Cairo'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotesBox(String notes, bool isDarkMode) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? Colors.black.withOpacity(0.2)
+            : Colors.white.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+            color: isDarkMode ? Colors.white12 : Colors.black12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.comment,
+              size: 16, color: isDarkMode ? accentGold : primaryColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text("ملاحظات: $notes",
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontStyle: FontStyle.italic,
+                    color: isDarkMode ? Colors.white70 : Colors.black87,
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(BuildContext context, String id,
+      Map<String, dynamic> data, bool isDarkMode) {
+    if (widget.role == "readonly") {
+      return const SizedBox();
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        TextButton.icon(
+          style: TextButton.styleFrom(
+              backgroundColor: isDarkMode
+                  ? Colors.orange.withOpacity(0.12)
+                  : Colors.orange.withOpacity(0.08),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12))),
+          onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => EditSessionPage(sessionId: id, data: data))),
+          icon: Icon(Icons.edit_rounded,
+              size: 16,
+              color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800),
+          label: Text("تعديل الجلسة",
+              style: TextStyle(
+                  color: isDarkMode
+                      ? Colors.orangeAccent
+                      : Colors.orange.shade800,
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12)),
+        ),
+        if (widget.role == "manager") ...[
+          const SizedBox(width: 10),
+          TextButton.icon(
+            style: TextButton.styleFrom(
+                backgroundColor: Colors.red.withOpacity(0.1),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              bool? confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                        backgroundColor: isDarkMode
+                            ? const Color(0xff1e293b)
+                            : Colors.white,
+                        title: Text("حذف الجلسة",
+                            style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.bold,
+                                color: isDarkMode
+                                    ? Colors.white
+                                    : Colors.black)),
+                        content: Text(
+                            "هل أنت تأكد من رغبتك في حذف هذه الجلسة بشكل نهائي؟",
+                            style: TextStyle(
+                                fontFamily: 'Cairo',
+                                color: isDarkMode
+                                    ? Colors.white70
+                                    : Colors.black87)),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text("إلغاء",
+                                  style: TextStyle(fontFamily: 'Cairo'))),
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text("حذف",
+                                  style: TextStyle(
+                                      fontFamily: 'Cairo',
+                                      color: Colors.redAccent,
+                                      fontWeight: FontWeight.bold))),
+                        ],
+                      ));
+
+              if (confirm == true) {
+                await SessionService().deleteSession(id);
+                SessionService()
+                    .recalculateConsecutiveAbsences(data['studentId']);
+
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text("تم حذف الجلسة بنجاح",
+                        style: TextStyle(fontFamily: 'Cairo'))));
+              }
+            },
+            icon: const Icon(Icons.delete_outline,
+                size: 16, color: Colors.redAccent),
+            label: const Text("حذف",
+                style: TextStyle(
+                    color: Colors.redAccent,
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12)),
+          ),
+        ]
+      ],
+    );
+  }
+
+  Widget _buildBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+          color: color.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(color: color.withOpacity(0.3), blurRadius: 4)
+          ]),
+      child: Text(text,
+          style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Cairo')),
+    );
+  }
+
+  Widget _buildGlassContainer(
+      {required Widget child,
+      required bool isDarkMode,
+      EdgeInsetsGeometry padding = EdgeInsets.zero,
+      Color? customColor,
+      Color? customBorderColor}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(25),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: customColor ??
+                (isDarkMode
+                    ? Colors.white.withOpacity(0.06)
+                    : Colors.white.withOpacity(0.4)),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: customBorderColor ??
+                  (isDarkMode
+                      ? Colors.white.withOpacity(0.1)
+                      : Colors.white.withOpacity(0.6)),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.02),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: child,
         ),
       ),
     );
@@ -1266,7 +1989,173 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 }
 
 // =========================================================================
-// 🚀 3. واجهة الطلاب الحاضرين الذين لم يسمّعوا
+// 🚀 3. واجهة الطلاب الغائبين
+// =========================================================================
+class DailyAbsentStudentsPage extends StatefulWidget {
+  final String targetDate;
+  const DailyAbsentStudentsPage({super.key, required this.targetDate});
+
+  @override
+  State<DailyAbsentStudentsPage> createState() =>
+      _DailyAbsentStudentsPageState();
+}
+
+class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
+  final Color primaryColor = const Color(0xff425c75);
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+
+    return OfflineWrapper(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor:
+            isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text("سجل الغائبين (${widget.targetDate}) 🔴",
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : primaryColor,
+                  fontFamily: 'Cairo',
+                  fontSize: 16)),
+          iconTheme:
+              IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+          centerTitle: true,
+        ),
+        body: Stack(
+          children: [
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode
+                      ? [
+                          const Color(0xff0f172a),
+                          const Color(0xff1e293b),
+                          const Color(0xff0f172a)
+                        ]
+                      : [
+                          const Color(0xffe2e8f0),
+                          const Color(0xffcfdef3),
+                          const Color(0xffe0eafc)
+                        ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('sessions')
+                    .where('date', isEqualTo: widget.targetDate)
+                    .where('absent', isEqualTo: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final absentDocs = snapshot.data?.docs ?? [];
+
+                  if (absentDocs.isEmpty) {
+                    return Center(
+                      child: Text("لا يوجد غياب مسجل في هذا اليوم 🎉",
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.white70 : primaryColor,
+                              fontSize: 14)),
+                    );
+                  }
+
+                  return ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.all(18),
+                    itemCount: absentDocs.length,
+                    itemBuilder: (context, index) {
+                      final data =
+                          absentDocs[index].data() as Map<String, dynamic>;
+                      String studentName = data['studentName'] ?? 'طالب';
+                      String reason = data['absenceReason'] ?? 'بدون سبَب مُسجّل';
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isDarkMode
+                                    ? Colors.white.withOpacity(0.06)
+                                    : Colors.white.withOpacity(0.55),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: Colors.redAccent.withOpacity(0.3),
+                                    width: 1.2),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.redAccent.withOpacity(0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.person_off_rounded,
+                                        color: Colors.redAccent, size: 22),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(studentName,
+                                            style: TextStyle(
+                                                fontFamily: 'Cairo',
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                                color: isDarkMode
+                                                    ? Colors.white
+                                                    : primaryColor)),
+                                        const SizedBox(height: 2),
+                                        Text("سبب الغياب: $reason",
+                                            style: TextStyle(
+                                                fontFamily: 'Cairo',
+                                                fontSize: 11,
+                                                color: isDarkMode
+                                                    ? Colors.white60
+                                                    : Colors.black54)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// 🚀 4. واجهة الطلاب (حضر ولم يسمّع)
 // =========================================================================
 class DailyDidNotReciteStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -1286,131 +2175,131 @@ class _DailyDidNotReciteStudentsPageState
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
+      backgroundColor:
+          isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
       appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
         title: Text("حضر ولم يسمّع (${widget.targetDate}) ⚠️",
-            style: const TextStyle(fontFamily: 'Cairo')),
+            style: TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.bold,
+                color: isDarkMode ? Colors.white : primaryColor,
+                fontSize: 16)),
+        iconTheme:
+            IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+        centerTitle: true,
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('sessions')
-            .where('cycleId', isEqualTo: currentCycleId)
-            .where('date', isEqualTo: widget.targetDate)
-            .where('didNotRecite', isEqualTo: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final docs = snapshot.data!.docs;
+      body: Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDarkMode
+                    ? [
+                        const Color(0xff0f172a),
+                        const Color(0xff1e293b),
+                        const Color(0xff0f172a)
+                      ]
+                    : [
+                        const Color(0xffe2e8f0),
+                        const Color(0xffcfdef3),
+                        const Color(0xffe0eafc)
+                      ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          SafeArea(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('sessions')
+                  .where('date', isEqualTo: widget.targetDate)
+                  .where('didNotRecite', isEqualTo: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          if (docs.isEmpty) {
-            return const Center(
-              child: Text("لا يوجد طلاب بحالة حضر ولم يسمّع اليوم 🎉",
-                  style: TextStyle(fontFamily: 'Cairo')),
-            );
-          }
+                final docs = snapshot.data?.docs ?? [];
 
-          return ListView.builder(
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-              return ListTile(
-                title: Text(data['studentName'] ?? 'طالب',
-                    style: TextStyle(
-                        color: isDarkMode ? Colors.white : primaryColor)),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Text("لا يوجد طلاب بحالة حضر ولم يسمّع اليوم 🎉",
+                        style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold,
+                            color: isDarkMode ? Colors.white70 : primaryColor,
+                            fontSize: 14)),
+                  );
+                }
 
-// =========================================================================
-// 🚀 4. واجهة التسميعات والجلسات اليومية
-// =========================================================================
-class DailyRecitationsPage extends StatefulWidget {
-  final String targetDate;
-  final String role;
+                return ListView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.all(18),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data() as Map<String, dynamic>;
+                    String studentName = data['studentName'] ?? 'طالب';
 
-  const DailyRecitationsPage({
-    super.key,
-    required this.targetDate,
-    this.role = 'supervisor',
-  });
-
-  @override
-  State<DailyRecitationsPage> createState() => _DailyRecitationsPageState();
-}
-
-class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
-  final Color primaryColor = const Color(0xff425c75);
-
-  @override
-  Widget build(BuildContext context) {
-    final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
-
-    return OfflineWrapper(
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text("جلسات التسميع (${widget.targetDate}) 📝",
-              style: const TextStyle(fontFamily: 'Cairo')),
-        ),
-        body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('sessions')
-              .where('cycleId', isEqualTo: currentCycleId)
-              .where('date', isEqualTo: widget.targetDate)
-              .where('absent', isEqualTo: false)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final sessions = snapshot.data!.docs;
-
-            if (sessions.isEmpty) {
-              return const Center(
-                child: Text("لا توجد تسميعات مسجلة في هذا اليوم",
-                    style: TextStyle(fontFamily: 'Cairo')),
-              );
-            }
-
-            return ListView.builder(
-              itemCount: sessions.length,
-              itemBuilder: (context, index) {
-                final session = sessions[index];
-                final data = session.data() as Map<String, dynamic>;
-
-                return Card(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: ListTile(
-                    title: Text(data['studentName'] ?? 'طالب',
-                        style: const TextStyle(
-                            fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                    subtitle: Text(
-                        "الحفظ: ${data['newMemorization'] ?? 'لا يوجد'}",
-                        style: const TextStyle(fontFamily: 'Cairo')),
-                    trailing: widget.role == 'manager'
-                        ? IconButton(
-                            icon:
-                                const Icon(Icons.delete, color: Colors.redAccent),
-                            onPressed: () async {
-                              await SessionService()
-                                  .deleteSession(session.id);
-                              SessionService().recalculateConsecutiveAbsences(
-                                  data['studentId']);
-                            },
-                          )
-                        : null,
-                  ),
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: isDarkMode
+                                  ? Colors.white.withOpacity(0.06)
+                                  : Colors.white.withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: Colors.blueGrey.withOpacity(0.4),
+                                  width: 1.2),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blueGrey.withOpacity(0.15),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                      Icons.speaker_notes_off_outlined,
+                                      color: Colors.blueGrey,
+                                      size: 22),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Text(studentName,
+                                      style: TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                          color: isDarkMode
+                                              ? Colors.white
+                                              : primaryColor)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
-            );
-          },
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

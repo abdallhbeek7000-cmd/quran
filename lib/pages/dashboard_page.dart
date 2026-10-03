@@ -13,9 +13,6 @@ import '../services/theme_provider.dart';
 import '../widgets/offline_wrapper.dart';
 import 'edit_student_page.dart';
 
-// ⚙️ معرف الدورة الحالية لتحديد نطاق البيانات (إذا كانت فارغة/غير موجودة تعتبر الدورة مغلقة)
-const String currentCycleId = 'cycle_2026_q4';
-
 bool _hasRecitation(Map<String, dynamic> data) {
   bool hasMemo = (data['newMemo'] != null && data['newMemo'].toString().trim().isNotEmpty) ||
       (data['memo'] != null && data['memo'].toString().trim().isNotEmpty) ||
@@ -58,6 +55,31 @@ class _DashboardPageState extends State<DashboardPage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
+  late Future<String> _activeCycleFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeCycleFuture = _fetchActiveCycleId();
+  }
+
+  // 🎯 جلب معرف الدورة النشطة مرة واحدة بدون تكرار
+  Future<String> _fetchActiveCycleId() async {
+    try {
+      var cycleSnap = await FirebaseFirestore.instance
+          .collection('cycles')
+          .where('isCurrent', isEqualTo: true)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+
+      if (cycleSnap.docs.isNotEmpty) {
+        return cycleSnap.docs.first.id;
+      }
+    } catch (_) {}
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
@@ -80,415 +102,417 @@ class _DashboardPageState extends State<DashboardPage> {
         iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
       ),
-      body: Stack(
-        children: [
-          Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDarkMode
-                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
-                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-          SafeArea(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('students')
-                  .where('cycleId', isEqualTo: currentCycleId)
-                  .snapshots(),
-              builder: (context, studentsSnap) {
-                if (studentsSnap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+      body: FutureBuilder<String>(
+        future: _activeCycleFuture,
+        builder: (context, cycleSnapshot) {
+          if (cycleSnapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-                return StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('supervisors')
-                      .where('cycleId', isEqualTo: currentCycleId)
-                      .snapshots(),
-                  builder: (context, supervisorsSnap) {
-                    if (supervisorsSnap.connectionState == ConnectionState.waiting) {
+          final String activeCycleId = cycleSnapshot.data ?? '';
+
+          return Stack(
+            children: [
+              Container(
+                width: double.infinity,
+                height: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isDarkMode
+                        ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
+                        : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+              ),
+              SafeArea(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: activeCycleId.isNotEmpty
+                      ? FirebaseFirestore.instance
+                          .collection('students')
+                          .where('cycleId', isEqualTo: activeCycleId)
+                          .snapshots()
+                      : FirebaseFirestore.instance.collection('students').snapshots(),
+                  builder: (context, studentsSnap) {
+                    if (studentsSnap.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
                     }
 
                     return StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('sessions')
-                          .where('cycleId', isEqualTo: currentCycleId)
-                          .snapshots(),
-                      builder: (context, sessionsSnap) {
-                        if (sessionsSnap.connectionState == ConnectionState.waiting) {
+                      // 👥 المشرفون ثابتون في كل المعهد (بدون فلترة بالدورة)
+                      stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
+                      builder: (context, supervisorsSnap) {
+                        if (supervisorsSnap.connectionState == ConnectionState.waiting) {
                           return const Center(child: CircularProgressIndicator());
                         }
 
-                        final allStudentsDocs = studentsSnap.hasData ? studentsSnap.data!.docs : [];
-                        final supervisors = supervisorsSnap.hasData ? supervisorsSnap.data!.docs : [];
-                        final sessions = sessionsSnap.hasData ? sessionsSnap.data!.docs : [];
-
-                        // 🔒 التحقق مما إذا كانت الدورة مغلقة أو فارغة
-                        if (currentCycleId.isEmpty || (allStudentsDocs.isEmpty && supervisors.isEmpty && sessions.isEmpty)) {
-                          return Center(
-                            child: Container(
-                              padding: const EdgeInsets.all(25),
-                              margin: const EdgeInsets.symmetric(horizontal: 20),
-                              decoration: BoxDecoration(
-                                color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(25),
-                                border: Border.all(color: Colors.orange.withOpacity(0.4), width: 1.5),
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.lock_clock_rounded, color: Colors.orange, size: 55),
-                                  const SizedBox(height: 15),
-                                  Text(
-                                    "لا توجد دورة نشطة حالياً 🛑",
-                                    style: TextStyle(
-                                      fontFamily: 'Cairo',
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                      color: isDarkMode ? Colors.white : primaryColor,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    "الدورة الحالية مغلقة أو لم يتم تفعيل دورة جديدة بعد. الرجاء إعداد بداية دورة جديدة لعرض الإحصائيات.",
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontFamily: 'Cairo',
-                                      fontSize: 12,
-                                      color: isDarkMode ? Colors.white60 : Colors.black54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-
-                        final students = allStudentsDocs.where((doc) {
-                          var data = doc.data() as Map<String, dynamic>;
-                          bool isArchived = data['archived'] == true || data['isArchived'] == true;
-                          bool isStopped = data['isStopped'] == true;
-                          String status = data['status']?.toString().toLowerCase() ?? '';
-                          return !isArchived && !isStopped && status != 'stopped' && status != 'archived';
-                        }).toList();
-
-                        int absentCount = 0;
-                        int unrecitedCount = 0;
-                        int noSupervisor = 0;
-
-                        for (var s in sessions) {
-                          final data = s.data() as Map<String, dynamic>;
-                          if (data['absent'] == true) {
-                            absentCount++;
-                          } else {
-                            if (!_hasRecitation(data)) {
-                              unrecitedCount++;
+                        return StreamBuilder<QuerySnapshot>(
+                          stream: activeCycleId.isNotEmpty
+                              ? FirebaseFirestore.instance
+                                  .collection('sessions')
+                                  .where('cycleId', isEqualTo: activeCycleId)
+                                  .snapshots()
+                              : FirebaseFirestore.instance.collection('sessions').snapshots(),
+                          builder: (context, sessionsSnap) {
+                            if (sessionsSnap.connectionState == ConnectionState.waiting) {
+                              return const Center(child: CircularProgressIndicator());
                             }
-                          }
-                        }
 
-                        for (var s in students) {
-                          final data = s.data() as Map<String, dynamic>;
-                          if (data['supervisorId'] == null || data['supervisorId'].toString().trim().isEmpty) {
-                            noSupervisor++;
-                          }
-                        }
+                            final allStudentsDocs = studentsSnap.hasData ? studentsSnap.data!.docs : [];
+                            final supervisors = supervisorsSnap.hasData ? supervisorsSnap.data!.docs : [];
+                            final sessions = sessionsSnap.hasData ? sessionsSnap.data!.docs : [];
 
-                        int totalStudents = students.length;
-                        int assignedStudents = totalStudents - noSupervisor;
-                        double assignedPercentage = totalStudents > 0 ? (assignedStudents / totalStudents) : 0.0;
+                            if (allStudentsDocs.isEmpty && supervisors.isEmpty && sessions.isEmpty) {
+                              return Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(25),
+                                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                                  decoration: BoxDecoration(
+                                    color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.6),
+                                    borderRadius: BorderRadius.circular(25),
+                                    border: Border.all(color: Colors.orange.withOpacity(0.4), width: 1.5),
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.lock_clock_rounded, color: Colors.orange, size: 55),
+                                      const SizedBox(height: 15),
+                                      Text(
+                                        "لا توجد بيانات مسجلة حالياً 🛑",
+                                        style: TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 18,
+                                          color: isDarkMode ? Colors.white : primaryColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
 
-                        return SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildHeaderSection(isDarkMode),
-                              const SizedBox(height: 15),
-                              _buildProgressSummaryCard(
-                                totalStudents: totalStudents,
-                                assignedStudents: assignedStudents,
-                                percentage: assignedPercentage,
-                                isDarkMode: isDarkMode,
-                              ),
-                              const SizedBox(height: 20),
-                              GridView.count(
-                                crossAxisCount: 2,
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                crossAxisSpacing: 15,
-                                mainAxisSpacing: 15,
-                                childAspectRatio: 1.05,
+                            final students = allStudentsDocs.where((doc) {
+                              var data = doc.data() as Map<String, dynamic>;
+                              bool isArchived = data['archived'] == true || data['isArchived'] == true;
+                              bool isStopped = data['isStopped'] == true;
+                              String status = data['status']?.toString().toLowerCase() ?? '';
+                              return !isArchived && !isStopped && status != 'stopped' && status != 'archived';
+                            }).toList();
+
+                            int absentCount = 0;
+                            int unrecitedCount = 0;
+                            int noSupervisor = 0;
+
+                            for (var s in sessions) {
+                              final data = s.data() as Map<String, dynamic>;
+                              if (data['absent'] == true) {
+                                absentCount++;
+                              } else {
+                                if (!_hasRecitation(data)) {
+                                  unrecitedCount++;
+                                }
+                              }
+                            }
+
+                            for (var s in students) {
+                              final data = s.data() as Map<String, dynamic>;
+                              if (data['supervisorId'] == null || data['supervisorId'].toString().trim().isEmpty) {
+                                noSupervisor++;
+                              }
+                            }
+
+                            int totalStudents = students.length;
+                            int assignedStudents = totalStudents - noSupervisor;
+                            double assignedPercentage = totalStudents > 0 ? (assignedStudents / totalStudents) : 0.0;
+
+                            return SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _buildGlassStatCard(
-                                    title: "إجمالي الطلاب",
-                                    value: totalStudents.toString(),
-                                    subtitle: "طلاب نشطون",
-                                    icon: Icons.people_alt_rounded,
-                                    color: isDarkMode ? Colors.lightBlueAccent : Colors.blue.shade600,
+                                  _buildHeaderSection(isDarkMode),
+                                  const SizedBox(height: 15),
+                                  _buildProgressSummaryCard(
+                                    totalStudents: totalStudents,
+                                    assignedStudents: assignedStudents,
+                                    percentage: assignedPercentage,
                                     isDarkMode: isDarkMode,
                                   ),
+                                  const SizedBox(height: 20),
+                                  GridView.count(
+                                    crossAxisCount: 2,
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    crossAxisSpacing: 15,
+                                    mainAxisSpacing: 15,
+                                    childAspectRatio: 1.05,
+                                    children: [
+                                      _buildGlassStatCard(
+                                        title: "إجمالي الطلاب",
+                                        value: totalStudents.toString(),
+                                        subtitle: "طلاب نشطون",
+                                        icon: Icons.people_alt_rounded,
+                                        color: isDarkMode ? Colors.lightBlueAccent : Colors.blue.shade600,
+                                        isDarkMode: isDarkMode,
+                                      ),
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(25),
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => SupervisorsStudentsCountPage(cycleId: activeCycleId)),
+                                          );
+                                        },
+                                        child: _buildGlassStatCard(
+                                          title: "المشرفين",
+                                          value: supervisors.length.toString(),
+                                          subtitle: "اضغط للتوزيع 👥",
+                                          icon: Icons.admin_panel_settings_rounded,
+                                          color: isDarkMode ? accentGold : Colors.amber.shade700,
+                                          isDarkMode: isDarkMode,
+                                        ),
+                                      ),
+                                      _buildGlassStatCard(
+                                        title: "إجمالي الجلسات",
+                                        value: sessions.length.toString(),
+                                        subtitle: "جلسة موثقة 📖",
+                                        icon: Icons.auto_stories_rounded,
+                                        color: Colors.greenAccent.shade700,
+                                        isDarkMode: isDarkMode,
+                                      ),
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(25),
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => AllAbsentStudentsSummaryPage(cycleId: activeCycleId)),
+                                          );
+                                        },
+                                        child: _buildGlassStatCard(
+                                          title: "طلاب غائبون",
+                                          value: absentCount.toString(),
+                                          subtitle: "عرض السجل 🚨",
+                                          icon: Icons.person_off_rounded,
+                                          color: Colors.redAccent.shade200,
+                                          isDarkMode: isDarkMode,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 15),
                                   InkWell(
                                     borderRadius: BorderRadius.circular(25),
                                     onTap: () {
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(builder: (_) => const SupervisorsStudentsCountPage()),
+                                        MaterialPageRoute(builder: (_) => UnrecitedSessionsPage(cycleId: activeCycleId)),
                                       );
                                     },
-                                    child: _buildGlassStatCard(
-                                      title: "المشرفين",
-                                      value: supervisors.length.toString(),
-                                      subtitle: "اضغط للتوزيع 👥",
-                                      icon: Icons.admin_panel_settings_rounded,
-                                      color: isDarkMode ? accentGold : Colors.amber.shade700,
+                                    child: _buildGlassContainer(
                                       isDarkMode: isDarkMode,
+                                      padding: const EdgeInsets.all(18),
+                                      customColor: isDarkMode ? Colors.purple.withOpacity(0.12) : Colors.purple.withOpacity(0.15),
+                                      customBorderColor: Colors.purpleAccent.withOpacity(0.5),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.purple.withOpacity(0.2),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(Icons.history_edu_rounded, color: Colors.purpleAccent, size: 30),
+                                          ),
+                                          const SizedBox(width: 15),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  "حضور بدون تسميع 📝",
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15,
+                                                    color: isDarkMode ? Colors.white : primaryColor,
+                                                    fontFamily: 'Cairo',
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  "جلسات تم حضورها دون تسجيل تسميع",
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: isDarkMode ? Colors.white70 : Colors.black54,
+                                                    fontFamily: 'Cairo',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.purpleAccent,
+                                              borderRadius: BorderRadius.circular(15),
+                                            ),
+                                            child: Text(
+                                              unrecitedCount.toString(),
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                                fontFamily: 'Cairo',
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                  _buildGlassStatCard(
-                                    title: "إجمالي الجلسات",
-                                    value: sessions.length.toString(),
-                                    subtitle: "جلسة موثقة 📖",
-                                    icon: Icons.auto_stories_rounded,
-                                    color: Colors.greenAccent.shade700,
-                                    isDarkMode: isDarkMode,
-                                  ),
+                                  const SizedBox(height: 15),
                                   InkWell(
                                     borderRadius: BorderRadius.circular(25),
                                     onTap: () {
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(builder: (_) => const AllAbsentStudentsSummaryPage()),
+                                        MaterialPageRoute(builder: (_) => TopSessionSupervisorsPage(cycleId: activeCycleId)),
                                       );
                                     },
-                                    child: _buildGlassStatCard(
-                                      title: "طلاب غائبون",
-                                      value: absentCount.toString(),
-                                      subtitle: "عرض السجل 🚨",
-                                      icon: Icons.person_off_rounded,
-                                      color: Colors.redAccent.shade200,
+                                    child: _buildGlassContainer(
                                       isDarkMode: isDarkMode,
+                                      padding: const EdgeInsets.all(18),
+                                      customColor: isDarkMode ? Colors.amber.withOpacity(0.12) : Colors.amber.withOpacity(0.18),
+                                      customBorderColor: accentGold.withOpacity(0.6),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: accentGold.withOpacity(0.2),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(Icons.workspace_premium_rounded, color: isDarkMode ? accentGold : Colors.amber.shade900, size: 30),
+                                          ),
+                                          const SizedBox(width: 15),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  "أكثر المشرفين تسميعاً 🏆",
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15,
+                                                    color: isDarkMode ? Colors.white : primaryColor,
+                                                    fontFamily: 'Cairo',
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  "ترتيب المشرفين بحسب إجمالي الجلسات المسجلة",
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: isDarkMode ? Colors.white70 : Colors.black54,
+                                                    fontFamily: 'Cairo',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Icon(Icons.arrow_forward_ios_rounded, color: isDarkMode ? accentGold : primaryColor, size: 16),
+                                        ],
+                                      ),
                                     ),
                                   ),
+                                  const SizedBox(height: 15),
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(25),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (_) => UnassignedStudentsPage(cycleId: activeCycleId)),
+                                      );
+                                    },
+                                    child: _buildGlassContainer(
+                                      isDarkMode: isDarkMode,
+                                      padding: const EdgeInsets.all(18),
+                                      customColor: isDarkMode ? Colors.orange.withOpacity(0.12) : Colors.orange.withOpacity(0.18),
+                                      customBorderColor: Colors.orange.withOpacity(0.5),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange.withOpacity(0.2),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 30),
+                                          ),
+                                          const SizedBox(width: 15),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  "طلاب يحتاجون مشرف",
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15,
+                                                    color: isDarkMode ? Colors.white : primaryColor,
+                                                    fontFamily: 'Cairo',
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  noSupervisor > 0 ? "هناك $noSupervisor طالباً ينتظرون التوزيع" : "تم توزيع جميع الطلاب بنجاح 🎉",
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: isDarkMode ? Colors.white70 : Colors.black54,
+                                                    fontFamily: 'Cairo',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange,
+                                              borderRadius: BorderRadius.circular(15),
+                                            ),
+                                            child: Text(
+                                              noSupervisor.toString(),
+                                              style: const TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                                fontFamily: 'Cairo',
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  _buildNotesSection(isDarkMode),
+                                  const SizedBox(height: 30),
                                 ],
                               ),
-                              const SizedBox(height: 15),
-                              InkWell(
-                                borderRadius: BorderRadius.circular(25),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => const UnrecitedSessionsPage()),
-                                  );
-                                },
-                                child: _buildGlassContainer(
-                                  isDarkMode: isDarkMode,
-                                  padding: const EdgeInsets.all(18),
-                                  customColor: isDarkMode ? Colors.purple.withOpacity(0.12) : Colors.purple.withOpacity(0.15),
-                                  customBorderColor: Colors.purpleAccent.withOpacity(0.5),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.purple.withOpacity(0.2),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(Icons.history_edu_rounded, color: Colors.purpleAccent, size: 30),
-                                      ),
-                                      const SizedBox(width: 15),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              "حضور بدون تسميع 📝",
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                                color: isDarkMode ? Colors.white : primaryColor,
-                                                fontFamily: 'Cairo',
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              "جلسات تم حضورها دون تسجيل تسميع",
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: isDarkMode ? Colors.white70 : Colors.black54,
-                                                fontFamily: 'Cairo',
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.purpleAccent,
-                                          borderRadius: BorderRadius.circular(15),
-                                        ),
-                                        child: Text(
-                                          unrecitedCount.toString(),
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                            fontFamily: 'Cairo',
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 15),
-                              InkWell(
-                                borderRadius: BorderRadius.circular(25),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => const TopSessionSupervisorsPage()),
-                                  );
-                                },
-                                child: _buildGlassContainer(
-                                  isDarkMode: isDarkMode,
-                                  padding: const EdgeInsets.all(18),
-                                  customColor: isDarkMode ? Colors.amber.withOpacity(0.12) : Colors.amber.withOpacity(0.18),
-                                  customBorderColor: accentGold.withOpacity(0.6),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: accentGold.withOpacity(0.2),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(Icons.workspace_premium_rounded, color: isDarkMode ? accentGold : Colors.amber.shade900, size: 30),
-                                      ),
-                                      const SizedBox(width: 15),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              "أكثر المشرفين تسميعاً 🏆",
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                                color: isDarkMode ? Colors.white : primaryColor,
-                                                fontFamily: 'Cairo',
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              "ترتيب المشرفين بحسب إجمالي الجلسات المسجلة",
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: isDarkMode ? Colors.white70 : Colors.black54,
-                                                fontFamily: 'Cairo',
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Icon(Icons.arrow_forward_ios_rounded, color: isDarkMode ? accentGold : primaryColor, size: 16),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 15),
-                              InkWell(
-                                borderRadius: BorderRadius.circular(25),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => const UnassignedStudentsPage()),
-                                  );
-                                },
-                                child: _buildGlassContainer(
-                                  isDarkMode: isDarkMode,
-                                  padding: const EdgeInsets.all(18),
-                                  customColor: isDarkMode ? Colors.orange.withOpacity(0.12) : Colors.orange.withOpacity(0.18),
-                                  customBorderColor: Colors.orange.withOpacity(0.5),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.withOpacity(0.2),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 30),
-                                      ),
-                                      const SizedBox(width: 15),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              "طلاب يحتاجون مشرف",
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                                color: isDarkMode ? Colors.white : primaryColor,
-                                                fontFamily: 'Cairo',
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              noSupervisor > 0 ? "هناك $noSupervisor طالباً ينتظرون التوزيع" : "تم توزيع جميع الطلاب بنجاح 🎉",
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: isDarkMode ? Colors.white70 : Colors.black54,
-                                                fontFamily: 'Cairo',
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange,
-                                          borderRadius: BorderRadius.circular(15),
-                                        ),
-                                        child: Text(
-                                          noSupervisor.toString(),
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                            fontFamily: 'Cairo',
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              _buildNotesSection(isDarkMode),
-                              const SizedBox(height: 30),
-                            ],
-                          ),
+                            );
+                          },
                         );
                       },
                     );
                   },
-                );
-              },
-            ),
-          ),
-        ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -762,7 +786,8 @@ DateTime _getDateTime(dynamic dateVal) {
 }
 
 class TopSessionSupervisorsPage extends StatelessWidget {
-  const TopSessionSupervisorsPage({super.key});
+  final String cycleId;
+  const TopSessionSupervisorsPage({super.key, required this.cycleId});
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
@@ -798,10 +823,8 @@ class TopSessionSupervisorsPage extends StatelessWidget {
             ),
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('supervisors')
-                    .where('cycleId', isEqualTo: currentCycleId)
-                    .snapshots(),
+                // 👥 جلب كافة المشرفين المسجلين في النظام
+                stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
                 builder: (context, supSnap) {
                   if (!supSnap.hasData) return const Center(child: CircularProgressIndicator());
 
@@ -809,16 +832,14 @@ class TopSessionSupervisorsPage extends StatelessWidget {
 
                   if (supervisors.isEmpty) {
                     return Center(
-                      child: Text("لا يوجد مشرفون مسجلون في هذه الدورة 📭", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
+                      child: Text("لا يوجد مشرفون مسجلون 📭", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
                     );
                   }
 
                   return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('sessions')
-                        .where('cycleId', isEqualTo: currentCycleId)
-                        .where('absent', isEqualTo: false)
-                        .snapshots(),
+                    stream: cycleId.isNotEmpty
+                        ? FirebaseFirestore.instance.collection('sessions').where('cycleId', isEqualTo: cycleId).where('absent', isEqualTo: false).snapshots()
+                        : FirebaseFirestore.instance.collection('sessions').where('absent', isEqualTo: false).snapshots(),
                     builder: (context, sessionSnap) {
                       if (!sessionSnap.hasData) return const Center(child: CircularProgressIndicator());
 
@@ -979,7 +1000,8 @@ class TopSessionSupervisorsPage extends StatelessWidget {
 }
 
 class SupervisorsStudentsCountPage extends StatelessWidget {
-  const SupervisorsStudentsCountPage({super.key});
+  final String cycleId;
+  const SupervisorsStudentsCountPage({super.key, required this.cycleId});
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
@@ -1015,20 +1037,17 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
             ),
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('supervisors')
-                    .where('cycleId', isEqualTo: currentCycleId)
-                    .snapshots(),
+                // 👥 المشرفون ثابتون في كل المعهد
+                stream: FirebaseFirestore.instance.collection('supervisors').snapshots(),
                 builder: (context, supSnap) {
                   if (!supSnap.hasData) return const Center(child: CircularProgressIndicator());
 
                   final supervisors = supSnap.data!.docs;
 
                   return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('students')
-                        .where('cycleId', isEqualTo: currentCycleId)
-                        .snapshots(),
+                    stream: cycleId.isNotEmpty
+                        ? FirebaseFirestore.instance.collection('students').where('cycleId', isEqualTo: cycleId).snapshots()
+                        : FirebaseFirestore.instance.collection('students').snapshots(),
                     builder: (context, stdSnap) {
                       if (!stdSnap.hasData) return const Center(child: CircularProgressIndicator());
 
@@ -1153,7 +1172,8 @@ class SupervisorsStudentsCountPage extends StatelessWidget {
 }
 
 class AllAbsentStudentsSummaryPage extends StatelessWidget {
-  const AllAbsentStudentsSummaryPage({super.key});
+  final String cycleId;
+  const AllAbsentStudentsSummaryPage({super.key, required this.cycleId});
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
@@ -1541,11 +1561,9 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
             ),
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('sessions')
-                    .where('cycleId', isEqualTo: currentCycleId)
-                    .where('absent', isEqualTo: true)
-                    .snapshots(),
+                stream: cycleId.isNotEmpty
+                    ? FirebaseFirestore.instance.collection('sessions').where('cycleId', isEqualTo: cycleId).where('absent', isEqualTo: true).snapshots()
+                    : FirebaseFirestore.instance.collection('sessions').where('absent', isEqualTo: true).snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
@@ -1553,7 +1571,7 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
 
                   if (absentSessions.isEmpty) {
                     return Center(
-                      child: Text("لا توجد أي غيابات مسجلة حتى الآن في هذه الدورة 🎉", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
+                      child: Text("لا توجد أي غيابات مسجلة حتى الآن 🎉", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : primaryColor, fontSize: 15)),
                     );
                   }
 
@@ -1683,7 +1701,8 @@ class AllAbsentStudentsSummaryPage extends StatelessWidget {
 }
 
 class UnrecitedSessionsPage extends StatelessWidget {
-  const UnrecitedSessionsPage({super.key});
+  final String cycleId;
+  const UnrecitedSessionsPage({super.key, required this.cycleId});
 
   final Color primaryColor = const Color(0xff425c75);
 
@@ -1718,11 +1737,9 @@ class UnrecitedSessionsPage extends StatelessWidget {
             ),
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('sessions')
-                    .where('cycleId', isEqualTo: currentCycleId)
-                    .where('absent', isEqualTo: false)
-                    .snapshots(),
+                stream: cycleId.isNotEmpty
+                    ? FirebaseFirestore.instance.collection('sessions').where('cycleId', isEqualTo: cycleId).where('absent', isEqualTo: false).snapshots()
+                    : FirebaseFirestore.instance.collection('sessions').where('absent', isEqualTo: false).snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
@@ -1813,7 +1830,8 @@ class UnrecitedSessionsPage extends StatelessWidget {
 }
 
 class UnassignedStudentsPage extends StatelessWidget {
-  const UnassignedStudentsPage({super.key});
+  final String cycleId;
+  const UnassignedStudentsPage({super.key, required this.cycleId});
 
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
@@ -1855,10 +1873,9 @@ class UnassignedStudentsPage extends StatelessWidget {
             ),
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('students')
-                    .where('cycleId', isEqualTo: currentCycleId)
-                    .snapshots(),
+                stream: cycleId.isNotEmpty
+                    ? FirebaseFirestore.instance.collection('students').where('cycleId', isEqualTo: cycleId).snapshots()
+                    : FirebaseFirestore.instance.collection('students').snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 

@@ -120,10 +120,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
         return;
       }
 
-      Set<String> currentCycleStudentIds = studentsSnap.docs.map((d) => d.id).toSet();
-
       // 3. جلب الجلسات
-      final sessionsSnap = await FirebaseFirestore.instance.collection('sessions').get();
+      final sessionsSnap =
+          await FirebaseFirestore.instance.collection('sessions').get();
 
       DateTime now = DateTime.now();
       DateTime targetStart = DateTime.now();
@@ -134,8 +133,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
         int daysToSaturday = (now.weekday + 1) % 7;
         DateTime currentWeekStart = DateTime(now.year, now.month, now.day)
             .subtract(Duration(days: daysToSaturday));
-        targetStart = currentWeekStart.subtract(Duration(days: periodsBack * 7));
-        targetEnd = targetStart.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+        targetStart =
+            currentWeekStart.subtract(Duration(days: periodsBack * 7));
+        targetEnd = targetStart
+            .add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
         currentPeriodLabel =
             "${targetStart.day}/${targetStart.month}  إلى  ${targetEnd.day}/${targetEnd.month}";
       } else if (filterMode == 1) {
@@ -164,23 +165,31 @@ class _StatisticsPageState extends State<StatisticsPage> {
         bool isArchived = sData['archived'] ?? false;
         if (isArchived) continue;
 
-        bool studentIsJuzAmma = sData['isJuzAmma'] ?? false;
+        // 🛑 استثناء الطالب إذا كان مسجلاً بنظام "جزء عمّ / نظام الأجزاء"
+        bool studentIsJuzAmma = sData['isJuzAmma'] == true;
         if (studentIsJuzAmma) continue;
 
         String sId = student.id;
         String sName = sData['name'] ?? 'طالب';
-        String imageUrl = sData.containsKey('imageUrl') ? sData['imageUrl'] ?? '' : '';
+        String imageUrl =
+            sData.containsKey('imageUrl') ? sData['imageUrl'] ?? '' : '';
 
-        String studentType = sData.containsKey('studentType') ? sData['studentType'] : 'new';
+        String studentType =
+            sData.containsKey('studentType') ? sData['studentType'] : 'new';
         bool isCompleted = studentType == 'completed';
 
-        // 🛠️ الفلترة الذكية: الجلسة يجب أن تكون للطالب الحالي + تنتمي لـ cycleId أو تكون ضمن نطاق تاريخ الدورة الحالية
+        // 🛠️ الفلترة الذكية للجلسات:
+        // يجب ألا تكون الجلسة مخصصة لنظام أجزاء (isJuzAmma / selectedJuz > 0)
         var sSessions = sessionsSnap.docs.where((doc) {
           var data = doc.data();
           if (data['studentId'] != sId) return false;
-          if (data['isJuzAmma'] == true) return false;
 
-          // التأكد من حقل cycleId في الجلسة إن وجد، أو تطابق الطالب مع الدورة الحالية
+          // 🛑 استثناء أي جلسة مخصصة لجزء عم أو نظام الأجزاء
+          if (data['isJuzAmma'] == true) return false;
+          int selJuz = data['selectedJuz'] ?? 0;
+          if (selJuz > 0) return false;
+
+          // التأكد من حقل cycleId في الجلسة إن وجد
           if (data.containsKey('cycleId') && data['cycleId'] != null) {
             if (data['cycleId'] != cycle.id) return false;
           }
@@ -192,7 +201,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
         int sessionsCount = sSessions.where((s) => s['absent'] != true).length;
         int absentCount = sSessions.where((s) => s['absent'] == true).length;
 
-        var validSessions = sSessions.where((s) => s['absent'] != true).toList();
+        var validSessions =
+            sSessions.where((s) => s['absent'] != true).toList();
 
         int totalPages = 0;
         int reviewPages = 0;
@@ -200,20 +210,29 @@ class _StatisticsPageState extends State<StatisticsPage> {
         if (validSessions.isNotEmpty) {
           if (!isCompleted) {
             for (var s in validSessions) {
-              totalPages += _calculatePagesFromText(s['newMemorization']?.toString());
-              reviewPages += _calculatePagesFromText(s['nearReview']?.toString());
-              reviewPages += _calculatePagesFromText(s['farReview']?.toString());
+              totalPages +=
+                  _calculatePagesFromText(s['newMemorization']?.toString());
+              reviewPages +=
+                  _calculatePagesFromText(s['nearReview']?.toString());
+              reviewPages +=
+                  _calculatePagesFromText(s['farReview']?.toString());
             }
           } else {
             for (var s in validSessions) {
-              reviewPages += _calculatePagesFromText(s['farReview']?.toString());
-              reviewPages += _calculatePagesFromText(s['nearReview']?.toString());
-              reviewPages += _calculatePagesFromText(s['review']?.toString());
+              reviewPages +=
+                  _calculatePagesFromText(s['farReview']?.toString());
+              reviewPages +=
+                  _calculatePagesFromText(s['nearReview']?.toString());
+              reviewPages +=
+                  _calculatePagesFromText(s['review']?.toString());
             }
           }
         }
 
-        if (totalPages == 0 && reviewPages == 0 && absentCount == 0 && sessionsCount == 0) continue;
+        if (totalPages == 0 &&
+            reviewPages == 0 &&
+            absentCount == 0 &&
+            sessionsCount == 0) continue;
 
         if (!isCompleted) cycleTotalPages += totalPages;
         cycleTotalReview += reviewPages;
@@ -310,9 +329,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
             : (filterMode == 1 ? "شهري" : "كامل_الدورة");
         String filePath = '${directory.path}/احصائيات_$filterName.xlsx';
 
-        File(filePath)
-          ..createSync(recursive: true)
-          ..writeAsBytesSync(fileBytes);
+        final file = File(filePath);
+        await file.writeAsBytes(fileBytes);
 
         await Share.shareXFiles(
           [XFile(filePath)],

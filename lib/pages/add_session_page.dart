@@ -5,8 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:workmanager/workmanager.dart';
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../services/session_service.dart';
 import '../services/theme_provider.dart';
@@ -18,15 +16,13 @@ import '../widgets/glass_toast.dart';
 class AddSessionPage extends StatefulWidget {
   final String studentId;
   final String studentName;
-  final String supervisorId;
-  final String supervisorName;
+  final String? cycleId;
 
   const AddSessionPage({
     super.key,
     required this.studentId,
     required this.studentName,
-    required this.supervisorId,
-    required this.supervisorName,
+    this.cycleId,
   });
 
   @override
@@ -44,7 +40,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   TextEditingController? _activeController;
   String _initialText = '';
 
-  // 📖 قائمة سور القرآن الكريمة
+  String activeCycleId = '';
+
   final List<Map<String, dynamic>> quranSurahs = const [
     {'id': 1, 'name': 'الفاتحة', 'startPage': 1, 'endPage': 1, 'verses': 7},
     {'id': 2, 'name': 'البقرة', 'startPage': 2, 'endPage': 49, 'verses': 286},
@@ -162,34 +159,15 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     {'id': 114, 'name': 'الناس', 'startPage': 604, 'endPage': 604, 'verses': 6},
   ];
 
-  // 0: عام (حسب الصفحات), 30: جزء عم, 29: جزء تبارك, 28: قد سمع, 27: الذاريات, 26: الأحقاف
   int selectedJuz = 0;
 
-  List<Map<String, dynamic>> newMemoRanges = [
-    {'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()}
-  ];
-
-  List<Map<String, dynamic>> newRevRanges = [
-    {'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()}
-  ];
-
-  List<Map<String, dynamic>> oldRevRanges = [
-    {'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()}
-  ];
-
-  List<Map<String, dynamic>> readingRanges = [
-    {'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()}
-  ];
-
-  List<Map<String, dynamic>> newHwRanges = [
-    {'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()}
-  ];
-  List<Map<String, dynamic>> newRevHwRanges = [
-    {'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()}
-  ];
-  List<Map<String, dynamic>> oldRevHwRanges = [
-    {'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()}
-  ];
+  List<Map<String, dynamic>> newMemoRanges = [];
+  List<Map<String, dynamic>> newRevRanges = [];
+  List<Map<String, dynamic>> oldRevRanges = [];
+  List<Map<String, dynamic>> readingRanges = [];
+  List<Map<String, dynamic>> newHwRanges = [];
+  List<Map<String, dynamic>> newRevHwRanges = [];
+  List<Map<String, dynamic>> oldRevHwRanges = [];
 
   final religiousActivities = TextEditingController();
   final notes = TextEditingController();
@@ -232,41 +210,96 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
     _speech = stt.SpeechToText();
 
-    var defaultSupervisor = {
-      'id': widget.supervisorId,
-      'name': widget.supervisorName
-    };
-    selectedNewMemoSupervisors.add(defaultSupervisor);
-    selectedReviewSupervisors.add(defaultSupervisor);
-
-    _checkIfStudentIsCompleted();
-    _loadPreviousSessionData();
+    _initEmptyRanges();
+    _fetchActiveCycleId();
+    _checkIfStudentIsCompletedAndLoadData();
   }
 
-  @override
-  void dispose() {
-    _bgController.dispose();
+  // 🎯 دالة جلب ID الدورة الفعالة بمختلف الأحتمالات
+  Future<String> _fetchActiveCycleId() async {
+    if (activeCycleId.isNotEmpty) return activeCycleId;
+    if (widget.cycleId != null && widget.cycleId!.isNotEmpty) {
+      activeCycleId = widget.cycleId!;
+      return activeCycleId;
+    }
 
-    _disposeRanges(newMemoRanges);
-    _disposeRanges(newRevRanges);
-    _disposeRanges(oldRevRanges);
-    _disposeRanges(readingRanges);
-    _disposeRanges(newHwRanges);
-    _disposeRanges(newRevHwRanges);
-    _disposeRanges(oldRevHwRanges);
+    try {
+      // 1. تجربة البحث بـ isActive: true
+      var snapshot = await FirebaseFirestore.instance
+          .collection('cycles')
+          .where('isActive', isEqualTo: true)
+          .limit(1)
+          .get();
 
-    religiousActivities.dispose();
-    notes.dispose();
-    absenceReasonController.dispose();
-    examScoreController.dispose();
-    totalMemorizedPagesController.dispose();
-    super.dispose();
+      if (snapshot.docs.isNotEmpty) {
+        activeCycleId = snapshot.docs.first.id;
+        if (mounted) setState(() {});
+        return activeCycleId;
+      }
+
+      // 2. تجربة البحث بـ status == 'active'
+      var statusSnapshot = await FirebaseFirestore.instance
+          .collection('cycles')
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+
+      if (statusSnapshot.docs.isNotEmpty) {
+        activeCycleId = statusSnapshot.docs.first.id;
+        if (mounted) setState(() {});
+        return activeCycleId;
+      }
+
+      // 3. في حال عدم وجود أي شروط، يجلب آخر دورة مضافة
+      var latestSnapshot = await FirebaseFirestore.instance
+          .collection('cycles')
+          .limit(1)
+          .get();
+
+      if (latestSnapshot.docs.isNotEmpty) {
+        activeCycleId = latestSnapshot.docs.first.id;
+        if (mounted) setState(() {});
+        return activeCycleId;
+      }
+    } catch (e) {
+      print("خطأ في جلب الدورة الفعالة: $e");
+    }
+
+    return "";
   }
 
-  void _disposeRanges(List<Map<String, dynamic>> list) {
-    for (var item in list) {
-      (item['from'] as TextEditingController?)?.dispose();
-      (item['to'] as TextEditingController?)?.dispose();
+  void _initEmptyRanges() {
+    for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+      list.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()});
+    }
+  }
+
+  Future<void> _checkIfStudentIsCompletedAndLoadData() async {
+    try {
+      if (widget.studentId.isNotEmpty) {
+        DocumentSnapshot studentDoc = await FirebaseFirestore.instance
+            .collection('students')
+            .doc(widget.studentId)
+            .get();
+
+        if (studentDoc.exists && studentDoc.data() != null) {
+          Map<String, dynamic> sData = studentDoc.data() as Map<String, dynamic>;
+
+          if (sData['studentType'] == 'completed') {
+            setState(() {
+              isCompletedStudent = true;
+              totalMemorizedPagesController.text = "604";
+            });
+          } else {
+            String pages = sData['memorizedPages']?.toString() ?? sData['total_memorized_pages']?.toString() ?? '0';
+            totalMemorizedPagesController.text = pages;
+          }
+        }
+      }
+    } catch (e) {
+      print("Error fetching student details: $e");
+    } finally {
+      if (mounted) setState(() => checkingStudentType = false);
     }
   }
 
@@ -275,14 +308,10 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     if (page == null || page < 1 || page > 604) return "";
 
     var matches = quranSurahs.where((s) => s['startPage'] == page).toList();
-    if (matches.isNotEmpty) {
-      return matches.first['name'];
-    }
+    if (matches.isNotEmpty) return matches.first['name'];
 
     for (var surah in quranSurahs) {
-      if (page >= surah['startPage'] && page <= surah['endPage']) {
-        return surah['name'];
-      }
+      if (page >= surah['startPage'] && page <= surah['endPage']) return surah['name'];
     }
     return "";
   }
@@ -292,14 +321,10 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     if (page == null || page < 1 || page > 604) return "";
 
     var matches = quranSurahs.where((s) => s['endPage'] == page).toList();
-    if (matches.isNotEmpty) {
-      return matches.last['name'];
-    }
+    if (matches.isNotEmpty) return matches.last['name'];
 
     for (var surah in quranSurahs) {
-      if (page >= surah['startPage'] && page <= surah['endPage']) {
-        return surah['name'];
-      }
+      if (page >= surah['startPage'] && page <= surah['endPage']) return surah['name'];
     }
     return "";
   }
@@ -312,16 +337,12 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     if (isFromPage) {
       String foundSurah = _getStartSurahByPage(pageVal);
       if (foundSurah.isNotEmpty && foundSurah != item['surah']) {
-        setState(() {
-          item['surah'] = foundSurah;
-        });
+        setState(() => item['surah'] = foundSurah);
       }
     } else {
       String foundSurah = _getEndSurahByPage(pageVal);
       if (foundSurah.isNotEmpty && foundSurah != item['toSurah']) {
-        setState(() {
-          item['toSurah'] = foundSurah;
-        });
+        setState(() => item['toSurah'] = foundSurah);
       }
     }
   }
@@ -428,70 +449,168 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     return parts.join(" | ");
   }
 
-  // 🛠️ دالة محللة ومستخرجة ممتازة لتحويل النصوص المنسقة للواجب إلى مقاطع تلقائية (Ranges)
-  List<Map<String, dynamic>> _parseFormattedTextToRanges(String text) {
-    List<Map<String, dynamic>> results = [];
-    if (text.trim().isEmpty) return results;
+  @override
+  void dispose() {
+    _bgController.dispose();
+    _disposeRanges(newMemoRanges);
+    _disposeRanges(newRevRanges);
+    _disposeRanges(oldRevRanges);
+    _disposeRanges(readingRanges);
+    _disposeRanges(newHwRanges);
+    _disposeRanges(newRevHwRanges);
+    _disposeRanges(oldRevHwRanges);
 
-    // تقسيم النص بناءً على الفواصل والمقاطع
-    List<String> rawParts = text.split(RegExp(r'\||\n'));
+    religiousActivities.dispose();
+    notes.dispose();
+    absenceReasonController.dispose();
+    examScoreController.dispose();
+    totalMemorizedPagesController.dispose();
+    super.dispose();
+  }
 
-    for (var part in rawParts) {
-      String trimmedPart = part.trim();
-      if (trimmedPart.isEmpty) continue;
-
-      String surahFrom = '';
-      String surahTo = '';
-      String fromPage = '';
-      String toPage = '';
-
-      // استخراج الأرقام من المقطع
-      RegExp digitsExp = RegExp(r'\d+');
-      var matches = digitsExp.allMatches(trimmedPart).map((m) => m.group(0)!).toList();
-
-      if (matches.length >= 2) {
-        fromPage = matches[0];
-        toPage = matches[1];
-      } else if (matches.length == 1) {
-        fromPage = matches[0];
-        toPage = matches[0];
-      }
-
-      // البحث عن أسماء السور المذكورة بالنص
-      for (var surah in quranSurahs) {
-        String sName = surah['name'];
-        if (trimmedPart.contains("من سورة $sName") || trimmedPart.contains("سورة $sName")) {
-          if (surahFrom.isEmpty) {
-            surahFrom = sName;
-          } else {
-            surahTo = sName;
-          }
-        } else if (trimmedPart.contains("إلى $sName") || trimmedPart.contains("إلى سورة $sName")) {
-          surahTo = sName;
-        }
-      }
-
-      // إذا لم يتم العثور على اسم سورة صريح، يتم جلبها عبر رقم الصفحة تلقائياً
-      if (surahFrom.isEmpty && fromPage.isNotEmpty) {
-        surahFrom = _getStartSurahByPage(fromPage);
-      }
-      if (surahTo.isEmpty && toPage.isNotEmpty) {
-        surahTo = _getEndSurahByPage(toPage);
-      }
-
-      var fromController = TextEditingController(text: fromPage);
-      var toController = TextEditingController(text: toPage);
-
-      results.add({
-        'surah': surahFrom,
-        'toSurah': surahTo.isNotEmpty ? surahTo : surahFrom,
-        'isFullSurah': fromPage.isEmpty && toPage.isEmpty,
-        'from': fromController,
-        'to': toController,
-      });
+  void _disposeRanges(List<Map<String, dynamic>> list) {
+    for (var item in list) {
+      (item['from'] as TextEditingController?)?.dispose();
+      (item['to'] as TextEditingController?)?.dispose();
     }
+  }
 
-    return results;
+  void _listen(TextEditingController controller) async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) {
+          if (val == 'done' || val == 'notListening') {
+            if (mounted) setState(() => _isListening = false);
+          }
+        },
+      );
+      if (available) {
+        setState(() {
+          _isListening = true;
+          _activeController = controller;
+          _initialText = controller.text;
+        });
+        _speech.listen(
+          onResult: (val) {
+            if (mounted) {
+              setState(() {
+                _activeController!.text = _initialText + (val.recognizedWords.isNotEmpty ? ' ' + val.recognizedWords : '');
+                _activeController!.selection = TextSelection.fromPosition(TextPosition(offset: _activeController!.text.length));
+              });
+            }
+          },
+          localeId: 'ar-SA',
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
+  }
+
+  Widget _buildMicButton(TextEditingController controller, bool isDarkMode) {
+    bool isActive = _isListening && _activeController == controller;
+    return IconButton(
+      key: ValueKey('mic_${controller.hashCode}'),
+      tooltip: "تحدث للإدخال",
+      icon: Icon(
+        isActive ? Icons.mic : Icons.mic_none,
+        color: isActive ? Colors.redAccent : (isDarkMode ? Colors.white60 : Colors.black54),
+      ),
+      onPressed: () {
+        HapticFeedback.lightImpact();
+        _listen(controller);
+      },
+    );
+  }
+
+  Widget _buildToggleTile(String title, bool value, Color color, Function(bool) onChanged, bool isDarkMode) {
+    return Container(
+      decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
+      child: CheckboxListTile(
+        activeColor: color,
+        title: Text(title, style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+        value: value,
+        onChanged: (v) => onChanged(v!),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      ),
+    );
+  }
+
+  Widget _buildMiniNumberInput(TextEditingController ctrl, bool isDarkMode, {String hint = "---", Map<String, dynamic>? itemToSync, bool isFromPage = true}) {
+    return SizedBox(
+      height: 42,
+      child: TextField(
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
+        textAlign: TextAlign.center,
+        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+        onChanged: (val) {
+          if (itemToSync != null) {
+            _syncSurahFromPageController(ctrl, itemToSync, isFromPage);
+          } else {
+            setState(() {});
+          }
+          _updateTotalPages();
+        },
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: isDarkMode ? Colors.white30 : Colors.black26),
+          contentPadding: EdgeInsets.zero,
+          filled: true,
+          fillColor: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.7),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSupervisorSelectorTile({
+    required String label,
+    required List<Map<String, String>> selectedList,
+    required VoidCallback onTap,
+    required bool isDarkMode,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDarkMode ? Colors.white70 : primaryColor, fontFamily: 'Cairo')),
+          const SizedBox(height: 6),
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: selectedList.isEmpty
+                      ? Text("اضغط لاختيار المشرفين...", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white38 : Colors.black38, fontFamily: 'Cairo'))
+                      : Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: selectedList.map((s) => Chip(
+                            label: Text(s['name']!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
+                            backgroundColor: accentGold,
+                            elevation: 1,
+                            visualDensity: VisualDensity.compact,
+                          )).toList(),
+                        ),
+                ),
+                Icon(Icons.person_add_alt_1_rounded, color: isDarkMode ? accentGold : primaryColor, size: 20),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode, List<Map<String, String>> targetList, String title) {
@@ -519,8 +638,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                   Expanded(
                     child: FutureBuilder<List<QuerySnapshot>>(
                       future: Future.wait([
-                        FirebaseFirestore.instance.collection('users').get(const GetOptions(source: Source.cache)),
-                        FirebaseFirestore.instance.collection('supervisors').get(const GetOptions(source: Source.cache))
+                        FirebaseFirestore.instance.collection('users').get(),
+                        FirebaseFirestore.instance.collection('supervisors').get()
                       ]),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -558,11 +677,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     if (val == true) {
                                       targetList.add(staff);
                                     } else {
-                                      if (targetList.length > 1) {
-                                        targetList.removeWhere((s) => s['id'] == staff['id']);
-                                      } else {
-                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يجب اختيار مشرف واحد على الأقل", style: TextStyle(fontFamily: 'Cairo'))));
-                                      }
+                                      targetList.removeWhere((s) => s['id'] == staff['id']);
                                     }
                                   });
                                   setState(() {});
@@ -670,547 +785,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
-  DateTime _parseDate(String dateStr) {
-    try {
-      List<String> parts = dateStr.split('-');
-      if (parts.length == 3) {
-        return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
-      }
-    } catch (e) {
-      return DateTime(2000);
-    }
-    return DateTime(2000);
-  }
-
-  Future<void> _loadPreviousSessionData() async {
-    try {
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('sessions')
-          .where('studentId', isEqualTo: widget.studentId)
-          .get(const GetOptions(source: Source.cache));
-
-      if (querySnapshot.docs.isNotEmpty) {
-        var docs = querySnapshot.docs.toList();
-
-        docs.sort((a, b) {
-          var dataA = a.data();
-          var dataB = b.data();
-
-          DateTime dateAObj = _parseDate(dataA['date'] ?? '');
-          DateTime dateBObj = _parseDate(dataB['date'] ?? '');
-
-          int dateComparison = dateBObj.compareTo(dateAObj);
-
-          if (dateComparison == 0) {
-            Timestamp? tA = dataA['timestamp'] as Timestamp?;
-            Timestamp? tB = dataB['timestamp'] as Timestamp?;
-            if (tA != null && tB != null) return tB.compareTo(tA);
-            if (tA == null && tB != null) return -1;
-            if (tB == null && tA != null) return 1;
-          }
-          return dateComparison;
-        });
-
-        var lastSession = docs.first.data();
-
-        String rawNewHW = lastSession['newHomework']?.toString() ?? '';
-        String rawNewRevHW = lastSession['newReviewHomework']?.toString() ?? '';
-        String rawOldRevHW = lastSession['oldReviewHomework']?.toString() ?? '';
-        String rawCombinedHW = lastSession['homework']?.toString() ?? '';
-
-        // إذا كان هناك واجب مدمج، نقوم بفك تشفيره إذا كانت الحقول المنفصلة فارغة
-        if (rawNewHW.isEmpty && rawNewRevHW.isEmpty && rawOldRevHW.isEmpty && rawCombinedHW.isNotEmpty) {
-          List<String> lines = rawCombinedHW.split('\n');
-          for (var line in lines) {
-            if (line.contains("حفظ:")) {
-              rawNewHW = line.replaceAll("حفظ:", "").trim();
-            } else if (line.contains("مراجعة:")) {
-              rawNewRevHW = line.replaceAll("مراجعة:", "").trim();
-            }
-          }
-        }
-
-        bool hasAnyHw = rawNewHW.isNotEmpty || rawNewRevHW.isNotEmpty || rawOldRevHW.isNotEmpty;
-
-        if (hasAnyHw && mounted) {
-          setState(() {
-            // استخراج وتعبئة مقاطع الحفظ الجديد
-            if (rawNewHW.isNotEmpty) {
-              var parsedMemo = _parseFormattedTextToRanges(rawNewHW);
-              if (parsedMemo.isNotEmpty) {
-                _disposeRanges(newMemoRanges);
-                newMemoRanges = parsedMemo;
-              }
-            }
-
-            // استخراج وتعبئة مقاطع المراجعة الجديدة
-            if (rawNewRevHW.isNotEmpty) {
-              var parsedNewRev = _parseFormattedTextToRanges(rawNewRevHW);
-              if (parsedNewRev.isNotEmpty) {
-                _disposeRanges(newRevRanges);
-                newRevRanges = parsedNewRev;
-              }
-            }
-
-            // استخراج وتعبئة مقاطع المراجعة القديمة
-            if (rawOldRevHW.isNotEmpty) {
-              var parsedOldRev = _parseFormattedTextToRanges(rawOldRevHW);
-              if (parsedOldRev.isNotEmpty) {
-                _disposeRanges(oldRevRanges);
-                oldRevRanges = parsedOldRev;
-              }
-            }
-          });
-          _updateTotalPages();
-        }
-      }
-    } catch (e) {
-      print("❌ خطأ في جلب الجلسة السابقة: $e");
-    }
-  }
-
-  Future<void> _checkIfStudentIsCompleted() async {
-    try {
-      DocumentSnapshot studentDoc = await FirebaseFirestore.instance
-          .collection('students')
-          .doc(widget.studentId)
-          .get(const GetOptions(source: Source.cache));
-      if (studentDoc.exists && studentDoc.data() != null) {
-        Map<String, dynamic> data = studentDoc.data() as Map<String, dynamic>;
-        if (data['studentType'] == 'completed') {
-          setState(() => isCompletedStudent = true);
-        }
-      }
-    } catch (e) {
-      print("Error checking student type: $e");
-    } finally {
-      if (mounted) setState(() => checkingStudentType = false);
-    }
-  }
-
-  void _listen(TextEditingController controller) async {
-    if (!_isListening) {
-      bool available = await _speech.initialize(
-        onStatus: (val) {
-          if (val == 'done' || val == 'notListening') {
-            if (mounted) setState(() => _isListening = false);
-          }
-        },
-      );
-      if (available) {
-        setState(() {
-          _isListening = true;
-          _activeController = controller;
-          _initialText = controller.text;
-        });
-        _speech.listen(
-          onResult: (val) {
-            if (mounted) {
-              setState(() {
-                _activeController!.text = _initialText + (val.recognizedWords.isNotEmpty ? ' ' + val.recognizedWords : '');
-                _activeController!.selection = TextSelection.fromPosition(TextPosition(offset: _activeController!.text.length));
-              });
-            }
-          },
-          localeId: 'ar-SA',
-        );
-      }
-    } else {
-      setState(() => _isListening = false);
-      _speech.stop();
-    }
-  }
-
-  Future<bool> _showCompletionCelebrationDialog(BuildContext context, bool isDarkMode) async {
-    return await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: accentGold.withOpacity(0.6), width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: accentGold.withOpacity(0.25),
-                  blurRadius: 25,
-                  spreadRadius: 2,
-                )
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: accentGold.withOpacity(0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Text("👑", style: TextStyle(fontSize: 45)),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  "مبارك! ختم القران الكريم 🎉",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: isDarkMode ? Colors.white : primaryColor,
-                    fontFamily: 'Cairo',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  "بحفظ هذه الجلسة، سيكتمل حفظ الطالب ${widget.studentName} لـ (604 صفحة) كتمام الحفظ.\n\nسيتحول حساب الطالب تلقائياً إلى (حساب خاتم) لتتغير واجهاته إلى نظام المراجعة الشاملة ✨",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.6,
-                    color: isDarkMode ? Colors.white70 : Colors.black87,
-                    fontFamily: 'Cairo',
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: Text(
-                          "إلغاء / تعديل",
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            color: isDarkMode ? Colors.white54 : Colors.grey[700],
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accentGold,
-                          foregroundColor: Colors.black,
-                          elevation: 3,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text(
-                          "تأكيد الختم 👑",
-                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    ) ?? false;
-  }
-
-  addSession() async {
-    if (loading) return;
-
-    if (isExam && !absent && examScoreController.text.trim().isEmpty) {
-      GlassToast.show(
-        context,
-        title: "بيانات ناقصة",
-        message: "يرجى إدخال علامة الاختبار أولاً ❌",
-        icon: Icons.error_outline_rounded,
-        color: Colors.redAccent,
-      );
-      return;
-    }
-
-    double inputPages = double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0;
-    bool willBeCompletedNow = false;
-
-    if (!isCompletedStudent && !absent && !isExam && !didNotRecite && selectedJuz == 0 && inputPages == 604.0) {
-      final isDarkMode = Provider.of<ThemeProvider>(context, listen: false).isDarkMode;
-      bool confirmCompletion = await _showCompletionCelebrationDialog(context, isDarkMode);
-      if (!confirmCompletion) return;
-      willBeCompletedNow = true;
-    }
-
-    setState(() => loading = true);
-
-    final String monthStr = _selectedDate.month.toString().padLeft(2, '0');
-    final String dayStr = _selectedDate.day.toString().padLeft(2, '0');
-    final String date = "${_selectedDate.year}-$monthStr-$dayStr";
-
-    final String customSessionId = "${widget.studentId}_$date";
-
-    DateTime realNow = DateTime.now();
-    String actualTimeFormatted = DateFormat('yyyy-MM-dd hh:mm a').format(realNow);
-
-    String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newMemoRanges);
-    String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevRanges);
-    String finalFarReview = (!hasReview || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(oldRevRanges);
-    String finalReading = (!hasReading || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(readingRanges);
-
-    String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
-    String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
-    String finalOldRevRating = (!hasReview || absent || isExam || didNotRecite) ? '' : oldReviewRating;
-    String finalFallbackRevRating = isCompletedStudent ? newReviewRating : (finalNewRevRating.isNotEmpty ? finalNewRevRating : finalOldRevRating);
-
-    String finalNewHW = (isCompletedStudent) ? '' : _buildFormattedSectionText(newHwRanges);
-    String finalNewRevHW = (isCompletedStudent) ? '' : _buildFormattedSectionText(newRevHwRanges);
-    String finalOldRevHW = _buildFormattedSectionText(oldRevHwRanges);
-
-    String combinedHW = "";
-    if (isCompletedStudent) {
-      combinedHW = finalOldRevHW;
-    } else {
-      if (finalNewHW.isNotEmpty) combinedHW += "حفظ: $finalNewHW";
-      List<String> revParts = [];
-      if (finalNewRevHW.isNotEmpty) revParts.add(finalNewRevHW);
-      if (finalOldRevHW.isNotEmpty) revParts.add(finalOldRevHW);
-      String combinedRev = revParts.join(" | ");
-
-      if (combinedRev.isNotEmpty) {
-        combinedHW += (combinedHW.isNotEmpty ? " \n " : "") + "مراجعة: $combinedRev";
-      }
-    }
-
-    double totalPages = (selectedJuz > 0) ? 0.0 : (isCompletedStudent || willBeCompletedNow ? 604.0 : inputPages);
-
-    List<String> newMemoSupIds = selectedNewMemoSupervisors.map((e) => e['id']!).toList();
-    List<String> newMemoSupNames = selectedNewMemoSupervisors.map((e) => e['name']!).toList();
-
-    List<String> reviewSupIds = selectedReviewSupervisors.map((e) => e['id']!).toList();
-    List<String> reviewSupNames = selectedReviewSupervisors.map((e) => e['name']!).toList();
-
-    final Map<String, dynamic> sessionData = {
-      'studentId': widget.studentId,
-      'studentName': widget.studentName,
-      'supervisorId': newMemoSupIds.isNotEmpty ? newMemoSupIds.first : widget.supervisorId,
-      'supervisorName': newMemoSupNames.isNotEmpty ? newMemoSupNames.first : widget.supervisorName,
-      'newMemoSupervisorIds': newMemoSupIds,
-      'newMemoSupervisorNames': newMemoSupNames,
-      'reviewSupervisorIds': reviewSupIds,
-      'reviewSupervisorNames': reviewSupNames,
-      'timestamp': FieldValue.serverTimestamp(),
-      'createdTimestamp': FieldValue.serverTimestamp(),
-      'actualCreatedAt': actualTimeFormatted,
-      'date': date,
-      'absent': absent,
-      'isExam': isExam,
-      'didNotRecite': didNotRecite,
-      'isJuzAmma': selectedJuz == 30,
-      'selectedJuz': selectedJuz,
-      'examScore': isExam && !absent ? examScoreController.text.trim() : '',
-      'newMemorization': finalNewMemo,
-      'nearReview': finalNearReview,
-      'farReview': finalFarReview,
-      'homework': combinedHW,
-      'newHomework': finalNewHW,
-      'newReviewHomework': finalNewRevHW,
-      'oldReviewHomework': finalOldRevHW,
-      'readingBySight': finalReading,
-      'memorizationRating': finalMemoRating,
-      'newReviewRating': finalNewRevRating,
-      'oldReviewRating': finalOldRevRating,
-      'reviewRating': (absent || isExam || didNotRecite) ? '' : finalFallbackRevRating,
-      'rating': (absent || isExam || didNotRecite) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)),
-      'studentStatus': (absent || isExam) ? '' : studentStatus,
-      'religiousActivities': (absent || isExam) ? '' : religiousActivities.text.trim(),
-      'notes': notes.text.trim(),
-      'absenceType': absent ? absenceType : '',
-      'absenceReason': absent ? absenceReasonController.text.trim() : '',
-      if (!absent && !isExam && !didNotRecite) 'total_memorized_pages': totalPages,
-    };
-
-    try {
-      await FirebaseFirestore.instance
-          .collection('sessions')
-          .doc(customSessionId)
-          .set(sessionData, SetOptions(merge: true))
-          .timeout(
-            const Duration(seconds: 1),
-            onTimeout: () => print("تم حفظ الجلسة محلياً بالكامل أوفلاين ⚡"),
-          );
-
-      Map<String, dynamic> studentUpdates = {
-        if (!absent) 'consecutiveAbsences': 0,
-        if (!absent && !isExam && !didNotRecite) 'memorizedPages': totalPages,
-      };
-
-      if (willBeCompletedNow) {
-        studentUpdates['studentType'] = 'completed';
-        studentUpdates['memorizedPages'] = 604.0;
-        studentUpdates['completedAt'] = FieldValue.serverTimestamp();
-      }
-
-      if (studentUpdates.isNotEmpty) {
-        FirebaseFirestore.instance.collection('students').doc(widget.studentId).update(studentUpdates)
-            .timeout(const Duration(seconds: 1), onTimeout: () => null)
-            .catchError((e) => print("Student status update error: $e"));
-      }
-
-      if (!kIsWeb) {
-        Workmanager().registerOneOffTask(
-          "sync_task_${DateTime.now().millisecondsSinceEpoch}",
-          "sync_sessions_data_forced",
-          constraints: Constraints(networkType: NetworkType.connected),
-        ).catchError((e) => print("Workmanager error: $e"));
-      }
-
-      String notifyTitle = absent ? "🚨 تنبيه غياب الطالب" : (isExam ? "📝 نتيجة اختبار جديدة" : (didNotRecite ? "ℹ️ حضور بدون تسميع" : (willBeCompletedNow ? "👑 تهنئة بختم القرآن الكريم" : "📢 تحديث يومي من الحلقة")));
-      String notifyBody = absent ? "تم تسجيل غياب لـ ${widget.studentName} في حلقة اليوم، نوع الغياب: ($absenceType)"
-        : (isExam ? "تم توثيق نتيجة اختبار لـ ${widget.studentName} بعلامة (${examScoreController.text.trim()} من 100)"
-        : (didNotRecite ? "حضر الطالب ${widget.studentName} في حلقة اليوم ولكنه لم يسمّع أو يقرأ شيئاً ⚠️"
-        : (willBeCompletedNow ? "مبارك! أتم الطالب ${widget.studentName} حفظ القرآن الكريم كاملاً وتم تحويل حسابه لحساب خاتم 🎉👑" : (isCompletedStudent ? "تم تحديث سجل مراجعة الختمة الشاملة لـ ${widget.studentName} بنجاح" : "تم تسجيل يومية جديدة لـ ${widget.studentName}"))));
-
-      String notifyType = absent ? "absent" : (isExam ? "exam" : (didNotRecite ? "info" : "regular"));
-
-      NotificationService.sendAndSaveNotification(
-        studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType, context: context,
-      ).catchError((error) async {
-        await NotificationQueueManager.addToQueue(studentId: widget.studentId, title: notifyTitle, body: notifyBody, type: notifyType);
-      });
-
-      if (!mounted) return;
-
-      GlassToast.show(
-        context,
-        title: willBeCompletedNow ? "مبارك الختم 👑" : "تم الحفظ",
-        message: willBeCompletedNow ? "تم تحويل حساب الطالب إلى خاتم بنجاح 🎉" : "تم تسجيل الجلسة للطالب بنجاح ✅",
-        icon: willBeCompletedNow ? Icons.workspace_premium : Icons.check_circle_outline_rounded,
-        color: Colors.greenAccent.shade400,
-      );
-
-      Navigator.pop(context);
-    } catch (e) {
-      print("Error saving session: $e");
-      if (mounted) {
-        GlassToast.show(
-          context,
-          title: "تم الحفظ محلياً",
-          message: "تم تسجيل الجلسة محلياً وسيتم الرفع فور توفر الإنترنت ✅",
-          icon: Icons.offline_pin_rounded,
-          color: Colors.orangeAccent,
-        );
-        Navigator.pop(context);
-      }
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  Widget _buildMicButton(TextEditingController controller, bool isDarkMode) {
-    bool isActive = _isListening && _activeController == controller;
-    return IconButton(
-      key: ValueKey('mic_${controller.hashCode}'),
-      tooltip: "تحدث للإدخال",
-      icon: Icon(
-        isActive ? Icons.mic : Icons.mic_none,
-        color: isActive ? Colors.redAccent : (isDarkMode ? Colors.white60 : Colors.black54),
-      ),
-      onPressed: () {
-        HapticFeedback.lightImpact();
-        _listen(controller);
-      },
-    );
-  }
-
-  Widget _buildToggleTile(String title, bool value, Color color, Function(bool) onChanged, bool isDarkMode) {
-    return Container(
-      decoration: BoxDecoration(color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(15)),
-      child: CheckboxListTile(
-        activeColor: color,
-        title: Text(title, style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-        value: value,
-        onChanged: (v) => onChanged(v!),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      ),
-    );
-  }
-
-  Widget _buildMiniNumberInput(TextEditingController ctrl, bool isDarkMode, {String hint = "---", Map<String, dynamic>? itemToSync, bool isFromPage = true}) {
-    return SizedBox(
-      height: 42,
-      child: TextField(
-        controller: ctrl,
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
-        textAlign: TextAlign.center,
-        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-        onChanged: (val) {
-          if (itemToSync != null) {
-            _syncSurahFromPageController(ctrl, itemToSync, isFromPage);
-          } else {
-            setState(() {});
-          }
-          _updateTotalPages();
-        },
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: isDarkMode ? Colors.white30 : Colors.black26),
-          contentPadding: EdgeInsets.zero,
-          filled: true,
-          fillColor: isDarkMode ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.7),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSupervisorSelectorTile({
-    required String label,
-    required List<Map<String, String>> selectedList,
-    required VoidCallback onTap,
-    required bool isDarkMode,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDarkMode ? Colors.white70 : primaryColor, fontFamily: 'Cairo')),
-          const SizedBox(height: 6),
-          InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: selectedList.map((s) => Chip(
-                      label: Text(s['name']!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
-                      backgroundColor: accentGold,
-                      elevation: 1,
-                      visualDensity: VisualDensity.compact,
-                    )).toList(),
-                  ),
-                ),
-                Icon(Icons.edit_rounded, color: isDarkMode ? accentGold : primaryColor, size: 20),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildUniversalQuranSection({
     required String title,
     required IconData icon,
@@ -1222,17 +796,17 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     List<Map<String, dynamic>> filteredSurahs;
 
     if (selectedJuz == 30) {
-      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 78).toList(); // عم
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 78).toList();
     } else if (selectedJuz == 29) {
-      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 67 && (s['id'] as int) <= 77).toList(); // تبارك
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 67 && (s['id'] as int) <= 77).toList();
     } else if (selectedJuz == 28) {
-      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 58 && (s['id'] as int) <= 66).toList(); // قد سمع
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 58 && (s['id'] as int) <= 66).toList();
     } else if (selectedJuz == 27) {
-      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 51 && (s['id'] as int) <= 57).toList(); // الذاريات
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 51 && (s['id'] as int) <= 57).toList();
     } else if (selectedJuz == 26) {
-      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 46 && (s['id'] as int) <= 50).toList(); // الأحقاف
+      filteredSurahs = quranSurahs.where((s) => (s['id'] as int) >= 46 && (s['id'] as int) <= 50).toList();
     } else {
-      filteredSurahs = quranSurahs; // عام
+      filteredSurahs = quranSurahs;
     }
 
     return Container(
@@ -1481,6 +1055,201 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         ],
       ),
     );
+  }
+
+  Widget _buildJuzChip(int juzNum, String title, bool isDarkMode) {
+    bool isSelected = selectedJuz == juzNum;
+    return ChoiceChip(
+      label: Text(
+        title,
+        style: TextStyle(
+          fontFamily: 'Cairo',
+          fontSize: 11,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? Colors.black : (isDarkMode ? Colors.white70 : Colors.black87),
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: accentGold,
+      backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
+      elevation: isSelected ? 2 : 0,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() {
+            selectedJuz = juzNum;
+            for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+              for (var item in list) {
+                item['surah'] = '';
+                item['toSurah'] = '';
+                item['isFullSurah'] = true;
+                (item['from'] as TextEditingController).clear();
+                (item['to'] as TextEditingController).clear();
+              }
+            }
+            if (selectedJuz > 0) {
+              totalMemorizedPagesController.text = "0";
+            }
+          });
+        }
+      },
+    );
+  }
+
+  save() async {
+    if (loading) return;
+
+    if (isExam && !absent && examScoreController.text.trim().isEmpty) {
+      GlassToast.show(
+        context,
+        title: "بيانات ناقصة",
+        message: "يرجى إدخال علامة الاختبار أولاً ❌",
+        icon: Icons.error_outline_rounded,
+        color: Colors.redAccent,
+      );
+      return;
+    }
+
+    setState(() => loading = true);
+
+    // ⚡️ انتظار حتمي لجلب ID الدورة الحالية من Firestore
+    String currentCycleId = await _fetchActiveCycleId();
+
+    double totalPages = (selectedJuz > 0) ? 0.0 : (isCompletedStudent ? 604.0 : (double.tryParse(totalMemorizedPagesController.text.trim()) ?? 0.0));
+
+    final String monthStr = _selectedDate.month.toString().padLeft(2, '0');
+    final String dayStr = _selectedDate.day.toString().padLeft(2, '0');
+    final String date = "${_selectedDate.year}-$monthStr-$dayStr";
+
+    DateTime realNow = DateTime.now();
+    String actualCreatedAtFormatted = DateFormat('yyyy-MM-dd hh:mm a').format(realNow);
+
+    String finalNewMemo = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newMemoRanges);
+    String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevRanges);
+    String finalFarReview = (!hasReview || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(oldRevRanges);
+    String finalReading = (!hasReading || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(readingRanges);
+
+    String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
+    String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
+    String finalOldRevRating = (!hasReview || absent || isExam || didNotRecite) ? '' : oldReviewRating;
+    String finalFallbackRevRating = isCompletedStudent ? newReviewRating : (finalNewRevRating.isNotEmpty ? finalNewRevRating : finalOldRevRating);
+
+    String finalNewHW = (isCompletedStudent) ? '' : _buildFormattedSectionText(newHwRanges);
+    String finalNewRevHW = (isCompletedStudent) ? '' : _buildFormattedSectionText(newRevHwRanges);
+    String finalOldRevHW = _buildFormattedSectionText(oldRevHwRanges);
+
+    String combinedHW = "";
+    if (isCompletedStudent) {
+      combinedHW = finalOldRevHW;
+    } else {
+      if (finalNewHW.isNotEmpty) combinedHW += "حفظ: $finalNewHW";
+      List<String> revParts = [];
+      if (finalNewRevHW.isNotEmpty) revParts.add(finalNewRevHW);
+      if (finalOldRevHW.isNotEmpty) revParts.add(finalOldRevHW);
+      String combinedRev = revParts.join(" | ");
+
+      if (combinedRev.isNotEmpty) {
+        combinedHW += (combinedHW.isNotEmpty ? " \n " : "") + "مراجعة: $combinedRev";
+      }
+    }
+
+    List<String> newMemoSupIds = selectedNewMemoSupervisors.map((e) => e['id']!).toList();
+    List<String> newMemoSupNames = selectedNewMemoSupervisors.map((e) => e['name']!).toList();
+
+    List<String> reviewSupIds = selectedReviewSupervisors.map((e) => e['id']!).toList();
+    List<String> reviewSupNames = selectedReviewSupervisors.map((e) => e['name']!).toList();
+
+    final Map<String, dynamic> sessionData = {
+      'studentId': widget.studentId,
+      'studentName': widget.studentName,
+      'date': date,
+      'cycleId': currentCycleId, // 👈 لن يعود فارغاً بأي شكل
+      'actualCreatedAt': actualCreatedAtFormatted,
+      'createdTimestamp': FieldValue.serverTimestamp(),
+      'absent': absent,
+      'isExam': isExam,
+      'didNotRecite': didNotRecite,
+      'isJuzAmma': selectedJuz == 30,
+      'selectedJuz': selectedJuz,
+      'examScore': isExam && !absent ? examScoreController.text.trim() : '',
+      'supervisorId': newMemoSupIds.isNotEmpty ? newMemoSupIds.first : '',
+      'supervisorName': newMemoSupNames.isNotEmpty ? newMemoSupNames.first : '',
+      'newMemoSupervisorIds': newMemoSupIds,
+      'newMemoSupervisorNames': newMemoSupNames,
+      'reviewSupervisorIds': reviewSupIds,
+      'reviewSupervisorNames': reviewSupNames,
+      'newMemorization': finalNewMemo,
+      'review': (absent || isExam || didNotRecite || !hasReview) ? '' : (isCompletedStudent ? finalFarReview : "$finalNearReview | $finalFarReview"),
+      'nearReview': finalNearReview,
+      'farReview': finalFarReview,
+      'homework': combinedHW,
+      'newHomework': finalNewHW,
+      'newReviewHomework': finalNewRevHW,
+      'oldReviewHomework': finalOldRevHW,
+      'readingBySight': finalReading,
+      'memorizationRating': finalMemoRating,
+      'newReviewRating': finalNewRevRating,
+      'oldReviewRating': finalOldRevRating,
+      'reviewRating': (absent || isExam || didNotRecite) ? '' : finalFallbackRevRating,
+      'rating': (absent || isExam || didNotRecite) ? '' : (isCompletedStudent ? finalFallbackRevRating : (hasNewMemorization ? finalMemoRating : finalFallbackRevRating)),
+      'studentStatus': (absent || isExam) ? '' : studentStatus,
+      'religiousActivities': (absent || isExam) ? '' : religiousActivities.text.trim(),
+      'notes': notes.text.trim(),
+      'absenceType': absent ? absenceType : '',
+      'absenceReason': absent ? absenceReasonController.text.trim() : '',
+      if (!absent && !isExam && !didNotRecite) 'total_memorized_pages': totalPages,
+    };
+
+    try {
+      String customDocId = "${widget.studentId}_$date";
+      await FirebaseFirestore.instance.collection('sessions').doc(customDocId).set(sessionData, SetOptions(merge: true));
+
+      sessionService.recalculateConsecutiveAbsences(widget.studentId);
+
+      if (!absent && !isExam && !didNotRecite && widget.studentId.isNotEmpty && !isCompletedStudent) {
+        FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
+          'memorizedPages': totalPages,
+        }).catchError((e) => print("خطأ في تحديث الطالب: $e"));
+      }
+
+      if (widget.studentId.isNotEmpty) {
+        String notifyTitle = "📖 جلسة جديدة في الحلقة";
+        String notifyBody = absent
+            ? "تم تسجيل غياب الطالب اليوم ($absenceType)."
+            : (isExam ? "تم إضافة جلسة اختبار جديدة وتوثيق العلامة (${examScoreController.text.trim()} من 100)" : "تم توثيق إنجاز الطالب اليومي بنجاح.");
+        String notifyType = absent ? "absent" : (isExam ? "exam" : "regular");
+
+        NotificationService.sendAndSaveNotification(
+          studentId: widget.studentId,
+          title: notifyTitle,
+          body: notifyBody,
+          type: notifyType,
+          context: context,
+        ).catchError((error) async {
+          await NotificationQueueManager.addToQueue(
+            studentId: widget.studentId,
+            title: notifyTitle,
+            body: notifyBody,
+            type: notifyType,
+          );
+        });
+      }
+
+      if (!mounted) return;
+
+      GlassToast.show(
+        context,
+        title: "تم الحفظ",
+        message: "تم حفظ الجلسة الجديدة بنجاح ✅",
+        icon: Icons.check_circle_rounded,
+        color: Colors.green,
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      print("خطأ في حفظ الجلسة: $e");
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   @override
@@ -1960,7 +1729,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                             width: double.infinity,
                             height: 55,
                             child: ElevatedButton(
-                              onPressed: loading ? null : addSession,
+                              onPressed: loading ? null : save,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: absent ? Colors.orange.withOpacity(0.9) : (isExam ? Colors.teal.withOpacity(0.9) : (didNotRecite ? Colors.blueGrey.withOpacity(0.9) : (isDarkMode ? Colors.orange.withOpacity(0.9) : primaryColor.withOpacity(0.9)))),
                                 foregroundColor: Colors.white,
@@ -1981,44 +1750,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                 ],
               ),
       ),
-    );
-  }
-
-  Widget _buildJuzChip(int juzNum, String title, bool isDarkMode) {
-    bool isSelected = selectedJuz == juzNum;
-    return ChoiceChip(
-      label: Text(
-        title,
-        style: TextStyle(
-          fontFamily: 'Cairo',
-          fontSize: 11,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected ? Colors.black : (isDarkMode ? Colors.white70 : Colors.black87),
-        ),
-      ),
-      selected: isSelected,
-      selectedColor: accentGold,
-      backgroundColor: isDarkMode ? Colors.black26 : Colors.white54,
-      elevation: isSelected ? 2 : 0,
-      onSelected: (selected) {
-        if (selected) {
-          setState(() {
-            selectedJuz = juzNum;
-            for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
-              for (var item in list) {
-                item['surah'] = '';
-                item['toSurah'] = '';
-                item['isFullSurah'] = true;
-                (item['from'] as TextEditingController).clear();
-                (item['to'] as TextEditingController).clear();
-              }
-            }
-            if (selectedJuz > 0) {
-              totalMemorizedPagesController.text = "0";
-            }
-          });
-        }
-      },
     );
   }
 

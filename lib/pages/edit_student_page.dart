@@ -34,6 +34,10 @@ class _EditStudentPageState extends State<EditStudentPage> with SingleTickerProv
   String? studentType;
   String? currentImageUrl; 
 
+  // 🎯 الحفاظ على معرف الدورة واسمها لمنع الخربطة بين الدورات
+  String? cycleId;
+  String? cycleName;
+
   File? _newSelectedImage; 
   final ImagePicker _picker = ImagePicker();
 
@@ -64,6 +68,10 @@ class _EditStudentPageState extends State<EditStudentPage> with SingleTickerProv
     selectedSupervisorName = data['supervisorName'];
     studentType = data['studentType'] ?? 'new';
     currentImageUrl = data['imageUrl']; 
+
+    // جلب قيم الدورة المربوطة بالطالب
+    cycleId = data['cycleId'];
+    cycleName = data['cycleName'];
 
     nameController.addListener(() => setState(() {}));
     serialController.addListener(() => setState(() {}));
@@ -241,6 +249,7 @@ class _EditStudentPageState extends State<EditStudentPage> with SingleTickerProv
         finalImageUrl = await _uploadNewImageToCloudinary();
       }
 
+      // 🛡 خريطة بيانات الحفظ مع الحفاظ الصريح والكامل على معرف واسم الدورة
       Map<String, dynamic> updateData = {
         'name': nameController.text.trim(),
         'serial': serialController.text.trim(),
@@ -253,6 +262,14 @@ class _EditStudentPageState extends State<EditStudentPage> with SingleTickerProv
         'schoolGrade': schoolGradeController.text.trim(),
         'imageUrl': finalImageUrl,
       };
+
+      // ربط وحفظ cycleId و cycleName بشكل دقيق
+      if (cycleId != null && cycleId!.isNotEmpty) {
+        updateData['cycleId'] = cycleId;
+      }
+      if (cycleName != null && cycleName!.isNotEmpty) {
+        updateData['cycleName'] = cycleName;
+      }
 
       if (studentType == 'completed') {
         updateData['memorizedPages'] = 604.0;
@@ -270,6 +287,7 @@ class _EditStudentPageState extends State<EditStudentPage> with SingleTickerProv
       );
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(backgroundColor: Colors.red, content: Text("خطأ أثناء التحديث: $e", style: const TextStyle(fontFamily: 'Cairo'))),
       );
@@ -523,7 +541,7 @@ class _EditStudentPageState extends State<EditStudentPage> with SingleTickerProv
                             Icon(Icons.school_rounded, color: isDarkMode ? accentGold : primaryColor, size: 22),
                             const SizedBox(width: 8),
                             Text(
-                              "الصف الدراسي (schoolGrade)",
+                              "الصف الدراسي",
                               style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontWeight: FontWeight.bold,
@@ -646,7 +664,6 @@ class _EditStudentPageState extends State<EditStudentPage> with SingleTickerProv
                         ),
                         const SizedBox(height: 14),
 
-                        // 👈 StreamBuilder يجلب كل المشرفين الدائمين دون التقييد بشرط الدورة القديمة
                         StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
                               .collection('supervisors')

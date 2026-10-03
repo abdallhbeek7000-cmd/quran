@@ -20,6 +20,48 @@ class _QuranCompletionsPageState extends State<QuranCompletionsPage> {
   String searchQuery = "";
   final TextEditingController searchCtrl = TextEditingController();
 
+  bool _isLoadingCycle = true;
+  String _activeCycleId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchActiveCycleId();
+  }
+
+  // 🎯 جلب معرف الدورة النشطة حالياً
+  Future<void> _fetchActiveCycleId() async {
+    try {
+      var cycleSnap = await FirebaseFirestore.instance
+          .collection('cycles')
+          .where('isCurrent', isEqualTo: true)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+
+      if (mounted) {
+        if (cycleSnap.docs.isNotEmpty) {
+          setState(() {
+            _activeCycleId = cycleSnap.docs.first.id;
+            _isLoadingCycle = false;
+          });
+        } else {
+          setState(() {
+            _activeCycleId = '';
+            _isLoadingCycle = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _activeCycleId = '';
+          _isLoadingCycle = false;
+        });
+      }
+    }
+  }
+
   // 📖 دالة تحديث عدد الختمات في الفايربيز (الحد الأدنى 0)
   Future<void> _updateCompletionsCount(String studentId, int currentCount, int delta) async {
     int newCount = currentCount + delta;
@@ -144,6 +186,12 @@ class _QuranCompletionsPageState extends State<QuranCompletionsPage> {
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
 
+    if (_isLoadingCycle) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return OfflineWrapper(
       child: Scaffold(
         extendBodyBehindAppBar: true,
@@ -188,7 +236,17 @@ class _QuranCompletionsPageState extends State<QuranCompletionsPage> {
 
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false).snapshots(),
+                // 🎯 تصفية الطلاب حسب حالة الأرشيف وربط الدورة النشطة
+                stream: _activeCycleId.isNotEmpty
+                    ? FirebaseFirestore.instance
+                        .collection('students')
+                        .where('archived', isEqualTo: false)
+                        .where('cycleId', isEqualTo: _activeCycleId)
+                        .snapshots()
+                    : FirebaseFirestore.instance
+                        .collection('students')
+                        .where('archived', isEqualTo: false)
+                        .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -203,7 +261,11 @@ class _QuranCompletionsPageState extends State<QuranCompletionsPage> {
                     final data = doc.data() as Map<String, dynamic>;
                     bool isCompletedType = data['studentType'] == 'completed';
                     bool hasCompletions = data.containsKey('completionsCount') && (data['completionsCount'] ?? 0) >= 0;
-                    return isCompletedType || hasCompletions;
+                    
+                    // التثبت من شرط الدورة النشطة إضافياً إن وُجدت
+                    bool matchesCycle = _activeCycleId.isEmpty || data['cycleId'] == _activeCycleId;
+
+                    return matchesCycle && (isCompletedType || hasCompletions);
                   }).toList();
 
                   final filteredDocs = completedStudents.where((doc) {
@@ -514,12 +576,12 @@ class _QuranCompletionsPageState extends State<QuranCompletionsPage> {
           Icon(Icons.menu_book_rounded, size: 80, color: isDark ? accentGold.withOpacity(0.4) : primaryColor.withOpacity(0.3)),
           const SizedBox(height: 15),
           Text(
-            "لا يوجد طلاب خاتمون مسجلون حالياً",
+            "لا يوجد طلاب خاتمون مسجلون في الدورة الحالية",
             style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : primaryColor),
           ),
           const SizedBox(height: 6),
           Text(
-            "عند تغيير نوع الطالب إلى (طالب خاتم) سيظهر في هذا السجل تلقائياً",
+            "عند إضافة أو ترقية طالب إلى (طالب خاتم) بالدورة النشطة سيظهر هنا تلقائياً",
             style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: isDark ? Colors.white38 : Colors.grey.shade600),
           ),
         ],
