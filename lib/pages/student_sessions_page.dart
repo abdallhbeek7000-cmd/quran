@@ -79,12 +79,12 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
 
   String _getJuzName(int juzNum) {
     switch (juzNum) {
-      case 30: return "جزء عمَّ 👶";
-      case 29: return "جزء تبارك 📖";
-      case 28: return "قد سمع 📜";
-      case 27: return "الذاريات 🌟";
-      case 26: return "الأحقاف ✨";
-      default: return "";
+      case 30: return "عمَّ (30)";
+      case 29: return "تبارك (29)";
+      case 28: return "قد سمع (28)";
+      case 27: return "الذاريات (27)";
+      case 26: return "الأحقاف (26)";
+      default: return "$juzNum";
     }
   }
 
@@ -179,7 +179,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         bool didNotRecite = data['didNotRecite'] ?? false;
         int selectedJuz = data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
 
-        String juzName = _getJuzName(selectedJuz);
+        String juzName = selectedJuz > 0 ? _getJuzName(selectedJuz) : '';
         String sessionType = isAbsent 
             ? 'غائب' 
             : (isExam ? 'اختبار' : (didNotRecite ? 'بدون تسميع' : (juzName.isNotEmpty ? 'حلقة ($juzName)' : 'حلقة عادية')));
@@ -246,9 +246,9 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isCompleted) ? '---' : nRev),
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : fRev),
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : sight),
-          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwNew),
-          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwNewRev),
-          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : hwOldRev),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwNew),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwNewRev),
+          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwOldRev),
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['religiousActivities'] ?? '')), 
           pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (selectedJuz > 0 ? 'نظام أجزاء' : (isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---')))), 
           pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['studentStatus'] ?? 'مهذب')),
@@ -478,7 +478,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
       if (sight.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.chrome_reader_mode_rounded, "قراءة نظراً", sight, Colors.indigoAccent, isDarkMode));
     }
 
-    String juzChipTitle = _getJuzName(selectedJuz);
+    String juzChipTitle = selectedJuz > 0 ? _getJuzName(selectedJuz) : '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -520,7 +520,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       Row(
                         children: [
                           if (juzChipTitle.isNotEmpty && !isAbsent && !isExam) ...[
-                            _buildBadge(juzChipTitle, Colors.purple),
+                            _buildBadge("نظام: جزء $juzChipTitle 📖", Colors.purple),
                             const SizedBox(width: 4),
                           ],
                           if (isAbsent) 
@@ -528,7 +528,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                           else if (isExam)
                             _buildBadge("اختبار 📝", Colors.teal) 
                           else if (didNotRecite)
-                            _buildBadge("بدون تسميع ℹ️", Colors.blueGrey)
+                            _buildBadge("حضر ولم يسمّع ℹ️", Colors.blueGrey)
                         ],
                       ),
                     ],
@@ -607,10 +607,13 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       if (nMemo.isNotEmpty) const SizedBox(height: 6),
                       _buildMinimalistDetailRow(Icons.supervisor_account_rounded, "مشرف المراجعة", revSupervisors, isDarkMode, isBold: true),
                     ],
+                    if (didNotRecite)
+                      _buildMinimalistDetailRow(Icons.person_outline, "المشرف المسجِّل", memoSupervisors, isDarkMode, isBold: true),
                   ],
 
                   Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
 
+                  // 🎯 1. مربعات التسميع (تظهر فقط إذا سمّع الطالب)
                   if (!isAbsent && !isExam && !didNotRecite) ...[
                     if (activeBoxes.isNotEmpty) ...[
                       for (int i = 0; i < activeBoxes.length; i += 2)
@@ -629,7 +632,10 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                         ),
                       Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
                     ],
+                  ],
 
+                  // 🎯 2. مربع الواجب القادم (يظهر حتى لو "حضر ولم يسمّع")
+                  if (!isAbsent && !isExam) ...[
                     if (nHw.isNotEmpty || nRevHw.isNotEmpty || oRevHw.isNotEmpty || oldHw.isNotEmpty) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -676,7 +682,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                   ],
 
                   if (data['studentStatus'] != null && data['studentStatus'].toString().trim().isNotEmpty && !isAbsent && !isExam) ...[
-                    _buildMinimalistDetailRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
+                    _buildMinimalistDetailRow(Icons.mood, "حالة سلوك الطالب", data['studentStatus'], isDarkMode),
                     Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
                   ],
                   

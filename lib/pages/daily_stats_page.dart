@@ -43,6 +43,22 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     return arabicDays[selectedDate.weekday - 1];
   }
 
+  // 🔍 فحص حالة الحضور للتحقق من المسمى داخل records
+  bool _isStudentPresent(dynamic val) {
+    if (val == null) return false;
+    if (val is bool) return val;
+    if (val is String) {
+      String s = val.trim().toLowerCase();
+      return s == 'present' || s == 'حاضر' || s == 'true';
+    }
+    if (val is Map) {
+      var status = val['status']?.toString().trim().toLowerCase();
+      if (status == 'present' || status == 'حاضر' || status == 'true') return true;
+      if (val['isPresent'] == true || val['attended'] == true) return true;
+    }
+    return false;
+  }
+
   Future<void> _pickDate(BuildContext context, bool isDarkMode) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -338,24 +354,25 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     );
   }
 
+  // 🔥 جلب مستند التفقد بالتاريخ (حتى لو كان معرّف المستند يبدأ بـ cycleId)
   Widget _buildExpectedSessionsCard(String targetDate, bool isDarkMode) {
-    return StreamBuilder<DocumentSnapshot>(
+    return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('daily_attendance')
-          .doc(targetDate)
+          .where('date', isEqualTo: targetDate)
           .snapshots(),
       builder: (context, snapshot) {
         int expectedCount = 0;
-        if (snapshot.hasData &&
-            snapshot.data!.exists &&
-            snapshot.data!.data() != null) {
-          var records =
-              snapshot.data!['records'] as Map<String, dynamic>? ?? {};
-          records.forEach((studentId, val) {
-            if ((val is Map && val['status'] == 'present') || val == 'present') {
-              expectedCount++;
-            }
-          });
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          for (var doc in snapshot.data!.docs) {
+            var data = doc.data() as Map<String, dynamic>;
+            var records = data['records'] as Map<String, dynamic>? ?? {};
+            records.forEach((studentId, val) {
+              if (_isStudentPresent(val)) {
+                expectedCount++;
+              }
+            });
+          }
         }
         return _statsUI(
           "المستهدفون للتسميع اليوم 🟢",
@@ -371,23 +388,23 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
   }
 
   Widget _buildAttendanceComparisonCard(String targetDate, bool isDarkMode) {
-    return StreamBuilder<DocumentSnapshot>(
+    return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('daily_attendance')
-          .doc(targetDate)
+          .where('date', isEqualTo: targetDate)
           .snapshots(),
       builder: (context, attendanceSnap) {
         int expectedCount = 0;
-        if (attendanceSnap.hasData &&
-            attendanceSnap.data!.exists &&
-            attendanceSnap.data!.data() != null) {
-          var records =
-              attendanceSnap.data!['records'] as Map<String, dynamic>? ?? {};
-          records.forEach((studentId, val) {
-            if ((val is Map && val['status'] == 'present') || val == 'present') {
-              expectedCount++;
-            }
-          });
+        if (attendanceSnap.hasData && attendanceSnap.data!.docs.isNotEmpty) {
+          for (var doc in attendanceSnap.data!.docs) {
+            var data = doc.data() as Map<String, dynamic>;
+            var records = data['records'] as Map<String, dynamic>? ?? {};
+            records.forEach((studentId, val) {
+              if (_isStudentPresent(val)) {
+                expectedCount++;
+              }
+            });
+          }
         }
 
         return StreamBuilder<QuerySnapshot>(
@@ -683,11 +700,11 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 }
 
 // =========================================================================
-// 🚀 1. واجهة الطلاب الحاضرين الذين لم تُسجل جلساتهم بعد (المتبقين)
+// 🚀 1. واجهة المتبقين للتسميع (مع إصلاح جلب التفقد وحل التصدير)
 // =========================================================================
 class PendingSessionsPage extends StatefulWidget {
   final String targetDate;
-  const PendingSessionsPage({required this.targetDate});
+  const PendingSessionsPage({super.key, required this.targetDate});
 
   @override
   State<PendingSessionsPage> createState() => _PendingSessionsPageState();
@@ -696,14 +713,29 @@ class PendingSessionsPage extends StatefulWidget {
 class _PendingSessionsPageState extends State<PendingSessionsPage> {
   final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
-  final Color accentGold = const Color(0xffd4af37);
   bool isExporting = false;
+
+  bool _isStudentPresent(dynamic val) {
+    if (val == null) return false;
+    if (val is bool) return val;
+    if (val is String) {
+      String s = val.trim().toLowerCase();
+      return s == 'present' || s == 'حاضر' || s == 'true';
+    }
+    if (val is Map) {
+      var status = val['status']?.toString().trim().toLowerCase();
+      if (status == 'present' || status == 'حاضر' || status == 'true') return true;
+      if (val['isPresent'] == true || val['attended'] == true) return true;
+    }
+    return false;
+  }
 
   Future<void> _sharePendingListAsImage(
       List<Map<String, dynamic>> pendingStudentsList) async {
     if (pendingStudentsList.isEmpty) return;
     setState(() => isExporting = true);
     try {
+      await Future.delayed(const Duration(milliseconds: 300));
       final bytes = await controller.capture();
       if (bytes != null) {
         final tempDir = await getTemporaryDirectory();
@@ -717,6 +749,8 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
           text:
               '⏳ تذكير بالطلاب المتبقين للتسميع اليوم (${widget.targetDate})\nنرجو من الإخوة المشرفين تسجيل التسميعات 🌸\nمعهد الشيخ سعيد العبدالله 🕌',
         );
+      } else {
+        throw "فشل التقاط البكسلات من الودجت";
       }
     } catch (e) {
       if (mounted) {
@@ -777,10 +811,10 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
               ),
             ),
             SafeArea(
-              child: StreamBuilder<DocumentSnapshot>(
+              child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('daily_attendance')
-                    .doc(widget.targetDate)
+                    .where('date', isEqualTo: widget.targetDate)
                     .snapshots(),
                 builder: (context, attendanceSnap) {
                   if (attendanceSnap.connectionState ==
@@ -789,8 +823,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                   }
 
                   if (!attendanceSnap.hasData ||
-                      !attendanceSnap.data!.exists ||
-                      attendanceSnap.data!.data() == null) {
+                      attendanceSnap.data!.docs.isEmpty) {
                     return Center(
                       child: Text(
                           "لم يتم تسجيل تفقد مبدئي لليوم المختار بعد.",
@@ -802,17 +835,17 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                     );
                   }
 
-                  var records =
-                      attendanceSnap.data!['records'] as Map<String, dynamic>? ??
-                          {};
                   List<String> presentStudentIds = [];
-
-                  records.forEach((studentId, val) {
-                    if ((val is Map && val['status'] == 'present') ||
-                        val == 'present') {
-                      presentStudentIds.add(studentId);
-                    }
-                  });
+                  for (var doc in attendanceSnap.data!.docs) {
+                    var attData = doc.data() as Map<String, dynamic>;
+                    var records =
+                        attData['records'] as Map<String, dynamic>? ?? {};
+                    records.forEach((studentId, val) {
+                      if (_isStudentPresent(val)) {
+                        presentStudentIds.add(studentId);
+                      }
+                    });
+                  }
 
                   if (presentStudentIds.isEmpty) {
                     return Center(
@@ -925,14 +958,18 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
 
                           return Stack(
                             children: [
-                              Offstage(
-                                offstage: true,
+                              // 🔥 نقل ودجت التصدير لـ Offscreen Rendering لضمان بنائها دون أخطاء
+                              Positioned(
+                                left: -9999,
                                 child: WidgetsToImage(
                                   controller: controller,
-                                  child: SizedBox(
-                                    width: 600,
-                                    child: _buildExportablePoster(
-                                        pendingStudentsList),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: SizedBox(
+                                      width: 600,
+                                      child: _buildExportablePoster(
+                                          pendingStudentsList),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1144,13 +1181,13 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
             children: [
               ...students.map((s) => TableRow(children: [
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Text(s['name'] ?? '',
                           style: const TextStyle(
                               color: Colors.white, fontFamily: 'Cairo')),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Text(s['supervisorName'] ?? '',
                           style: const TextStyle(
                               color: Colors.white70, fontFamily: 'Cairo')),
@@ -1349,7 +1386,6 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
         data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
 
     String sessionDateRaw = data['date'] ?? '';
-    String dayName = _getArabicDayName(sessionDateRaw);
 
     String actualCreatedAt = data['actualCreatedAt']?.toString() ?? '';
     String actualEditedAt = data['actualEditedAt']?.toString() ?? '';
@@ -1981,7 +2017,7 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
 }
 
 // =========================================================================
-// 🚀 3. واجهة الطلاب الغائبين (مع التصدير بـ HD)
+// 🚀 3. واجهة سجل الغائبين (مع التصدير بنجاح ودون أخطاء)
 // =========================================================================
 class DailyAbsentStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -2002,6 +2038,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
     if (docs.isEmpty) return;
     setState(() => isExporting = true);
     try {
+      await Future.delayed(const Duration(milliseconds: 300));
       final bytes = await controller.capture();
       if (bytes != null) {
         final tempDir = await getTemporaryDirectory();
@@ -2015,6 +2052,8 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
           text:
               '🚨 كرت الغياب اليومي (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
         );
+      } else {
+        throw "فشل التقاط بكسلات الصورة";
       }
     } catch (e) {
       if (mounted) {
@@ -2099,13 +2138,17 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 
                   return Stack(
                     children: [
-                      Offstage(
-                        offstage: true,
+                      // 🔥 الرسم خارج الشاشة لضمان أداء لالتقاط بدون مشاكل
+                      Positioned(
+                        left: -9999,
                         child: WidgetsToImage(
                           controller: controller,
-                          child: SizedBox(
-                            width: 600,
-                            child: _buildExportablePoster(absentDocs),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: SizedBox(
+                              width: 600,
+                              child: _buildExportablePoster(absentDocs),
+                            ),
                           ),
                         ),
                       ),
@@ -2301,7 +2344,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 }
 
 // =========================================================================
-// 🚀 4. واجهة الطلاب (حضر ولم يسمّع مع التصدير بـ HD)
+// 🚀 4. واجهة الطلاب (حضر ولم يسمّع مع التصدير HD)
 // =========================================================================
 class DailyDidNotReciteStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -2323,6 +2366,7 @@ class _DailyDidNotReciteStudentsPageState
     if (docs.isEmpty) return;
     setState(() => isExporting = true);
     try {
+      await Future.delayed(const Duration(milliseconds: 300));
       final bytes = await controller.capture();
       if (bytes != null) {
         final tempDir = await getTemporaryDirectory();
@@ -2334,8 +2378,10 @@ class _DailyDidNotReciteStudentsPageState
         await Share.shareXFiles(
           [XFile(file.path)],
           text:
-              '⚠️ إشعار الطلاب (حضر ولم يسمّع) اليوم (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
+              '⚠️️ إشعار الطلاب (حضر ولم يسمّع) اليوم (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
         );
+      } else {
+        throw "فشل التقاط بكسلات الصورة";
       }
     } catch (e) {
       if (mounted) {
@@ -2419,13 +2465,17 @@ class _DailyDidNotReciteStudentsPageState
 
                 return Stack(
                   children: [
-                    Offstage(
-                      offstage: true,
+                    // 🔥 الرسم خارج الشاشة لضمان التصدير
+                    Positioned(
+                      left: -9999,
                       child: WidgetsToImage(
                         controller: controller,
-                        child: SizedBox(
-                          width: 600,
-                          child: _buildExportablePoster(docs),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: SizedBox(
+                            width: 600,
+                            child: _buildExportablePoster(docs),
+                          ),
                         ),
                       ),
                     ),

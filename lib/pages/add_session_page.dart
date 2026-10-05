@@ -240,11 +240,11 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     return "";
   }
 
-  // 🎯 جلب الجلسة السابقة واستعادة نظام الجزء المحدد (عم/تبارك...) بجميع خياراته
+  // 🎯 التحديث الجوهري: يتوقف عند أول جلسة حضور بغض النظر عن وجود واجب من عدمه
   Future<void> _checkIfStudentIsCompletedAndLoadData() async {
     try {
       if (widget.studentId.isNotEmpty) {
-        // 1. جلب بيانات الطالب
+        // 1. جلب بيانات الطالب الأساسية
         DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(widget.studentId).get();
 
         if (studentDoc.exists && studentDoc.data() != null) {
@@ -267,7 +267,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
           }
         }
 
-        // 2. جلب آخر جلسة مسجلة
+        // 2. جلب جميع جلسات الطالب مرتبة تنازلياً (الأحدث أولاً)
         var sessionsSnap = await FirebaseFirestore.instance
             .collection('sessions')
             .where('studentId', isEqualTo: widget.studentId)
@@ -281,39 +281,57 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
             return dateB.compareTo(dateA);
           });
 
-          var lastData = docs.first.data();
-
-          // 🎯 استعادة الجزء المحدد (selectedJuz) إذا كان الطالب يتعامل مع نظام الأجزاء
-          if (lastData.containsKey('selectedJuz') && lastData['selectedJuz'] != null) {
-            int prevJuz = int.tryParse(lastData['selectedJuz'].toString()) ?? 0;
+          // استعادة نظام الجزء المحدد من آخر جلسة مسجلة
+          var latestSessionData = docs.first.data();
+          if (latestSessionData.containsKey('selectedJuz') && latestSessionData['selectedJuz'] != null) {
+            int prevJuz = int.tryParse(latestSessionData['selectedJuz'].toString()) ?? 0;
             if (prevJuz > 0) {
               selectedJuz = prevJuz;
             }
-          } else if (lastData['isJuzAmma'] == true) {
+          } else if (latestSessionData['isJuzAmma'] == true) {
             selectedJuz = 30;
           }
 
-          String lastNewHw = lastData['newHomework']?.toString() ?? '';
-          String lastNewRevHw = lastData['newReviewHomework']?.toString() ?? '';
-          String lastOldRevHw = lastData['oldReviewHomework']?.toString() ?? '';
-          String generalHw = lastData['homework']?.toString() ?? '';
+          // 🎯 منطق الفحص الحازم: يتجاوز الغياب فقط ويثبت عند أول جلسة حضور
+          Map<String, dynamic>? targetSessionForHomework;
 
-          if (lastNewHw.isEmpty && lastNewRevHw.isEmpty && lastOldRevHw.isEmpty && generalHw.isNotEmpty) {
-            if (generalHw.contains("حفظ:")) {
-              var parts = generalHw.split("مراجعة:");
-              lastNewHw = parts[0].replaceAll("حفظ:", "").trim();
-              if (parts.length > 1) lastOldRevHw = parts[1].trim();
-            } else if (generalHw.contains("مراجعة:")) {
-              lastOldRevHw = generalHw.replaceAll("مراجعة:", "").trim();
+          for (var doc in docs) {
+            var data = doc.data();
+            bool isAbsent = data['absent'] == true;
+
+            if (isAbsent) {
+              // إذا كان غائباً: يتم تخطي اليوم والذهاب لليوم السابق
+              continue;
             } else {
-              lastNewHw = generalHw;
+              // إذا كان حاضراً: تتوقف عملية البحث فوراً وتعتمد هذه الجلسة
+              targetSessionForHomework = data;
+              break; 
             }
           }
 
-          // تفكيك وتمرير نصوص الواجب السابق إلى خانات التسميع الحالية
-          _parseFormattedTextToRanges(lastNewHw, newMemoRanges);
-          _parseFormattedTextToRanges(lastNewRevHw, newRevRanges);
-          _parseFormattedTextToRanges(lastOldRevHw, oldRevRanges);
+          // 3. سحب الواجبات من آخر جلسة حضور تم العثور عليها
+          if (targetSessionForHomework != null) {
+            String lastNewHw = targetSessionForHomework['newHomework']?.toString() ?? '';
+            String lastNewRevHw = targetSessionForHomework['newReviewHomework']?.toString() ?? '';
+            String lastOldRevHw = targetSessionForHomework['oldReviewHomework']?.toString() ?? '';
+            String generalHw = targetSessionForHomework['homework']?.toString() ?? '';
+
+            if (lastNewHw.isEmpty && lastNewRevHw.isEmpty && lastOldRevHw.isEmpty && generalHw.isNotEmpty) {
+              if (generalHw.contains("حفظ:")) {
+                var parts = generalHw.split("مراجعة:");
+                lastNewHw = parts[0].replaceAll("حفظ:", "").trim();
+                if (parts.length > 1) lastOldRevHw = parts[1].trim();
+              } else if (generalHw.contains("مراجعة:")) {
+                lastOldRevHw = generalHw.replaceAll("مراجعة:", "").trim();
+              } else {
+                lastNewHw = generalHw;
+              }
+            }
+
+            _parseFormattedTextToRanges(lastNewHw, newMemoRanges);
+            _parseFormattedTextToRanges(lastNewRevHw, newRevRanges);
+            _parseFormattedTextToRanges(lastOldRevHw, oldRevRanges);
+          }
         }
       }
     } catch (e) {
@@ -336,7 +354,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
   }
 
-  // 🎯 تفكيك النص واكتشاف إذا كان الخيار "سورة كاملة" أم "آيات محددة"
   void _parseFormattedTextToRanges(String formattedText, List<Map<String, dynamic>> targetList) {
     if (formattedText.trim().isEmpty) return;
     targetList.clear();
@@ -352,7 +369,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       String toVal = '';
       bool isFull = true;
 
-      // 1. مطابقة أرقام الآيات (نظام الأجزاء)
       RegExp regAyah = RegExp(r'\(آية\s*(\d+)\)|\(من آية\s*(\d+)\s*إلى\s*(\d+)\)', caseSensitive: false);
       var ayahMatch = regAyah.firstMatch(text);
 
@@ -366,7 +382,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
           toVal = ayahMatch.group(3) ?? fromVal;
         }
       } else {
-        // 2. مطابقة أرقام الصفحات (النظام العادي)
         RegExp regPages = RegExp(r'\(ص\s*(\d+)(?:\s*-\s*(\d+))?\)', caseSensitive: false);
         var pageMatch = regPages.firstMatch(text);
 
@@ -377,7 +392,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         }
       }
 
-      // 3. استخراج أسماء السور
       RegExp regSurahBetween = RegExp(r'من سورة\s+([^\(]+?)\s+إلى\s+(?:سورة\s+)?([^\(]+)');
       RegExp regSingleSurah = RegExp(r'سورة\s+([^\(]+)');
 

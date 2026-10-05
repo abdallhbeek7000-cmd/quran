@@ -34,7 +34,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     _fetchActiveCycleId();
   }
 
-  // 🎯 جلب المعرّف الخاص بالدورة النشطة (Active Cycle)
+  // 🎯 جلب المعرّف الخاص بالدورة النشطة
   Future<String> _fetchActiveCycleId() async {
     try {
       var snapshot = await FirebaseFirestore.instance
@@ -67,7 +67,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
     return activeCycleId;
   }
 
-  // 🗺️ دالة فتح الموقع في خرائط جوجل
+  // 🗺️ فتح الموقع في خرائط جوجل
   Future<void> _openLocationInMaps(String locationText) async {
     if (locationText.trim().isEmpty) return;
     final Uri googleMapsUrl = Uri.parse("https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(locationText)}");
@@ -127,16 +127,14 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
               child: isLoadingCycle
                   ? const Center(child: CircularProgressIndicator())
                   : StreamBuilder<QuerySnapshot>(
-                      // 🎯 تصفية الاستعلام لعرض أنشطة الدورة النشطة فقط
+                      // 🎯 جلب الأنشطة المرتبطة بالدورة النشطة بدون تعارض الترتيب
                       stream: activeCycleId.isNotEmpty
                           ? FirebaseFirestore.instance
                               .collection('activities')
                               .where('cycleId', isEqualTo: activeCycleId)
-                              .orderBy('createdAt', descending: true)
                               .snapshots()
                           : FirebaseFirestore.instance
                               .collection('activities')
-                              .orderBy('createdAt', descending: true)
                               .snapshots(),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -156,7 +154,15 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                           );
                         }
 
-                        final docs = snapshot.data!.docs;
+                        // ترتيب العناصر في الذاكرة لتفادي مشاكل الفهارس Composite Indexes في Firestore
+                        final docs = snapshot.data!.docs.toList();
+                        docs.sort((a, b) {
+                          var aTime = (a.data() as Map<String, dynamic>)['createdAt'];
+                          var bTime = (b.data() as Map<String, dynamic>)['createdAt'];
+                          if (aTime == null) return 1;
+                          if (bTime == null) return -1;
+                          return (bTime as Timestamp).compareTo(aTime as Timestamp);
+                        });
 
                         return ListView.builder(
                           physics: const BouncingScrollPhysics(),
@@ -824,10 +830,27 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                       if (targetMode == 'selected') ...[
                         const SizedBox(height: 10),
                         StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false).snapshots(),
+                          stream: activeCycleId.isNotEmpty
+                              ? FirebaseFirestore.instance
+                                  .collection('students')
+                                  .where('archived', isEqualTo: false)
+                                  .where('cycleId', isEqualTo: activeCycleId)
+                                  .snapshots()
+                              : FirebaseFirestore.instance
+                                  .collection('students')
+                                  .where('archived', isEqualTo: false)
+                                  .snapshots(),
                           builder: (context, stdSnap) {
                             if (!stdSnap.hasData) return const Center(child: CircularProgressIndicator());
                             final docs = stdSnap.data!.docs;
+
+                            if (docs.isEmpty) {
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                alignment: Alignment.center,
+                                child: const Text("لا يوجد طلاب مسجلون في الدورة الفعالية حالياً", style: TextStyle(fontFamily: 'Cairo', fontSize: 12)),
+                              );
+                            }
 
                             return Container(
                               height: 150,
@@ -891,7 +914,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                     String dayName = DateFormat('EEEE', 'ar').format(eventDt);
                                     String eventDtStr = "يوم $dayName (${DateFormat('yyyy-MM-dd').format(eventDt)}) - الساعة ${selectedTime!.format(context)}";
 
-                                    // 🎯 إضافة cycleId الفعالة للبيانات
+                                    // ✅ تصحيح وتنسيق التواريخ لـ Firestore ضمان ظهورها فوراً
                                     final Map<String, dynamic> updatePayload = {
                                       'title': titleCtrl.text.trim(),
                                       'details': detailsCtrl.text.trim(),
@@ -902,7 +925,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                       'deadlineTimestamp': Timestamp.fromDate(deadlineDt),
                                       'targetType': targetMode,
                                       'targetStudentIds': targetMode == 'selected' ? selectedStudentIds : [],
-                                      'cycleId': activeCycleId,
+                                      'cycleId': activeCycleId.isNotEmpty ? activeCycleId : 'default',
                                     };
 
                                     if (isEditing) {
@@ -911,8 +934,11 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                       updatePayload['createdAt'] = FieldValue.serverTimestamp();
                                       await FirebaseFirestore.instance.collection('activities').add(updatePayload);
 
+                                      // بث الإشعارات
                                       if (targetMode == 'all') {
-                                        var stdSnap = await FirebaseFirestore.instance.collection('students').get();
+                                        var stdSnap = activeCycleId.isNotEmpty
+                                            ? await FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false).where('cycleId', isEqualTo: activeCycleId).get()
+                                            : await FirebaseFirestore.instance.collection('students').get();
                                         for (var std in stdSnap.docs) {
                                           NotificationService.sendAndSaveNotification(
                                             studentId: std.id,
@@ -937,6 +963,10 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
 
                                     if (!mounted) return;
                                     Navigator.pop(context);
+                                    
+                                    // إعادة تنشيط الواجهة
+                                    setState(() {});
+
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(backgroundColor: Colors.green, content: Text(isEditing ? "تم تعديل بيانات النشاط بنجاح! ✏️" : "تم إرسال دعوة النشاط بنجاح! 🎉", style: const TextStyle(fontFamily: 'Cairo'))),
                                     );
@@ -946,7 +976,7 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                                   }
                                 },
                           icon: isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Icon(isEditing ? Icons.check_circle_outline_rounded : Icons.send_rounded, color: Colors.white),
-                          label: Text(isSaving ? "جاري الحفظ..." : (isEditing ? "تحديث بيانات النشاط ✏️️" : "حفظ وبث الدعوة للأهالي 🚀"), style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                          label: Text(isSaving ? "جاري الحفظ..." : (isEditing ? "تحديث بيانات النشاط ✏" : "حفظ وبث الدعوة للأهالي 🚀"), style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -1002,7 +1032,9 @@ class _ActivitiesManagePageState extends State<ActivitiesManagePage> {
                           String targetType = activityData['targetType'] ?? 'all';
                           List<dynamic> targetStudentIds = activityData['targetStudentIds'] ?? [];
 
-                          Query studentsQuery = FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false);
+                          Query studentsQuery = activeCycleId.isNotEmpty
+                              ? FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false).where('cycleId', isEqualTo: activeCycleId)
+                              : FirebaseFirestore.instance.collection('students').where('archived', isEqualTo: false);
 
                           return StreamBuilder<QuerySnapshot>(
                             stream: studentsQuery.snapshots(),
