@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -214,6 +215,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     _checkIfStudentIsCompletedAndLoadData();
   }
 
+  // 🎯 جلب سريع من الـ Cache فوراً بدون تعليق الواجهة
   Future<String> _fetchActiveCycleId() async {
     if (activeCycleId.isNotEmpty) return activeCycleId;
     if (widget.cycleId != null && widget.cycleId!.isNotEmpty) {
@@ -222,29 +224,24 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     }
 
     try {
-      var snapshot = await FirebaseFirestore.instance.collection('cycles').where('isActive', isEqualTo: true).limit(1).get();
-      if (snapshot.docs.isNotEmpty) {
-        activeCycleId = snapshot.docs.first.id;
-        if (mounted) setState(() {});
-        return activeCycleId;
-      }
-      var statusSnapshot = await FirebaseFirestore.instance.collection('cycles').where('status', isEqualTo: 'active').limit(1).get();
-      if (statusSnapshot.docs.isNotEmpty) {
-        activeCycleId = statusSnapshot.docs.first.id;
-        if (mounted) setState(() {});
-        return activeCycleId;
+      var snapshot = await FirebaseFirestore.instance.collection('cycles').get(const GetOptions(source: Source.cache));
+      for (var doc in snapshot.docs) {
+        var data = doc.data();
+        if (data['isActive'] == true || data['status'] == 'active') {
+          activeCycleId = doc.id;
+          if (mounted) setState(() {});
+          return activeCycleId;
+        }
       }
     } catch (e) {
-      print("خطأ في جلب الدورة الفعالة: $e");
+      debugPrint("خطأ في جلب الدورة من الكاش: $e");
     }
     return "";
   }
 
-  // 🎯 التحديث الجوهري: يتوقف عند أول جلسة حضور بغض النظر عن وجود واجب من عدمه
   Future<void> _checkIfStudentIsCompletedAndLoadData() async {
     try {
       if (widget.studentId.isNotEmpty) {
-        // 1. جلب بيانات الطالب الأساسية
         DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(widget.studentId).get();
 
         if (studentDoc.exists && studentDoc.data() != null) {
@@ -267,7 +264,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
           }
         }
 
-        // 2. جلب جميع جلسات الطالب مرتبة تنازلياً (الأحدث أولاً)
         var sessionsSnap = await FirebaseFirestore.instance
             .collection('sessions')
             .where('studentId', isEqualTo: widget.studentId)
@@ -281,7 +277,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
             return dateB.compareTo(dateA);
           });
 
-          // استعادة نظام الجزء المحدد من آخر جلسة مسجلة
           var latestSessionData = docs.first.data();
           if (latestSessionData.containsKey('selectedJuz') && latestSessionData['selectedJuz'] != null) {
             int prevJuz = int.tryParse(latestSessionData['selectedJuz'].toString()) ?? 0;
@@ -292,7 +287,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
             selectedJuz = 30;
           }
 
-          // 🎯 منطق الفحص الحازم: يتجاوز الغياب فقط ويثبت عند أول جلسة حضور
           Map<String, dynamic>? targetSessionForHomework;
 
           for (var doc in docs) {
@@ -300,16 +294,13 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
             bool isAbsent = data['absent'] == true;
 
             if (isAbsent) {
-              // إذا كان غائباً: يتم تخطي اليوم والذهاب لليوم السابق
               continue;
             } else {
-              // إذا كان حاضراً: تتوقف عملية البحث فوراً وتعتمد هذه الجلسة
               targetSessionForHomework = data;
               break; 
             }
           }
 
-          // 3. سحب الواجبات من آخر جلسة حضور تم العثور عليها
           if (targetSessionForHomework != null) {
             String lastNewHw = targetSessionForHomework['newHomework']?.toString() ?? '';
             String lastNewRevHw = targetSessionForHomework['newReviewHomework']?.toString() ?? '';
@@ -335,7 +326,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         }
       }
     } catch (e) {
-      print("خطأ في جلب الجلسة السابقة: $e");
+      debugPrint("خطأ في جلب الجلسة السابقة: $e");
     } finally {
       _ensureNonEmptyRanges();
       if (mounted) {
@@ -1217,6 +1208,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
+  // 🎯 دالة الحفظ الفوري المجهزة للأوفلاين والأونلاين
   save() async {
     if (loading) return;
 
@@ -1322,16 +1314,23 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
     try {
       String customDocId = "${widget.studentId}_$date";
-      await FirebaseFirestore.instance.collection('sessions').doc(customDocId).set(sessionData, SetOptions(merge: true));
+      
+      // ⚡ إرسال الحفظ للـ Firestore محلياً بدون انتظار مزامنة الشبكة لكي ينتهي الفراغ فوراً
+      FirebaseFirestore.instance
+          .collection('sessions')
+          .doc(customDocId)
+          .set(sessionData, SetOptions(merge: true))
+          .catchError((e) => debugPrint("خطأ في تخزين الجلسة: $e"));
 
       sessionService.recalculateConsecutiveAbsences(widget.studentId);
 
       if (!absent && !isExam && !didNotRecite && widget.studentId.isNotEmpty && !isCompletedStudent) {
         FirebaseFirestore.instance.collection('students').doc(widget.studentId).update({
           'memorizedPages': totalPages,
-        }).catchError((e) => print("خطأ في تحديث الطالب: $e"));
+        }).catchError((e) => debugPrint("تنبيه في تحديث الطالب أوفلاين: $e"));
       }
 
+      // ⚡ معالجة الإشعار خلف الكواليس بدون await لمنع تجميد الشاشة أوفلاين
       if (widget.studentId.isNotEmpty) {
         String notifyTitle = "📖 جلسة جديدة في الحلقة";
         String notifyBody = absent
@@ -1339,20 +1338,22 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
             : (isExam ? "تم إضافة جلسة اختبار جديدة وتوثيق العلامة (${examScoreController.text.trim()} من 100)" : "تم توثيق إنجاز الطالب اليومي بنجاح.");
         String notifyType = absent ? "absent" : (isExam ? "exam" : "regular");
 
-        NotificationService.sendAndSaveNotification(
-          studentId: widget.studentId,
-          title: notifyTitle,
-          body: notifyBody,
-          type: notifyType,
-          context: context,
-        ).catchError((error) async {
-          await NotificationQueueManager.addToQueue(
+        unawaited(
+          NotificationService.sendAndSaveNotification(
             studentId: widget.studentId,
             title: notifyTitle,
             body: notifyBody,
             type: notifyType,
-          );
-        });
+            context: context,
+          ).catchError((error) async {
+            await NotificationQueueManager.addToQueue(
+              studentId: widget.studentId,
+              title: notifyTitle,
+              body: notifyBody,
+              type: notifyType,
+            );
+          }),
+        );
       }
 
       if (!mounted) return;
@@ -1360,14 +1361,14 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       GlassToast.show(
         context,
         title: "تم الحفظ",
-        message: "تم حفظ الجلسة الجديدة بنجاح ✅",
+        message: "تم حفظ الجلسة بنجاح وسيتم رفعها عند توفر النت ⚡",
         icon: Icons.check_circle_rounded,
         color: Colors.green,
       );
 
       Navigator.pop(context);
     } catch (e) {
-      print("خطأ في حفظ الجلسة: $e");
+      debugPrint("خطأ أثناء معالجة الحفظ: $e");
     } finally {
       if (mounted) setState(() => loading = false);
     }

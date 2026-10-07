@@ -16,13 +16,13 @@ import '../widgets/glass_toast.dart';
 class EditSessionPage extends StatefulWidget {
   final String sessionId;
   final Map<String, dynamic> data;
-  final String? cycleId; // 👈 إضافة cycleId اختياري هنا
+  final String? cycleId;
 
   const EditSessionPage({
     super.key,
     required this.sessionId,
     required this.data,
-    this.cycleId, // 👈 إمكانية تمريره مباشرة عند التنقل
+    this.cycleId,
   });
 
   @override
@@ -40,7 +40,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
   TextEditingController? _activeController;
   String _initialText = '';
 
-  // 📖 قائمة سور القرآن الكريمة
+  // 📖 قائمة سور القرآن الكريم
   final List<Map<String, dynamic>> quranSurahs = const [
     {'id': 1, 'name': 'الفاتحة', 'startPage': 1, 'endPage': 1, 'verses': 7},
     {'id': 2, 'name': 'البقرة', 'startPage': 2, 'endPage': 49, 'verses': 286},
@@ -559,10 +559,11 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     try {
       String studentId = widget.data['studentId'] ?? '';
       if (studentId.isNotEmpty) {
+        // جلب البيانات مع دعم الكاش لتفادي البطء عند الـ Offline
         DocumentSnapshot studentDoc = await FirebaseFirestore.instance
             .collection('students')
             .doc(studentId)
-            .get();
+            .get(const GetOptions(source: Source.serverAndCache));
 
         if (studentDoc.exists && studentDoc.data() != null) {
           Map<String, dynamic> sData = studentDoc.data() as Map<String, dynamic>;
@@ -765,8 +766,8 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                   Expanded(
                     child: FutureBuilder<List<QuerySnapshot>>(
                       future: Future.wait([
-                        FirebaseFirestore.instance.collection('users').get(),
-                        FirebaseFirestore.instance.collection('supervisors').get()
+                        FirebaseFirestore.instance.collection('users').get(const GetOptions(source: Source.serverAndCache)),
+                        FirebaseFirestore.instance.collection('supervisors').get(const GetOptions(source: Source.serverAndCache))
                       ]),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -1287,14 +1288,13 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     List<String> reviewSupIds = selectedReviewSupervisors.map((e) => e['id']!).toList();
     List<String> reviewSupNames = selectedReviewSupervisors.map((e) => e['name']!).toList();
 
-    // 👈 الحصول على cycleId الممرر في Parameter الشاشة أو من الخريطة
     String currentCycleId = widget.cycleId ?? widget.data['cycleId'] ?? '';
 
     final Map<String, dynamic> updateData = {
       'studentId': studentId,
       'studentName': widget.data['studentName'] ?? '',
       'date': date,
-      'cycleId': currentCycleId, // 👈 حفظ معرف الدورة عند تعديل الجلسة
+      'cycleId': currentCycleId,
       'actualEditedAt': actualEditedTimeFormatted,
       'lastUpdatedTimestamp': FieldValue.serverTimestamp(),
       'absent': absent,
@@ -1332,15 +1332,20 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     };
 
     try {
+      // 1️⃣ حفظ البيانات محلياً وفي السيرفر بنفس الوقت عبر Firestore Cache
       await FirebaseFirestore.instance.collection('sessions').doc(widget.sessionId).set(updateData, SetOptions(merge: true));
-      sessionService.recalculateConsecutiveAbsences(studentId);
 
+      // 2️⃣ تحديث إجمالي صفحات الطالب محلياً دون إيقاف التطبيق
       if (!absent && !isExam && !didNotRecite && studentId.isNotEmpty && !isCompletedStudent) {
         FirebaseFirestore.instance.collection('students').doc(studentId).update({
           'memorizedPages': totalPages,
-        }).catchError((e) => print("خطأ في تحديث الطالب: $e"));
+        }).catchError((e) => print("تنبيه: سيتم مزامنة إجمالي الصفحات فور الاتصال بالشبكة"));
       }
 
+      // 3️⃣ حساب الأيام والمتتاليات في الخلفية بدون حجب الواجهة
+      sessionService.recalculateConsecutiveAbsences(studentId).catchError((_) {});
+
+      // 4️⃣ إرسال وحفظ الإشعار بالطابور دون حظر الواجهة عند انقطاع الإنترنت
       if (studentId.isNotEmpty) {
         String notifyTitle = "✏️ تعديل في بيانات الحلقة";
         String notifyBody = absent
@@ -1369,14 +1374,23 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
       GlassToast.show(
         context,
         title: "تم التحديث",
-        message: "تم تحديث بيانات الجلسة بنجاح 🔄",
+        message: "تم حفظ التعديلات محلياً وستتم المزامنة فور التوصيل بالشبكة 🔄",
         icon: Icons.edit_note_rounded,
         color: Colors.lightBlueAccent,
       );
 
       Navigator.pop(context);
     } catch (e) {
-      print("خطأ في تحديث الجلسة: $e");
+      print("خطأ أثناء الحفظ: $e");
+      if (mounted) {
+        GlassToast.show(
+          context,
+          title: "خطأ",
+          message: "حدث خطأ غير متوقع أثناء الحفظ ❌",
+          icon: Icons.error_outline_rounded,
+          color: Colors.redAccent,
+        );
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }

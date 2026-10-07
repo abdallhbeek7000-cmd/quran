@@ -9,7 +9,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:provider/provider.dart'; 
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:quran_habal/widgets/offline_wrapper.dart'; 
 import 'package:workmanager/workmanager.dart';
 import 'package:flutter/foundation.dart'; 
 
@@ -25,8 +24,9 @@ import 'pages/splash_screen.dart';
 import 'pages/update_checker.dart'; 
 import 'services/theme_provider.dart'; 
 import 'services/prayer_service.dart'; // 🕌 خدمة أوقات الصلاة
-import 'services/cycle_service.dart'; // 🔄 1. استيراد خدمة الدورات
-import 'models/cycle_model.dart';      // 📖 2. استيراد موديل الدورة
+import 'services/cycle_service.dart';  // 🔄 خدمة الدورات
+import 'models/cycle_model.dart';      // 📖 موديل الدورة
+import 'widgets/offline_wrapper.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -128,8 +128,8 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // ⚡ إعداد الكاش المحلي لـ Firestore
-  FirebaseFirestore.instance.settings = Settings(
+  // ⚡ إعداد الكاش المحلي وحفظ البيانات أوفلاين لـ Firestore
+  FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
@@ -190,7 +190,7 @@ void main() async {
   FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   
-  // 👈 3. استخدام MultiProvider لبث الدورة النشطة + الثيمات لجميع أرجاء التطبيق
+  // 3️⃣ استخدام MultiProvider لبث الدورة النشطة + الثيمات لجميع أرجاء التطبيق
   runApp(
     MultiProvider(
       providers: [
@@ -299,14 +299,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent, 
           foregroundColor: primaryColor,
-          centerTitle: centerTitleDefault, 
+          centerTitle: true, 
           elevation: 0,
         ),
         dialogTheme: DialogThemeData(
-          backgroundColor: Colors.white.withValues(alpha: 0.95),
+          backgroundColor: Colors.white.withOpacity(0.95),
         ),
         bottomSheetTheme: BottomSheetThemeData(
-          backgroundColor: Colors.white.withValues(alpha: 0.95),
+          backgroundColor: Colors.white.withOpacity(0.95),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
           ),
@@ -328,14 +328,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent, 
           foregroundColor: Colors.white,
-          centerTitle: centerTitleDefault,
+          centerTitle: true,
           elevation: 0,
         ),
         dialogTheme: DialogThemeData(
-          backgroundColor: const Color(0xff1e293b).withValues(alpha: 0.95),
+          backgroundColor: const Color(0xff1e293b).withOpacity(0.95),
         ),
         bottomSheetTheme: BottomSheetThemeData(
-          backgroundColor: const Color(0xff1e293b).withValues(alpha: 0.95),
+          backgroundColor: const Color(0xff1e293b).withOpacity(0.95),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
           ),
@@ -362,5 +362,3 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 }
-
-const bool centerTitleDefault = true;

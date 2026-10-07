@@ -43,11 +43,6 @@ class _StudentsPageState extends State<StudentsPage> {
 
   final TextEditingController _searchController = TextEditingController();
 
-  bool _isLoadingCycle = true;
-  bool _isCycleActive = false;
-  String _activeCycleId = '';
-  String _activeCycleName = '';
-
   final Map<String, String> _flags = {
     'فلسطيني': '🇵🇸', 'أردني': '🇯🇴', 'لبناني': '🇱🇧', 'عراقي': '🇮🇶',
     'مصري': '🇪🇬', 'سعودي': '🇸🇦', 'يمني': '🇾🇪', 'سوداني': '🇸🇩',
@@ -55,52 +50,9 @@ class _StudentsPageState extends State<StudentsPage> {
   };
 
   @override
-  void initState() {
-    super.initState();
-    _checkActiveCycle();
-  }
-
-  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
-  }
-
-  // 🚀 التحقق من وجود دورة نشطة مرة واحدة فقط عند فتح الصفحة لمنع إعادة التحميل المفاجئ
-  Future<void> _checkActiveCycle() async {
-    try {
-      var cycleSnap = await FirebaseFirestore.instance
-          .collection('cycles')
-          .where('isCurrent', isEqualTo: true)
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .get();
-
-      if (mounted) {
-        if (cycleSnap.docs.isNotEmpty) {
-          var doc = cycleSnap.docs.first;
-          var data = doc.data();
-          setState(() {
-            _isCycleActive = true;
-            _activeCycleId = doc.id;
-            _activeCycleName = data['name'] ?? 'الدورة الحالية';
-            _isLoadingCycle = false;
-          });
-        } else {
-          setState(() {
-            _isCycleActive = false;
-            _isLoadingCycle = false;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isCycleActive = false;
-          _isLoadingCycle = false;
-        });
-      }
-    }
   }
 
   void _updateStudentLiveStatus(String studentId, String newStatus, String studentName) async {
@@ -123,13 +75,13 @@ class _StudentsPageState extends State<StudentsPage> {
     }
 
     if (mounted) {
-      await NotificationService.sendAndSaveNotification(
+      NotificationService.sendAndSaveNotification(
         studentId: studentId,
         title: "تحديث مباشر: $studentName",
         body: "حالة الطالب اللحظية في المعهد: $statusText",
         type: "live_status",
         context: context,
-      ).catchError((e) => print("فشل إرسال إشعار النبض: $e"));
+      ).catchError((e) => debugPrint("فشل إرسال إشعار النبض: $e"));
 
       GlassToast.show(
         context,
@@ -244,6 +196,7 @@ class _StudentsPageState extends State<StudentsPage> {
           .get();
 
       if (snapshot.docs.isEmpty) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("لا يوجد طلاب لتصديرهم", style: TextStyle(fontFamily: 'Cairo'))),
         );
@@ -317,6 +270,7 @@ class _StudentsPageState extends State<StudentsPage> {
       await Share.shareXFiles([XFile(filePath)], text: 'جدول طلاب دورة: $cycleName');
 
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("حدث خطأ أثناء التصدير: $e", style: const TextStyle(fontFamily: 'Cairo'))),
       );
@@ -328,7 +282,7 @@ class _StudentsPageState extends State<StudentsPage> {
     try {
       await Share.share("رقم هاتف ولي الأمر للمتابعة: $phoneNumber");
     } catch (e) {
-      print("Error opening dialer: $e");
+      debugPrint("Error opening dialer: $e");
     }
   }
 
@@ -371,142 +325,107 @@ class _StudentsPageState extends State<StudentsPage> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
+  // ⚡ تم تحسين الاستعلام ليصبح خفيف وسريع جداً بدون استعلامات متداخلة
   Widget _buildAbsentAlertSection(bool isDarkMode, String cycleId) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('students')
           .where('cycleId', isEqualTo: cycleId)
           .where('archived', isEqualTo: false)
+          .where('consecutiveAbsences', isGreaterThanOrEqualTo: 3)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError || !snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox();
 
-        final rawAlertStudents = snapshot.data!.docs.where((doc) {
-          final sData = doc.data() as Map<String, dynamic>;
-          final count = sData['consecutiveAbsences'] ?? 0;
-          return count >= 3;
-        }).toList();
+        final alertStudents = snapshot.data!.docs;
 
-        if (rawAlertStudents.isEmpty) return const SizedBox();
-
-        return FutureBuilder<List<DocumentSnapshot>>(
-          future: () async {
-            List<DocumentSnapshot> activeAlerts = [];
-            for (var doc in rawAlertStudents) {
-              var sessionsSnap = await FirebaseFirestore.instance
-                  .collection('sessions')
-                  .where('studentId', isEqualTo: doc.id)
-                  .orderBy('date', descending: true)
-                  .limit(1)
-                  .get();
-
-              if (sessionsSnap.docs.isNotEmpty) {
-                var lastSessionData = sessionsSnap.docs.first.data();
-                String lastSessionDateStr = lastSessionData['date'] ?? '';
-
-                String todayStr = "${DateTime.now().day}-${DateTime.now().month}-${DateTime.now().year}";
-                if (lastSessionDateStr.trim() == todayStr.trim()) {
-                  FirebaseFirestore.instance.collection('students').doc(doc.id).update({'consecutiveAbsences': 0});
-                  continue;
-                }
-              }
-              activeAlerts.add(doc);
-            }
-            return activeAlerts;
-          }(),
-          builder: (context, futureSnapshot) {
-            if (!futureSnapshot.hasData || futureSnapshot.data!.isEmpty) return const SizedBox();
-            final alertStudents = futureSnapshot.data!;
-
-            return Container(
-              margin: const EdgeInsets.fromLTRB(15, 10, 15, 4),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.redAccent.withOpacity(isDarkMode ? 0.12 : 0.08),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.redAccent.withOpacity(0.35), width: 1.2),
+        return Container(
+          margin: const EdgeInsets.fromLTRB(15, 10, 15, 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.redAccent.withOpacity(isDarkMode ? 0.12 : 0.08),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.redAccent.withOpacity(0.35), width: 1.2),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.gpp_maybe_rounded, color: Colors.redAccent.shade200, size: 22),
+              const SizedBox(width: 10),
+              Text(
+                "المنقطعين (${alertStudents.length}) :",
+                style: TextStyle(color: isDarkMode ? Colors.red.shade300 : Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'Cairo'),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.gpp_maybe_rounded, color: Colors.redAccent.shade200, size: 22),
-                  const SizedBox(width: 10),
-                  Text(
-                    "المنقطعين (${alertStudents.length}) :",
-                    style: TextStyle(color: isDarkMode ? Colors.red.shade300 : Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'Cairo'),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SizedBox(
-                      height: 34,
-                      child: ListView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        scrollDirection: Axis.horizontal,
-                        itemCount: alertStudents.length,
-                        itemBuilder: (context, idx) {
-                          final sData = alertStudents[idx].data() as Map<String, dynamic>;
-                          final String sName = sData['name'] ?? 'طالب';
-                          final int count = sData['consecutiveAbsences'] ?? 0;
-                          final String pPhone = sData['parentPhone'] ?? '';
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: 34,
+                  child: ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: alertStudents.length,
+                    itemBuilder: (context, idx) {
+                      final sData = alertStudents[idx].data() as Map<String, dynamic>;
+                      final String sName = sData['name'] ?? 'طالب';
+                      final int count = sData['consecutiveAbsences'] ?? 0;
+                      final String pPhone = sData['parentPhone'] ?? '';
 
-                          return Padding(
-                            padding: const EdgeInsets.only(left: 6),
-                            child: InkWell(
-                              onTap: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                    title: Text("متابعة غياب: $sName ⚠️", style: const TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold)),
-                                    content: Text("الطالب متغيب عن الحلقة لـ $count أيام متتالية دون عذر مسجل.", style: const TextStyle(fontFamily: 'Cairo', fontSize: 13)),
-                                    actions: [
-                                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("إغلاق", style: TextStyle(fontFamily: 'Cairo', color: Colors.grey))),
-                                      if (pPhone.isNotEmpty)
-                                        ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                          onPressed: () {
-                                            Navigator.pop(ctx);
-                                            _makePhoneCall(pPhone);
-                                          },
-                                          icon: const Icon(Icons.phone, size: 16),
-                                          label: const Text("اتصال بولي الأمر", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                                        )
-                                    ],
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isDarkMode ? Colors.black38 : Colors.white.withOpacity(0.8),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      sName.split(' ')[0],
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
-                                      child: Text("$countد", style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                      return Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: InkWell(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                title: Text("متابعة غياب: $sName ⚠️", style: const TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold)),
+                                content: Text("الطالب متغيب عن الحلقة لـ $count أيام متتالية دون عذر مسجل.", style: const TextStyle(fontFamily: 'Cairo', fontSize: 13)),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("إغلاق", style: TextStyle(fontFamily: 'Cairo', color: Colors.grey))),
+                                  if (pPhone.isNotEmpty)
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        _makePhoneCall(pPhone);
+                                      },
+                                      icon: const Icon(Icons.phone, size: 16),
+                                      label: const Text("اتصال بولي الأمر", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                                     )
-                                  ],
-                                ),
+                                ],
                               ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isDarkMode ? Colors.black38 : Colors.white.withOpacity(0.8),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
                             ),
-                          );
-                        },
-                      ),
-                    ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  sName.split(' ')[0],
+                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black87, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                ),
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
+                                  child: Text("$countد", style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                )
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ],
+                ),
               ),
-            );
-          },
+            ],
+          ),
         );
       },
     );
@@ -516,184 +435,199 @@ class _StudentsPageState extends State<StudentsPage> {
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
-    if (_isLoadingCycle) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    // ⚡ فحص الدورة بطريقة Stream مباشرة خفيفة
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('cycles')
+          .where('active', isEqualTo: true)
+          .where('archived', isEqualTo: false)
+          .limit(1)
+          .snapshots(),
+      builder: (context, cycleSnap) {
+        if (cycleSnap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
 
-    if (!_isCycleActive) {
-      return OfflineWrapper(
-        child: Scaffold(
-          extendBodyBehindAppBar: true,
-          backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
-          appBar: AppBar(
-            elevation: 0,
-            backgroundColor: Colors.transparent,
-            title: Text("قائمة الطلاب", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
-            centerTitle: true,
-          ),
-          body: _buildClosedCycleState(isDarkMode),
-        ),
-      );
-    }
+        bool isCycleActive = cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty;
+        final String activeCycleId = isCycleActive ? cycleSnap.data!.docs.first.id : widget.cycle.id;
+        final String activeCycleName = isCycleActive 
+            ? ((cycleSnap.data!.docs.first.data() as Map<String, dynamic>)['name'] ?? 'الدورة الحالية') 
+            : widget.cycle.name;
 
-    final CycleModel activeCycle = widget.cycle;
-
-    Query query = FirebaseFirestore.instance
-        .collection('students')
-        .where('cycleId', isEqualTo: _activeCycleId);
-
-    if (!widget.isArchivedFromHistory) {
-      query = query.where('archived', isEqualTo: false);
-    }
-
-    if (widget.role == "supervisor") {
-      query = query.where('supervisorId', isEqualTo: widget.uid);
-    }
-
-    return OfflineWrapper(
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
-        appBar: AppBar(
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          title: Text(
-            widget.isArchivedFromHistory ? "أرشيف: $_activeCycleName" : "قائمة الطلاب",
-            style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18),
-          ),
-          iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-          centerTitle: true,
-          actions: [
-            if (!widget.isArchivedFromHistory)
-              IconButton(
-                icon: Icon(Icons.archive_outlined, color: isDarkMode ? accentGold : primaryColor),
-                tooltip: "الطلاب المتوقفين مؤقتاً",
-                onPressed: () => _internalNav(ArchivedStudentsPage(cycle: activeCycle, role: widget.role, uid: widget.uid)),
+        if (!isCycleActive && !widget.isArchivedFromHistory) {
+          return OfflineWrapper(
+            child: Scaffold(
+              extendBodyBehindAppBar: true,
+              backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+              appBar: AppBar(
+                elevation: 0,
+                backgroundColor: Colors.transparent,
+                title: Text("قائمة الطلاب", style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18)),
+                centerTitle: true,
               ),
-            if (widget.role == "manager")
-              IconButton(
-                icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor),
-                tooltip: "تصدير Excel",
-                onPressed: () => exportToExcel(_activeCycleId, _activeCycleName),
-              ),
-          ],
-        ),
-        floatingActionButton: (widget.role == "manager" && !widget.isArchivedFromHistory)
-            ? FloatingActionButton(
-                backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9),
-                onPressed: () => _internalNav(AddStudentPage(cycle: activeCycle)),
-                child: const Icon(Icons.person_add_alt_1, color: Colors.white),
-              )
-            : null,
-        body: Stack(
-          children: [
-            Container(
-              width: double.infinity, height: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
-                ),
-              ),
+              body: _buildClosedCycleState(isDarkMode),
             ),
-            Stack(
+          );
+        }
+
+        Query query = FirebaseFirestore.instance
+            .collection('students')
+            .where('cycleId', isEqualTo: activeCycleId);
+
+        if (!widget.isArchivedFromHistory) {
+          query = query.where('archived', isEqualTo: false);
+        }
+
+        if (widget.role == "supervisor") {
+          query = query.where('supervisorId', isEqualTo: widget.uid);
+        }
+
+        return OfflineWrapper(
+          child: Scaffold(
+            extendBodyBehindAppBar: true,
+            backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+            appBar: AppBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              title: Text(
+                widget.isArchivedFromHistory ? "أرشيف: $activeCycleName" : "قائمة الطلاب",
+                style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 18),
+              ),
+              iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+              centerTitle: true,
+              actions: [
+                if (!widget.isArchivedFromHistory)
+                  IconButton(
+                    icon: Icon(Icons.archive_outlined, color: isDarkMode ? accentGold : primaryColor),
+                    tooltip: "الطلاب المتوقفين مؤقتاً",
+                    onPressed: () => _internalNav(ArchivedStudentsPage(cycle: widget.cycle, role: widget.role, uid: widget.uid)),
+                  ),
+                if (widget.role == "manager")
+                  IconButton(
+                    icon: Icon(Icons.file_download, color: isDarkMode ? accentGold : primaryColor),
+                    tooltip: "تصدير Excel",
+                    onPressed: () => exportToExcel(activeCycleId, activeCycleName),
+                  ),
+              ],
+            ),
+            floatingActionButton: (widget.role == "manager" && !widget.isArchivedFromHistory)
+                ? FloatingActionButton(
+                    backgroundColor: isDarkMode ? accentGold.withOpacity(0.9) : primaryColor.withOpacity(0.9),
+                    onPressed: () => _internalNav(AddStudentPage(cycle: widget.cycle)),
+                    child: const Icon(Icons.person_add_alt_1, color: Colors.white),
+                  )
+                : null,
+            body: Stack(
               children: [
-                Positioned(
-                  top: -50, left: -50,
-                  child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                Container(
+                  width: double.infinity, height: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDarkMode ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)] : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                      begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    ),
+                  ),
                 ),
-                Positioned(
-                  top: 200, right: -80,
-                  child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
+                Stack(
+                  children: [
+                    Positioned(
+                      top: -50, left: -50,
+                      child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
+                    ),
+                    Positioned(
+                      top: 200, right: -80,
+                      child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15))),
+                    ),
+                  ],
+                ),
+                Positioned.fill(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                    child: Container(color: Colors.transparent),
+                  ),
+                ),
+                SafeArea(
+                  child: Column(
+                    children: [
+                      if (widget.role == "manager" && !widget.isArchivedFromHistory)
+                        _buildAbsentAlertSection(isDarkMode, activeCycleId),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                        child: _buildGlassContainer(
+                          isDarkMode: isDarkMode,
+                          padding: const EdgeInsets.all(15),
+                          child: Column(
+                            children: [
+                              TextField(
+                                controller: _searchController,
+                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
+                                onChanged: (v) {
+                                  setState(() {
+                                    search = v.trim().toLowerCase();
+                                  });
+                                },
+                              ),
+                              if (widget.role == "manager") ...[
+                                const SizedBox(height: 12),
+                                _buildSupervisorFilter(isDarkMode),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      Expanded(
+                        child: StreamBuilder<QuerySnapshot>(
+                          stream: query.snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات"));
+                            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+                            var docs = snapshot.data!.docs.where((doc) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
+                              final nameMatches = search.isEmpty || studentName.contains(search);
+                              
+                              bool supervisorMatches = true;
+                              if (selectedSupervisor.isNotEmpty) {
+                                final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
+                                final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
+                                supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
+                              }
+                              return nameMatches && supervisorMatches;
+                            }).toList();
+
+                            docs.sort((a, b) {
+                              final aData = a.data() as Map<String, dynamic>;
+                              final bData = b.data() as Map<String, dynamic>;
+                              int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
+                              int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
+                              return sA.compareTo(sB);
+                            });
+
+                            if (docs.isEmpty) return _buildEmptyState(isDarkMode);
+
+                            return ListView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.only(left: 15, right: 15, top: 5, bottom: 80),
+                              itemCount: docs.length,
+                              itemBuilder: (context, index) {
+                                return _buildStudentCard(context, docs[index], isDarkMode);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(color: Colors.transparent),
-              ),
-            ),
-            SafeArea(
-              child: Column(
-                children: [
-                  if (widget.role == "manager" && !widget.isArchivedFromHistory)
-                    _buildAbsentAlertSection(isDarkMode, _activeCycleId),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                    child: _buildGlassContainer(
-                      isDarkMode: isDarkMode,
-                      padding: const EdgeInsets.all(15),
-                      child: Column(
-                        children: [
-                          TextField(
-                            controller: _searchController,
-                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                            decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
-                            onChanged: (v) {
-                              setState(() {
-                                search = v.trim().toLowerCase();
-                              });
-                            },
-                          ),
-                          if (widget.role == "manager") ...[
-                            const SizedBox(height: 12),
-                            _buildSupervisorFilter(isDarkMode),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: query.snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات"));
-                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-
-                        var docs = snapshot.data!.docs.where((doc) {
-                          final data = doc.data() as Map<String, dynamic>;
-                          final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
-                          final nameMatches = search.isEmpty || studentName.contains(search);
-                          
-                          bool supervisorMatches = true;
-                          if (selectedSupervisor.isNotEmpty) {
-                            final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
-                            final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
-                            supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
-                          }
-                          return nameMatches && supervisorMatches;
-                        }).toList();
-
-                        docs.sort((a, b) {
-                          final aData = a.data() as Map<String, dynamic>;
-                          final bData = b.data() as Map<String, dynamic>;
-                          int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
-                          int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
-                          return sA.compareTo(sB);
-                        });
-
-                        if (docs.isEmpty) return _buildEmptyState(isDarkMode);
-
-                        return ListView.builder(
-                          physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.only(left: 15, right: 15, top: 5, bottom: 80),
-                          itemCount: docs.length,
-                          itemBuilder: (context, index) {
-                            return _buildStudentCard(context, docs[index], isDarkMode);
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -946,7 +880,11 @@ class _StudentsPageState extends State<StudentsPage> {
           decoration: _glassInputDecoration("", Icons.filter_list_rounded, isDarkMode),
           items: [
             const DropdownMenuItem(value: '', child: Text("كل المشرفين")),
-            ...supervisors.map((sup) => DropdownMenuItem(value: sup['name'].toString(), child: Text(sup['name']))),
+            ...supervisors.map((sup) {
+              final supMap = sup.data() as Map<String, dynamic>;
+              String sName = supMap['name'] ?? supMap['email'] ?? 'مشرف';
+              return DropdownMenuItem(value: sName, child: Text(sName));
+            }),
           ],
           onChanged: (v) => setState(() => selectedSupervisor = v ?? ''),
         );
