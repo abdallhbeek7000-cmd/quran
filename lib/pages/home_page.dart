@@ -39,7 +39,7 @@ import 'qiblah_page.dart';
 import '../services/prayer_service.dart';
 import 'institute_expenses_page.dart'; 
 import 'all_cycles_students_page.dart';
-import 'archived_student_sessions_page.dart'; // 👈 استيراد صفحة أرشيف الجلسات
+import 'archived_student_sessions_page.dart';
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -370,6 +370,168 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // 🌟 النافذة السفلية الفاخرة للخيارات والسلاسة العالية (Glassmorphism Menu Sheet)
+  void _showNavigationMenu(bool isDark, CycleModel? activeCycleModel, Function(Widget Function(CycleModel)) openPageWithActiveCycle) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 25),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xff0f172a).withOpacity(0.92) : Colors.white.withOpacity(0.92),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                border: Border.all(
+                  color: isDark ? Colors.white12 : Colors.white,
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 45,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black26,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  Text(
+                    "القائمة السريعة ⚡",
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : primaryNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 0.95,
+                        children: [
+                          _buildSheetItem(Icons.view_list_rounded, "عرض الدورات", Colors.indigoAccent, () {
+                            Navigator.pop(context);
+                            _nav(const CyclesPage());
+                          }, isDark),
+                          if (widget.role == "manager") ...[
+                            _buildSheetItem(Icons.badge_rounded, "جميع الطلاب 🎒", Colors.blueAccent, () {
+                              Navigator.pop(context);
+                              _nav(const AllCyclesStudentsPage());
+                            }, isDark),
+                            _buildSheetItem(Icons.history_edu_rounded, "أرشيف الجلسات 📜", Colors.orangeAccent, () {
+                              Navigator.pop(context);
+                              _nav(const ArchivedStudentSessionsPage());
+                            }, isDark),
+                            _buildSheetItem(Icons.add_circle_outline_rounded, "إنشاء دورة", accentGold, () {
+                              Navigator.pop(context);
+                              _nav(const CreateCyclePage());
+                            }, isDark),
+                            _buildSheetItem(Icons.campaign_rounded, "إرسال إعلان", Colors.lightBlueAccent, () {
+                              Navigator.pop(context);
+                              _nav(const BroadcastPage());
+                            }, isDark),
+                            _buildSheetItem(Icons.wb_sunny_rounded, "إدارة الإشراقات", Colors.amber, () {
+                              Navigator.pop(context);
+                              _nav(const InspirationsManagePage());
+                            }, isDark),
+                            _buildSheetItem(Icons.diamond_rounded, "بنك النقاط", Colors.purpleAccent, () {
+                              Navigator.pop(context);
+                              _nav(const PointsBankPage());
+                            }, isDark),
+                            _buildSheetItem(Icons.directions_bus_rounded, "الأنشطة والرحلات", Colors.tealAccent, () {
+                              Navigator.pop(context);
+                              _nav(const ActivitiesManagePage());
+                            }, isDark),
+                            _buildSheetItem(Icons.shuffle_rounded, "توزيع الطلاب", Colors.deepPurpleAccent, () {
+                              Navigator.pop(context);
+                              openPageWithActiveCycle((cycle) => AssignStudentsPage(cycle: cycle));
+                            }, isDark),
+                            _buildSheetItem(Icons.account_balance_wallet_rounded, "مصروفات المعهد", Colors.greenAccent, () {
+                              Navigator.pop(context);
+                              _nav(const InstituteExpensesPage());
+                            }, isDark),
+                            _buildSheetItem(Icons.menu_book_rounded, "سجل الختمات", Colors.orange, () {
+                              Navigator.pop(context);
+                              _nav(const QuranCompletionsPage());
+                            }, isDark),
+                          ],
+                          _buildSheetItem(Icons.workspace_premium_rounded, "لوحة الشرف 🏆", Colors.amber, () {
+                            Navigator.pop(context);
+                            _nav(HonorBoardPage(role: widget.role));
+                          }, isDark),
+                          _buildSheetItem(Icons.compass_calibration_rounded, "اتجاه القبلة", Colors.cyanAccent, () {
+                            Navigator.pop(context);
+                            _nav(const QiblahPage());
+                          }, isDark),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSheetItem(IconData icon, String title, Color color, VoidCallback onTap, bool isDark) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.18),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -436,188 +598,9 @@ class _HomePageState extends State<HomePage> {
                   shape: BoxShape.circle,
                   border: Border.all(color: isDark ? Colors.white12 : Colors.white),
                 ),
-                child: PopupMenuButton<String>(
+                child: IconButton(
                   icon: Icon(Icons.grid_view_rounded, color: isDark ? accentGold : primaryNavy, size: 22),
-                  color: isDark ? const Color(0xff0f172a) : Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'cycles':
-                        _nav(const CyclesPage());
-                        break;
-                      case 'all_cycles_students':
-                        _nav(const AllCyclesStudentsPage());
-                        break;
-                      case 'archived_sessions':
-                        _nav(const ArchivedStudentSessionsPage()); // 👈 توجيه لصفحة أرشيف الجلسات
-                        break;
-                      case 'create_cycle':
-                        _nav(const CreateCyclePage());
-                        break;
-                      case 'broadcast':
-                        _nav(const BroadcastPage());
-                        break;
-                      case 'inspirations':
-                        _nav(const InspirationsManagePage());
-                        break;
-                      case 'points_bank':
-                        _nav(const PointsBankPage());
-                        break;
-                      case 'activities':
-                        _nav(const ActivitiesManagePage());
-                        break;
-                      case 'assign_students':
-                        openPageWithActiveCycle((cycle) => AssignStudentsPage(cycle: cycle));
-                        break;
-                      case 'expenses':
-                        _nav(const InstituteExpensesPage());
-                        break;
-                      case 'honor_board':
-                        _nav(HonorBoardPage(role: widget.role));
-                        break;
-                      case 'completions':
-                        _nav(const QuranCompletionsPage());
-                        break;
-                      case 'qiblah':
-                        _nav(const QiblahPage());
-                        break;
-                    }
-                  },
-                  itemBuilder: (BuildContext context) => [
-                    PopupMenuItem(
-                      value: 'cycles',
-                      child: Row(
-                        children: [
-                          Icon(Icons.view_list_rounded, color: isDark ? accentGold : primaryNavy, size: 20),
-                          const SizedBox(width: 10),
-                          Text('عرض الدورات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                        ],
-                      ),
-                    ),
-                    if (widget.role == "manager") ...[
-                      PopupMenuItem(
-                        value: 'all_cycles_students',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.badge_rounded, color: Colors.blueAccent, size: 20),
-                            const SizedBox(width: 10),
-                            Text('جميع طلاب الدورات 🎒', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                      // 🔒 خيار خاص بالمدير لفتح أرشيف كافة جلسات الطلاب
-                      PopupMenuItem(
-                        value: 'archived_sessions',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.history_edu_rounded, color: Colors.orangeAccent, size: 20),
-                            const SizedBox(width: 10),
-                            Text('أرشيف الجلسات 📜', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'create_cycle',
-                        child: Row(
-                          children: [
-                            Icon(Icons.add_circle_outline_rounded, color: isDark ? accentGold : primaryNavy, size: 20),
-                            const SizedBox(width: 10),
-                            Text('إنشاء دورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'broadcast',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.campaign_rounded, color: Colors.lightBlueAccent, size: 20),
-                            const SizedBox(width: 10),
-                            Text('إرسال إعلان للجميع', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'inspirations',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.wb_sunny_rounded, color: Colors.orangeAccent, size: 20),
-                            const SizedBox(width: 10),
-                            Text('إدارة الإشراقات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'points_bank',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.diamond_rounded, color: Colors.purpleAccent, size: 20),
-                            const SizedBox(width: 10),
-                            Text('بنك النقاط', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'activities',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.directions_bus_rounded, color: Colors.tealAccent, size: 20),
-                            const SizedBox(width: 10),
-                            Text('الأنشطة والرحلات 🚌', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'assign_students',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.shuffle_rounded, color: Colors.indigoAccent, size: 20),
-                            const SizedBox(width: 10),
-                            Text('توزيع الطلاب', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'expenses',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.account_balance_wallet_rounded, color: Colors.greenAccent, size: 20),
-                            const SizedBox(width: 10),
-                            Text('مصروفات المعهد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'completions',
-                        child: Row(
-                          children: [
-                            Icon(Icons.menu_book_rounded, color: Colors.amber.shade600, size: 20),
-                            const SizedBox(width: 10),
-                            Text('سجل الختمات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                          ],
-                        ),
-                      ),
-                    ],
-                    PopupMenuItem(
-                      value: 'honor_board',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 20),
-                          const SizedBox(width: 10),
-                          Text('لوحة الشرف 🏆', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'qiblah',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.compass_calibration_rounded, color: Colors.blueAccent, size: 20),
-                          const SizedBox(width: 10),
-                          Text('اتجاه القبلة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-                        ],
-                      ),
-                    ),
-                  ],
+                  onPressed: () => _showNavigationMenu(isDark, activeCycleModel, openPageWithActiveCycle),
                 ),
               ),
               title: Text(
@@ -860,6 +843,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildRealGlassHeader(bool isDark, String currentCollection, CycleModel? activeCycle) {
+    bool isManager = widget.role == "manager";
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
@@ -885,19 +870,19 @@ class _HomePageState extends State<HomePage> {
                   }
 
                   Widget buildGreetingText() {
-                    if (widget.role == "manager") {
+                    if (isManager) {
                       return Text("أهلاً مدير المعهد 👑", style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'));
                     } else if (currentName != null && currentName.isNotEmpty) {
-                      return Text("المشرف: $currentName", style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'));
+                      return Text("أهلاً المشرف: $currentName 👤", style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'));
                     } else {
-                      return Text("المشرف", style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'));
+                      return Text("أهلاً بالمشرف 👤", style: TextStyle(color: isDark ? Colors.white : primaryNavy, fontSize: 19, fontWeight: FontWeight.w800, fontFamily: 'Cairo'));
                     }
                   }
 
                   return Column(
                     children: [
                       GestureDetector(
-                        onTap: !_isUploadingManagerImage ? _updateManagerImage : null,
+                        onTap: (isManager && !_isUploadingManagerImage) ? _updateManagerImage : null,
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
@@ -909,7 +894,7 @@ class _HomePageState extends State<HomePage> {
                               child: (imageUrl == null || imageUrl.isEmpty) && !_isUploadingManagerImage ? Icon(Icons.person, size: 45, color: accentGold) : null,
                             ),
                             if (_isUploadingManagerImage) const Positioned.fill(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(color: Colors.white))),
-                            if (!_isUploadingManagerImage)
+                            if (!_isUploadingManagerImage && isManager)
                               Positioned(bottom: 0, right: 0, child: CircleAvatar(radius: 14, backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white, child: Icon(Icons.camera_alt, size: 15, color: primaryNavy))),
                           ],
                         ),

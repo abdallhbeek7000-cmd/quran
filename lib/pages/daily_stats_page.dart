@@ -354,7 +354,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     );
   }
 
-  // 🔥 جلب مستند التفقد بالتاريخ (حتى لو كان معرّف المستند يبدأ بـ cycleId)
+  // 🔥 جلب مستند التفقد بالتاريخ
   Widget _buildExpectedSessionsCard(String targetDate, bool isDarkMode) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -700,7 +700,121 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 }
 
 // =========================================================================
-// 🚀 1. واجهة المتبقين للتسميع (مع إصلاح جلب التفقد وحل التصدير)
+// 🚀 دالة المساعدة العامة لمعاينة كرت/بوستر الصورة قبل مشاركتها
+// =========================================================================
+Future<void> _previewAndShareImage({
+  required BuildContext context,
+  required WidgetsToImageController controller,
+  required String shareText,
+  required String fileNamePrefix,
+  required String targetDate,
+}) async {
+  try {
+    final bytes = await controller.capture();
+    if (bytes == null) throw "فشل التقاط صورة البوستر";
+
+    if (!context.mounted) return;
+
+    // 📸 عرض الصورة للمعاينة بـ Dialog أنيق
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xff0f172a),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.all(16),
+        title: const Row(
+          children: [
+            Icon(Icons.remove_red_eye_rounded, color: Color(0xffd4af37), size: 22),
+            SizedBox(width: 8),
+            Text(
+              "معاينة الصورة قبل المشاركة",
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.55,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xff334155)),
+                ),
+                child: SingleChildScrollView(
+                  child: Image.memory(bytes, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "تأكد من وضوح البيانات المنسقة قبل إرسالها لجروب الواتساب",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontFamily: 'Cairo', fontSize: 11, color: Colors.white60),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("إلغاء",
+                style: TextStyle(fontFamily: 'Cairo', color: Colors.grey)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xff2563eb),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final tempDir = await getTemporaryDirectory();
+              final safeDate = targetDate.replaceAll('/', '_');
+              final file = await File(
+                      '${tempDir.path}/${fileNamePrefix}_$safeDate.png')
+                  .create();
+              await file.writeAsBytes(bytes);
+
+              await Share.shareXFiles(
+                [XFile(file.path)],
+                text: shareText,
+              );
+            },
+            icon: const Icon(Icons.share_rounded, size: 18, color: Colors.white),
+            label: const Text(
+              "تأكيد والمشاركة 🚀",
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("حدث خطأ أثناء معاينة الصورة: $e",
+              style: const TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+}
+
+// =========================================================================
+// 🚀 1. واجهة المتبقين للتسميع (مع معاينة البوستر وتصديره)
 // =========================================================================
 class PendingSessionsPage extends StatefulWidget {
   final String targetDate;
@@ -730,37 +844,22 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
     return false;
   }
 
-  Future<void> _sharePendingListAsImage(
+  Future<void> _handleShareProcess(
       List<Map<String, dynamic>> pendingStudentsList) async {
     if (pendingStudentsList.isEmpty) return;
     setState(() => isExporting = true);
-    try {
-      await Future.delayed(const Duration(milliseconds: 300));
-      final bytes = await controller.capture();
-      if (bytes != null) {
-        final tempDir = await getTemporaryDirectory();
-        final file =
-            await File('${tempDir.path}/متبقين_تسميع_${widget.targetDate}.png')
-                .create();
-        await file.writeAsBytes(bytes);
+    await Future.delayed(const Duration(milliseconds: 300));
 
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text:
-              '⏳ تذكير بالطلاب المتبقين للتسميع اليوم (${widget.targetDate})\nنرجو من الإخوة المشرفين تسجيل التسميعات 🌸\nمعهد الشيخ سعيد العبدالله 🕌',
-        );
-      } else {
-        throw "فشل التقاط البكسلات من الودجت";
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("حدث خطأ أثناء إنشاء الصورة: $e",
-                style: const TextStyle(fontFamily: 'Cairo'))));
-      }
-    } finally {
-      if (mounted) setState(() => isExporting = false);
-    }
+    await _previewAndShareImage(
+      context: context,
+      controller: controller,
+      fileNamePrefix: "pending_recitations",
+      targetDate: widget.targetDate,
+      shareText:
+          '⏳ تذكير بالطلاب المتبقين للتسميع اليوم (${widget.targetDate})\nنرجو من الإخوة المشرفين تسجيل التسميعات 🌸\nمعهد الشيخ سعيد العبدالله 🕌',
+    );
+
+    if (mounted) setState(() => isExporting = false);
   }
 
   @override
@@ -958,7 +1057,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
 
                           return Stack(
                             children: [
-                              // 🔥 نقل ودجت التصدير لـ Offscreen Rendering لضمان بنائها دون أخطاء
+                              // 🔥 الرسم خارج الشاشة لضمان أداء التقط الكرت دون أخطاء
                               Positioned(
                                 left: -9999,
                                 child: WidgetsToImage(
@@ -992,7 +1091,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                         ),
                                         onPressed: isExporting
                                             ? null
-                                            : () => _sharePendingListAsImage(
+                                            : () => _handleShareProcess(
                                                 pendingStudentsList),
                                         icon: isExporting
                                             ? const SizedBox(
@@ -1006,7 +1105,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                         label: Text(
                                           isExporting
                                               ? "جاري الإنشاء..."
-                                              : "مشاركة الصورة لتذكير المشرفين 📸",
+                                              : "معاينة ومشاركة التذكير 📸",
                                           style: const TextStyle(
                                               fontFamily: 'Cairo',
                                               fontWeight: FontWeight.bold,
@@ -1150,50 +1249,109 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
     );
   }
 
+  // 🎨 بوستر التصدير الفاخر للمتبقين
   Widget _buildExportablePoster(List<Map<String, dynamic>> students) {
     return Container(
-      padding: const EdgeInsets.all(30),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xff0f172a), Color(0xff1e293b), Color(0xff0f172a)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
+      padding: const EdgeInsets.all(26),
+      decoration: BoxDecoration(
+        color: const Color(0xff0f172a),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xff334155), width: 2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text("معهد الشيخ سعيد العبدالله 🕌",
-              style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontFamily: 'Cairo')),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.mosque_rounded, color: Color(0xffd4af37), size: 28),
+              SizedBox(width: 10),
+              Text("معهد الشيخ سعيد العبدالله",
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      fontFamily: 'Cairo')),
+            ],
+          ),
           const SizedBox(height: 12),
-          Text("⏳ الطلاب المتبقون للتسميع يوم: ${widget.targetDate}",
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xfff59e0b).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: const Color(0xfff59e0b).withOpacity(0.5)),
+            ),
+            child: Text(
+              "⏳ قائمة الطلاب المتبقين للتسميع - ${widget.targetDate}",
               style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.orange,
+                  fontSize: 13,
+                  color: Color(0xfffde68a),
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'Cairo')),
+                  fontFamily: 'Cairo'),
+            ),
+          ),
           const SizedBox(height: 20),
           Table(
+            border: TableBorder.all(
+                color: const Color(0xff334155),
+                width: 1,
+                borderRadius: BorderRadius.circular(12)),
             children: [
+              TableRow(
+                decoration: const BoxDecoration(color: Color(0xff1e293b)),
+                children: const [
+                  Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text("اسم الطالب",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Color(0xff94a3b8),
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text("المشرف المسؤول",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Color(0xff94a3b8),
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ),
+                ],
+              ),
               ...students.map((s) => TableRow(children: [
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      padding: const EdgeInsets.all(10),
                       child: Text(s['name'] ?? '',
+                          textAlign: TextAlign.center,
                           style: const TextStyle(
-                              color: Colors.white, fontFamily: 'Cairo')),
+                              color: Colors.white,
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12)),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      padding: const EdgeInsets.all(10),
                       child: Text(s['supervisorName'] ?? '',
+                          textAlign: TextAlign.center,
                           style: const TextStyle(
-                              color: Colors.white70, fontFamily: 'Cairo')),
+                              color: Color(0xffcbd5e1),
+                              fontFamily: 'Cairo',
+                              fontSize: 12)),
                     ),
                   ]))
             ],
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            "نرجو من الإخوة المشرفين الكرام المتابعة وتسجيل التسميعات 📖",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: Color(0xff94a3b8), fontSize: 11, fontFamily: 'Cairo'),
           )
         ],
       ),
@@ -1202,7 +1360,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
 }
 
 // =========================================================================
-// 🚀 2. واجهة التسميعات والجلسات اليومية
+// 🚀 2. واجهة التسميعات والجلسات اليومية (المحافظ عليها تماماً)
 // =========================================================================
 class DailyRecitationsPage extends StatefulWidget {
   final String targetDate;
@@ -1384,8 +1542,6 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
     bool didNotRecite = data['didNotRecite'] ?? false;
     int selectedJuz =
         data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
-
-    String sessionDateRaw = data['date'] ?? '';
 
     String actualCreatedAt = data['actualCreatedAt']?.toString() ?? '';
     String actualEditedAt = data['actualEditedAt']?.toString() ?? '';
@@ -2017,7 +2173,7 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
 }
 
 // =========================================================================
-// 🚀 3. واجهة سجل الغائبين (مع التصدير بنجاح ودون أخطاء)
+// 🚀 3. واجهة سجل الغائبين (مع المعاينة قبل المشاركة)
 // =========================================================================
 class DailyAbsentStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -2033,37 +2189,21 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
   final Color primaryColor = const Color(0xff425c75);
   bool isExporting = false;
 
-  Future<void> _shareAbsentListAsImage(
-      List<QueryDocumentSnapshot> docs) async {
+  Future<void> _handleShareProcess(List<QueryDocumentSnapshot> docs) async {
     if (docs.isEmpty) return;
     setState(() => isExporting = true);
-    try {
-      await Future.delayed(const Duration(milliseconds: 300));
-      final bytes = await controller.capture();
-      if (bytes != null) {
-        final tempDir = await getTemporaryDirectory();
-        final file =
-            await File('${tempDir.path}/قائمة_الغياب_${widget.targetDate}.png')
-                .create();
-        await file.writeAsBytes(bytes);
+    await Future.delayed(const Duration(milliseconds: 300));
 
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text:
-              '🚨 كرت الغياب اليومي (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
-        );
-      } else {
-        throw "فشل التقاط بكسلات الصورة";
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("حدث خطأ أثناء تصدير الصورة: $e",
-                style: const TextStyle(fontFamily: 'Cairo'))));
-      }
-    } finally {
-      if (mounted) setState(() => isExporting = false);
-    }
+    await _previewAndShareImage(
+      context: context,
+      controller: controller,
+      fileNamePrefix: "absent_students",
+      targetDate: widget.targetDate,
+      shareText:
+          '🚨 كرت الغياب اليومي (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
+    );
+
+    if (mounted) setState(() => isExporting = false);
   }
 
   @override
@@ -2138,7 +2278,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 
                   return Stack(
                     children: [
-                      // 🔥 الرسم خارج الشاشة لضمان أداء لالتقاط بدون مشاكل
+                      // 🔥 الرسم خارج الشاشة للتصدير
                       Positioned(
                         left: -9999,
                         child: WidgetsToImage(
@@ -2169,7 +2309,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                                 ),
                                 onPressed: isExporting
                                     ? null
-                                    : () => _shareAbsentListAsImage(absentDocs),
+                                    : () => _handleShareProcess(absentDocs),
                                 icon: isExporting
                                     ? const SizedBox(
                                         width: 18,
@@ -2182,7 +2322,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                                 label: Text(
                                   isExporting
                                       ? "جاري الإنشاء..."
-                                      : "مشاركة كرت الغياب اليومي لـ لواتساب 📸",
+                                      : "معاينة ومشاركة كرت الغياب 📸",
                                   style: const TextStyle(
                                       fontFamily: 'Cairo',
                                       fontWeight: FontWeight.bold,
@@ -2287,55 +2427,122 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
     );
   }
 
+  // 🎨 بوستر التصدير الفاخر للغائبين
   Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
     return Container(
-      padding: const EdgeInsets.all(30),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xff0f172a), Color(0xff1e293b), Color(0xff0f172a)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
+      padding: const EdgeInsets.all(26),
+      decoration: BoxDecoration(
+        color: const Color(0xff0f172a),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xff334155), width: 2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text("معهد الشيخ سعيد العبدالله 🕌",
-              style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontFamily: 'Cairo')),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.mosque_rounded, color: Color(0xffd4af37), size: 28),
+              SizedBox(width: 10),
+              Text("معهد الشيخ سعيد العبدالله",
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      fontFamily: 'Cairo')),
+            ],
+          ),
           const SizedBox(height: 12),
-          Text("🔴 قائمة الطلاب الغائبين يوم: ${widget.targetDate}",
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xffef4444).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: const Color(0xffef4444).withOpacity(0.5)),
+            ),
+            child: Text(
+              "🔴 جدول الطلاب الغائبين - ${widget.targetDate}",
               style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.redAccent,
+                  fontSize: 13,
+                  color: Color(0xfffca5a5),
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'Cairo')),
+                  fontFamily: 'Cairo'),
+            ),
+          ),
           const SizedBox(height: 20),
           Table(
+            border: TableBorder.all(
+                color: const Color(0xff334155),
+                width: 1,
+                borderRadius: BorderRadius.circular(12)),
             children: [
+              TableRow(
+                decoration: const BoxDecoration(color: Color(0xff1e293b)),
+                children: const [
+                  Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text("اسم الطالب",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Color(0xff94a3b8),
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text("حالة الغياب / العذر",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Color(0xff94a3b8),
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ),
+                ],
+              ),
               ...docs.map((doc) {
                 var s = doc.data() as Map<String, dynamic>;
+                String reason = s['absenceReason'] ?? 'بدون عذر';
+                bool hasExcused = reason.contains("بعذر") ||
+                    reason.contains("استئذان") ||
+                    reason.contains("مريض");
+
                 return TableRow(children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.all(10),
                     child: Text(s['studentName'] ?? '',
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
                             color: Colors.white,
                             fontFamily: 'Cairo',
-                            fontWeight: FontWeight.bold)),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Text(s['absenceReason'] ?? 'بدون سبب',
-                        style: const TextStyle(
-                            color: Colors.white70, fontFamily: 'Cairo')),
+                    padding: const EdgeInsets.all(10),
+                    child: Text(
+                      hasExcused ? "$reason 📝" : "$reason ❌",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: hasExcused
+                              ? const Color(0xff34d399)
+                              : const Color(0xfff87171),
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11.5),
+                    ),
                   ),
                 ]);
               })
             ],
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            "يرجى من أولياء الأمور الكرام الحرص والمتابعة لعدم التكرار 🌺",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: Color(0xff94a3b8), fontSize: 11, fontFamily: 'Cairo'),
           )
         ],
       ),
@@ -2344,7 +2551,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 }
 
 // =========================================================================
-// 🚀 4. واجهة الطلاب (حضر ولم يسمّع مع التصدير HD)
+// 🚀 4. واجهة حضر ولم يسمّع (مع المعاينة قبل المشاركة)
 // =========================================================================
 class DailyDidNotReciteStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -2361,37 +2568,21 @@ class _DailyDidNotReciteStudentsPageState
   final Color primaryColor = const Color(0xff425c75);
   bool isExporting = false;
 
-  Future<void> _shareDidNotReciteListAsImage(
-      List<QueryDocumentSnapshot> docs) async {
+  Future<void> _handleShareProcess(List<QueryDocumentSnapshot> docs) async {
     if (docs.isEmpty) return;
     setState(() => isExporting = true);
-    try {
-      await Future.delayed(const Duration(milliseconds: 300));
-      final bytes = await controller.capture();
-      if (bytes != null) {
-        final tempDir = await getTemporaryDirectory();
-        final file = await File(
-                '${tempDir.path}/حضر_ولم_يسمع_${widget.targetDate}.png')
-            .create();
-        await file.writeAsBytes(bytes);
+    await Future.delayed(const Duration(milliseconds: 300));
 
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text:
-              '⚠️️ إشعار الطلاب (حضر ولم يسمّع) اليوم (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
-        );
-      } else {
-        throw "فشل التقاط بكسلات الصورة";
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("حدث خطأ أثناء تصدير الصورة: $e",
-                style: const TextStyle(fontFamily: 'Cairo'))));
-      }
-    } finally {
-      if (mounted) setState(() => isExporting = false);
-    }
+    await _previewAndShareImage(
+      context: context,
+      controller: controller,
+      fileNamePrefix: "not_recited_students",
+      targetDate: widget.targetDate,
+      shareText:
+          '⚠ إشعار الطلاب (حضر ولم يسمّع) اليوم (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
+    );
+
+    if (mounted) setState(() => isExporting = false);
   }
 
   @override
@@ -2465,7 +2656,7 @@ class _DailyDidNotReciteStudentsPageState
 
                 return Stack(
                   children: [
-                    // 🔥 الرسم خارج الشاشة لضمان التصدير
+                    // 🔥 الرسم خارج الشاشة للتصدير
                     Positioned(
                       left: -9999,
                       child: WidgetsToImage(
@@ -2496,7 +2687,7 @@ class _DailyDidNotReciteStudentsPageState
                               ),
                               onPressed: isExporting
                                   ? null
-                                  : () => _shareDidNotReciteListAsImage(docs),
+                                  : () => _handleShareProcess(docs),
                               icon: isExporting
                                   ? const SizedBox(
                                       width: 18,
@@ -2508,7 +2699,7 @@ class _DailyDidNotReciteStudentsPageState
                               label: Text(
                                 isExporting
                                     ? "جاري الإنشاء..."
-                                    : "مشاركة القائمة كصورة لجروب الأهالي 📸",
+                                    : "معاينة ومشاركة القائمة للأهالي 📸",
                                 style: const TextStyle(
                                     fontFamily: 'Cairo',
                                     fontWeight: FontWeight.bold,
@@ -2611,55 +2802,112 @@ class _DailyDidNotReciteStudentsPageState
     );
   }
 
+  // 🎨 بوستر التصدير الفاخر لحضر ولم يسمّع
   Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
     return Container(
-      padding: const EdgeInsets.all(30),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xff0f172a), Color(0xff1e293b), Color(0xff0f172a)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
+      padding: const EdgeInsets.all(26),
+      decoration: BoxDecoration(
+        color: const Color(0xff0f172a),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xff334155), width: 2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text("معهد الشيخ سعيد العبدالله 🕌",
-              style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontFamily: 'Cairo')),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.mosque_rounded, color: Color(0xffd4af37), size: 28),
+              SizedBox(width: 10),
+              Text("معهد الشيخ سعيد العبدالله",
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      fontFamily: 'Cairo')),
+            ],
+          ),
           const SizedBox(height: 12),
-          Text("⚠️ قائمة الطلاب الذين حضروا ولم يسمّعوا يوم: ${widget.targetDate}",
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xfff59e0b).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: const Color(0xfff59e0b).withOpacity(0.5)),
+            ),
+            child: Text(
+              "⚠️ قائمة الطلاب الذين حضروا ولم يسْمَعوا - ${widget.targetDate}",
               style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.amber,
+                  fontSize: 13,
+                  color: Color(0xfffde68a),
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'Cairo')),
+                  fontFamily: 'Cairo'),
+            ),
+          ),
           const SizedBox(height: 20),
           Table(
+            border: TableBorder.all(
+                color: const Color(0xff334155),
+                width: 1,
+                borderRadius: BorderRadius.circular(12)),
             children: [
+              TableRow(
+                decoration: const BoxDecoration(color: Color(0xff1e293b)),
+                children: const [
+                  Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text("اسم الطالب",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Color(0xff94a3b8),
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text("المشرف المسؤول",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Color(0xff94a3b8),
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ),
+                ],
+              ),
               ...docs.map((doc) {
                 var s = doc.data() as Map<String, dynamic>;
                 return TableRow(children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.all(10),
                     child: Text(s['studentName'] ?? '',
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
                             color: Colors.white,
                             fontFamily: 'Cairo',
-                            fontWeight: FontWeight.bold)),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.all(10),
                     child: Text(s['supervisorName'] ?? 'غير محدد',
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
-                            color: Colors.white70, fontFamily: 'Cairo')),
+                            color: Color(0xffcbd5e1),
+                            fontFamily: 'Cairo',
+                            fontSize: 12)),
                   ),
                 ]);
               })
             ],
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            "يرجى من أولياء الأمور الكرام الحرص على إعداد وتسميع المقرر بالبيت 📖",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: Color(0xff94a3b8), fontSize: 11, fontFamily: 'Cairo'),
           )
         ],
       ),

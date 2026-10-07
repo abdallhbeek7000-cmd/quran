@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart'; 
 import '../services/theme_provider.dart'; 
 import '../services/notification_service.dart';
-import '../services/cycle_service.dart'; // 🚀 استيراد خدمة الدورات لجلب الدورة النشطة
+import '../services/cycle_service.dart';
 
 class ManageHonorBoardPage extends StatefulWidget {
   const ManageHonorBoardPage({super.key});
@@ -57,8 +57,10 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
     var doc = await FirebaseFirestore.instance.collection('honor_board').doc(categoryId).get();
     if (doc.exists && doc.data()!.containsKey('knights')) {
       var data = doc.data()!;
+      List<dynamic> rawKnights = data['knights'] ?? [];
+      
       setState(() {
-        knightsList = List<Map<String, dynamic>>.from(data['knights']);
+        knightsList = List<Map<String, dynamic>>.from(rawKnights);
         if (knightsList.length > 8) {
           knightsList = knightsList.sublist(0, 8);
         }
@@ -74,31 +76,40 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
       });
     } else {
       setState(() {
-        knightsList = [
-          {'name': 'لم يحدد', 'serial': '---'} 
-        ];
+        knightsList = [];
       });
     }
   }
 
-  // 🚀 دالة الحفظ مع البث الفوري للإشعارات
+  // 🚀 دالة الحفظ المعدلة مع ربط cycleId وإرسال الإشعارات
   void saveHonorBoard() async {
     if (currentCycleId.isEmpty) return;
 
     setState(() => isSaving = true);
     
     try {
-      // 1. حفظ القائمة في Firestore
+      // 1. تنظيف القائمة من العناصر الفارغة وتضمين الـ cycleId
+      List<Map<String, dynamic>> cleanKnights = knightsList
+          .where((k) => k['name'] != 'لم يحدد' && k['serial'] != '---')
+          .map((k) => {
+                ...k,
+                'cycleId': currentCycleId,
+              })
+          .toList();
+
+      // 2. حفظ القائمة في Firestore
       await FirebaseFirestore.instance.collection('honor_board').doc(selectedCategory).set({
-        'knights': knightsList.isEmpty ? [{'name': 'لم يحدد', 'serial': '---'}] : knightsList,
+        'knights': cleanKnights,
+        'cycleId': currentCycleId,
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // 2. تحديد اسم الفئة بالإشعار
+      // 3. تحديد اسم الفئة للإشعار
       String categoryName = "الطلاب الجدد";
       if (selectedCategory == "old_students") categoryName = "الطلاب القدماء";
       if (selectedCategory == "completed_students") categoryName = "الطلاب الخاتمين";
 
-      // 3. جلب جميع الطلاب النشطين في الدورة الحالية وإرسال إشعار لأولياء أمورهم
+      // 4. جلب جميع الطلاب النشطين وإرسال الإشعار
       var studentsSnapshot = await FirebaseFirestore.instance
           .collection('students')
           .where('cycleId', isEqualTo: currentCycleId)
@@ -139,7 +150,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
     }
   }
 
-  // 🚀 دالة تصفير اللوحة
+  // 🚀 دالة تصفير اللوحة وحذف الأسماء بالكامل
   void clearHonorBoard(bool isDarkMode) async {
     if (currentCycleId.isEmpty) return;
 
@@ -174,19 +185,37 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
 
     setState(() => isClearing = true);
 
-    await FirebaseFirestore.instance.collection('honor_board').doc(selectedCategory).set({
-      'knights': [],
-    });
+    try {
+      // تصفير البيانات داخل Firestore وحذف جميع الحقول السابقة
+      await FirebaseFirestore.instance.collection('honor_board').doc(selectedCategory).set({
+        'knights': [],
+        'cycleId': currentCycleId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
-    setState(() {
-      knightsList = [{'name': 'لم يحدد', 'serial': '---'}];
-      isClearing = false;
-    });
+      // تحديث الواجهة المحلية فوراً لتصبح فارغة
+      setState(() {
+        knightsList = [];
+        isClearing = false;
+      });
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(backgroundColor: Colors.redAccent, content: Text("تم تصفير اللوحة وحذف النجوم بنجاح! 🗑️", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
-    );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text("تم تصفير اللوحة وحذف جميع النجوم بنجاح! 🗑️", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+        ),
+      );
+    } catch (e) {
+      setState(() => isClearing = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text("حدث خطأ أثناء التصفير: $e", style: const TextStyle(fontFamily: 'Cairo')),
+        ),
+      );
+    }
   }
 
   String? _getMatchedValue(Map<String, dynamic> currentValue, List<Map<String, dynamic>> students) {
@@ -258,6 +287,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                               allStudents.add({
                                 'name': d['name']?.toString() ?? '',
                                 'serial': d['serial']?.toString() ?? '',
+                                'imageUrl': d['imageUrl']?.toString() ?? '',
                               });
                             }
                           }
@@ -267,7 +297,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                             child: Column(
                               children: [
-                                // كرت اختيار الفئة
+                                // 🌟 1. كرت اختيار الفئة
                                 _buildGlassContainer(
                                   isDarkMode: isDarkMode,
                                   padding: const EdgeInsets.all(22),
@@ -310,7 +340,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                                 
                                 const SizedBox(height: 20),
 
-                                // كرت اختيار الفرسان والنجوم
+                                // 🌟 2. كرت تحديد فرسان الحلقة والنجوم
                                 _buildGlassContainer(
                                   isDarkMode: isDarkMode,
                                   padding: const EdgeInsets.all(22),
@@ -332,30 +362,39 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                                       ),
                                       const SizedBox(height: 15),
 
-                                      ListView.builder(
-                                        shrinkWrap: true,
-                                        physics: const NeverScrollableScrollPhysics(),
-                                        itemCount: knightsList.length,
-                                        itemBuilder: (context, idx) {
-                                          return Column(
-                                            children: [
-                                              if (idx > 0) const SizedBox(height: 20),
-                                              _buildStudentDropdown(
-                                                "النجم رقم #${idx + 1}", 
-                                                knightsList[idx], 
-                                                allStudents, 
-                                                (val) => setState(() => knightsList[idx] = val), 
-                                                isDarkMode, 
-                                                idx == 0 ? accentGold : (idx == 1 ? const Color(0xffC0C0C0) : (idx == 2 ? const Color(0xffCD7F32) : primaryColor.withOpacity(0.7)))
-                                              ),
-                                              if (idx < knightsList.length - 1) ...[
-                                                const SizedBox(height: 20),
-                                                Divider(color: isDarkMode ? Colors.white10 : Colors.black12, height: 1),
-                                              ]
-                                            ],
-                                          );
-                                        },
-                                      ),
+                                      if (knightsList.isEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 20),
+                                          child: Text(
+                                            "اللوحة فارغة حالياً. اضغط على 'إضافة نجم' للبدء.",
+                                            style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white54 : Colors.grey),
+                                          ),
+                                        )
+                                      else
+                                        ListView.builder(
+                                          shrinkWrap: true,
+                                          physics: const NeverScrollableScrollPhysics(),
+                                          itemCount: knightsList.length,
+                                          itemBuilder: (context, idx) {
+                                            return Column(
+                                              children: [
+                                                if (idx > 0) const SizedBox(height: 20),
+                                                _buildStudentDropdown(
+                                                  "النجم رقم #${idx + 1}", 
+                                                  knightsList[idx], 
+                                                  allStudents, 
+                                                  (val) => setState(() => knightsList[idx] = val), 
+                                                  isDarkMode, 
+                                                  idx == 0 ? accentGold : (idx == 1 ? const Color(0xffC0C0C0) : (idx == 2 ? const Color(0xffCD7F32) : primaryColor.withOpacity(0.7)))
+                                                ),
+                                                if (idx < knightsList.length - 1) ...[
+                                                  const SizedBox(height: 20),
+                                                  Divider(color: isDarkMode ? Colors.white10 : Colors.black12, height: 1),
+                                                ]
+                                              ],
+                                            );
+                                          },
+                                        ),
                                       
                                       const SizedBox(height: 25),
                                       
@@ -392,7 +431,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                                             ),
                                           ),
 
-                                          if (knightsList.length > 1)
+                                          if (knightsList.isNotEmpty)
                                             TextButton.icon(
                                               style: TextButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.15)),
                                               onPressed: () {
@@ -411,6 +450,7 @@ class _ManageHonorBoardPageState extends State<ManageHonorBoardPage> {
                                 
                                 const SizedBox(height: 35),
                                 
+                                // 🌟 3. أزرار الحفظ والتصفير
                                 SizedBox(
                                   width: double.infinity,
                                   height: 55,
