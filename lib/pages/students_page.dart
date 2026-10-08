@@ -36,8 +36,10 @@ class StudentsPage extends StatefulWidget {
 }
 
 class _StudentsPageState extends State<StudentsPage> {
-  String search = '';
-  String selectedSupervisor = '';
+  // استخدام ValueNotifier لمنع إعادة بناء الشاشة بالكامل عند الكتابة
+  final ValueNotifier<String> searchNotifier = ValueNotifier<String>('');
+  final ValueNotifier<String> supervisorNotifier = ValueNotifier<String>('');
+
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
 
@@ -52,7 +54,22 @@ class _StudentsPageState extends State<StudentsPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    searchNotifier.dispose();
+    supervisorNotifier.dispose();
     super.dispose();
+  }
+
+  // 🔍 دالة لتنظيف النص العربي من الهمزات والحركات لضمان دقة البحث
+  static String _normalizeArabicText(String text) {
+    return text
+        .replaceAll(RegExp(r'[أإآA-Z]'), 'ا')
+        .replaceAll('ى', 'ي')
+        .replaceAll('ؤ', 'و')
+        .replaceAll('ئ', 'ي')
+        .replaceAll('ة', 'ه')
+        .replaceAll(RegExp(r'[\u064B-\u0652]'), '') // إزالة التشكيل
+        .trim()
+        .toLowerCase();
   }
 
   void _updateStudentLiveStatus(String studentId, String newStatus, String studentName) async {
@@ -306,7 +323,7 @@ class _StudentsPageState extends State<StudentsPage> {
                     Icon(Icons.star, color: Color(0xffCE1126), size: 4.5),
                   ],
                 ),
-              )
+              ),
             ),
             Expanded(child: Container(color: Colors.black)),
           ],
@@ -325,7 +342,6 @@ class _StudentsPageState extends State<StudentsPage> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
-  // ⚡ تم تحسين الاستعلام ليصبح خفيف وسريع جداً بدون استعلامات متداخلة
   Widget _buildAbsentAlertSection(bool isDarkMode, String cycleId) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('students')
@@ -435,7 +451,6 @@ class _StudentsPageState extends State<StudentsPage> {
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
-    // ⚡ فحص الدورة بطريقة Stream مباشرة خفيفة
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('cycles')
@@ -552,6 +567,7 @@ class _StudentsPageState extends State<StudentsPage> {
                       if (widget.role == "manager" && !widget.isArchivedFromHistory)
                         _buildAbsentAlertSection(isDarkMode, activeCycleId),
 
+                      // عزل كود حقل البحث داخل مكون معزول
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
                         child: _buildGlassContainer(
@@ -559,14 +575,17 @@ class _StudentsPageState extends State<StudentsPage> {
                           padding: const EdgeInsets.all(15),
                           child: Column(
                             children: [
-                              TextField(
-                                controller: _searchController,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                                decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
-                                onChanged: (v) {
-                                  setState(() {
-                                    search = v.trim().toLowerCase();
-                                  });
+                              ValueListenableBuilder<String>(
+                                valueListenable: searchNotifier,
+                                builder: (context, searchVal, _) {
+                                  return TextField(
+                                    controller: _searchController,
+                                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                                    decoration: _glassInputDecoration("ابحث عن اسم الطالب...", Icons.search, isDarkMode),
+                                    onChanged: (v) {
+                                      searchNotifier.value = _normalizeArabicText(v);
+                                    },
+                                  );
                                 },
                               ),
                               if (widget.role == "manager") ...[
@@ -582,39 +601,54 @@ class _StudentsPageState extends State<StudentsPage> {
                         child: StreamBuilder<QuerySnapshot>(
                           stream: query.snapshots(),
                           builder: (context, snapshot) {
-                            if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات"));
+                            if (snapshot.hasError) return const Center(child: Text("حدث خطأ في تحميل البيانات", style: TextStyle(fontFamily: 'Cairo')));
                             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
-                            var docs = snapshot.data!.docs.where((doc) {
-                              final data = doc.data() as Map<String, dynamic>;
-                              final studentName = (data['name'] ?? '').toString().trim().toLowerCase();
-                              final nameMatches = search.isEmpty || studentName.contains(search);
-                              
-                              bool supervisorMatches = true;
-                              if (selectedSupervisor.isNotEmpty) {
-                                final currentStudentSupervisor = (data['supervisorName'] ?? '').toString().trim().toLowerCase();
-                                final selectedSupervisorClean = selectedSupervisor.trim().toLowerCase();
-                                supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
-                              }
-                              return nameMatches && supervisorMatches;
-                            }).toList();
+                            final allDocs = snapshot.data!.docs;
 
-                            docs.sort((a, b) {
-                              final aData = a.data() as Map<String, dynamic>;
-                              final bData = b.data() as Map<String, dynamic>;
-                              int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
-                              int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
-                              return sA.compareTo(sB);
-                            });
+                            // الاستماع للفلترة دون إعادة بناء الـ Stream
+                            return ValueListenableBuilder<String>(
+                              valueListenable: searchNotifier,
+                              builder: (context, searchVal, _) {
+                                return ValueListenableBuilder<String>(
+                                  valueListenable: supervisorNotifier,
+                                  builder: (context, supervisorVal, _) {
+                                    var docs = allDocs.where((doc) {
+                                      final data = doc.data() as Map<String, dynamic>;
+                                      final studentNameRaw = (data['name'] ?? '').toString();
+                                      final studentNameNormalized = _normalizeArabicText(studentNameRaw);
+                                      
+                                      final nameMatches = searchVal.isEmpty || studentNameNormalized.contains(searchVal);
+                                      
+                                      bool supervisorMatches = true;
+                                      if (supervisorVal.isNotEmpty) {
+                                        final currentStudentSupervisor = _normalizeArabicText((data['supervisorName'] ?? '').toString());
+                                        final selectedSupervisorClean = _normalizeArabicText(supervisorVal);
+                                        supervisorMatches = (currentStudentSupervisor == selectedSupervisorClean);
+                                      }
+                                      return nameMatches && supervisorMatches;
+                                    }).toList();
 
-                            if (docs.isEmpty) return _buildEmptyState(isDarkMode);
+                                    docs.sort((a, b) {
+                                      final aData = a.data() as Map<String, dynamic>;
+                                      final bData = b.data() as Map<String, dynamic>;
+                                      int sA = int.tryParse(aData['serial']?.toString() ?? '0') ?? 0;
+                                      int sB = int.tryParse(bData['serial']?.toString() ?? '0') ?? 0;
+                                      return sA.compareTo(sB);
+                                    });
 
-                            return ListView.builder(
-                              physics: const BouncingScrollPhysics(),
-                              padding: const EdgeInsets.only(left: 15, right: 15, top: 5, bottom: 80),
-                              itemCount: docs.length,
-                              itemBuilder: (context, index) {
-                                return _buildStudentCard(context, docs[index], isDarkMode);
+                                    if (docs.isEmpty) return _buildEmptyState(isDarkMode);
+
+                                    return ListView.builder(
+                                      physics: const BouncingScrollPhysics(),
+                                      padding: const EdgeInsets.only(left: 15, right: 15, top: 5, bottom: 80),
+                                      itemCount: docs.length,
+                                      itemBuilder: (context, index) {
+                                        return _buildStudentCard(context, docs[index], isDarkMode);
+                                      },
+                                    );
+                                  },
+                                );
                               },
                             );
                           },
@@ -651,10 +685,10 @@ class _StudentsPageState extends State<StudentsPage> {
       prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
       suffixIcon: _searchController.text.isNotEmpty
           ? IconButton(
-              icon: Icon(Icons.clear, color: isDarkMode ? Colors.white60 : Colors.black54, size: 18),
+              icon: Icon(Icons.cancel_rounded, color: isDarkMode ? accentGold : primaryColor, size: 20),
               onPressed: () {
                 _searchController.clear();
-                setState(() => search = '');
+                searchNotifier.value = '';
               },
             )
           : null,
@@ -872,21 +906,26 @@ class _StudentsPageState extends State<StudentsPage> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox();
         final supervisors = snapshot.data!.docs;
-        return DropdownButtonFormField<String>(
-          value: selectedSupervisor.isEmpty ? null : selectedSupervisor,
-          hint: Text("فلترة بحسب المشرف...", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontSize: 13, fontFamily: 'Cairo')),
-          dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-          decoration: _glassInputDecoration("", Icons.filter_list_rounded, isDarkMode),
-          items: [
-            const DropdownMenuItem(value: '', child: Text("كل المشرفين")),
-            ...supervisors.map((sup) {
-              final supMap = sup.data() as Map<String, dynamic>;
-              String sName = supMap['name'] ?? supMap['email'] ?? 'مشرف';
-              return DropdownMenuItem(value: sName, child: Text(sName));
-            }),
-          ],
-          onChanged: (v) => setState(() => selectedSupervisor = v ?? ''),
+        return ValueListenableBuilder<String>(
+          valueListenable: supervisorNotifier,
+          builder: (context, currentSupervisor, _) {
+            return DropdownButtonFormField<String>(
+              value: currentSupervisor.isEmpty ? null : currentSupervisor,
+              hint: Text("فلترة بحسب المشرف...", style: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontSize: 13, fontFamily: 'Cairo')),
+              dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+              style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+              decoration: _glassInputDecoration("", Icons.filter_list_rounded, isDarkMode),
+              items: [
+                const DropdownMenuItem(value: '', child: Text("كل المشرفين", style: TextStyle(fontFamily: 'Cairo'))),
+                ...supervisors.map((sup) {
+                  final supMap = sup.data() as Map<String, dynamic>;
+                  String sName = supMap['name'] ?? supMap['email'] ?? 'مشرف';
+                  return DropdownMenuItem(value: sName, child: Text(sName, style: const TextStyle(fontFamily: 'Cairo')));
+                }),
+              ],
+              onChanged: (v) => supervisorNotifier.value = v ?? '',
+            );
+          },
         );
       },
     );

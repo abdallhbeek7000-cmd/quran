@@ -29,12 +29,12 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
   String? globalSupervisorName;
   bool isResetting = false;
 
-  // 🔍 تحكم بالبحث والصف الدراسي
+  // 🔍 تحكم ثابت بالبحث دون إحداث Rebuild ثقيل
   final TextEditingController _searchController = TextEditingController();
-  String searchQuery = '';
-  String selectedGrade = 'الكل'; // 👈 الصف المحدد حالياً للفلترة
+  final ValueNotifier<String> _searchQueryNotifier = ValueNotifier<String>('');
+  String selectedGrade = 'الكل';
 
-  // 🎓 القائمة الثابتة للصفوف الدراسية مثل صفحة الطالب
+  // 🎓 القائمة الثابتة للصفوف الدراسية
   final List<String> allGradesList = [
     "الكل",
     "الأول",
@@ -53,8 +53,17 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      _searchQueryNotifier.value = _searchController.text.trim().toLowerCase();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _searchQueryNotifier.dispose();
     super.dispose();
   }
 
@@ -261,37 +270,34 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                             child: Column(
                               children: [
-                                // 🔍 مربع البحث
+                                // 🔍 مربع البحث - مبني بشكل معزول يمنع الاهتزاز وضياع التركيز
                                 Container(
                                   decoration: BoxDecoration(
                                     color: isDarkMode ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.5),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white.withValues(alpha: 0.7)),
                                   ),
-                                  child: TextField(
-                                    controller: _searchController,
-                                    onChanged: (val) {
-                                      setState(() {
-                                        searchQuery = val.trim().toLowerCase();
-                                      });
+                                  child: ValueListenableBuilder<String>(
+                                    valueListenable: _searchQueryNotifier,
+                                    builder: (context, query, child) {
+                                      return TextField(
+                                        controller: _searchController,
+                                        style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white : Colors.black87),
+                                        decoration: InputDecoration(
+                                          hintText: "ابحث باسم الطالب أو رقمه التسلسلي...",
+                                          hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDarkMode ? Colors.white54 : Colors.black45),
+                                          prefixIcon: Icon(Icons.search_rounded, color: isDarkMode ? accentGold : primaryColor),
+                                          suffixIcon: query.isNotEmpty
+                                              ? IconButton(
+                                                  icon: Icon(Icons.clear, color: isDarkMode ? Colors.white54 : Colors.black54),
+                                                  onPressed: () => _searchController.clear(),
+                                                )
+                                              : null,
+                                          border: InputBorder.none,
+                                          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                        ),
+                                      );
                                     },
-                                    style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white : Colors.black87),
-                                    decoration: InputDecoration(
-                                      hintText: "ابحث باسم الطالب أو رقمه التسلسلي...",
-                                      hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDarkMode ? Colors.white54 : Colors.black45),
-                                      prefixIcon: Icon(Icons.search_rounded, color: isDarkMode ? accentGold : primaryColor),
-                                      suffixIcon: searchQuery.isNotEmpty
-                                          ? IconButton(
-                                              icon: Icon(Icons.clear, color: isDarkMode ? Colors.white54 : Colors.black54),
-                                              onPressed: () {
-                                                _searchController.clear();
-                                                setState(() => searchQuery = '');
-                                              },
-                                            )
-                                          : null,
-                                      border: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                    ),
                                   ),
                                 ),
 
@@ -364,7 +370,7 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
                             ),
                           ),
 
-                          // 🎓 اختيار الصف الدراسي (مطابق لصفحة إضافة الطالب)
+                          // 🎓 اختيار الصف الدراسي
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                             child: Align(
@@ -438,7 +444,7 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
 
                           const SizedBox(height: 10),
 
-                          // 📜 جلب وعرض قائمة الطلاب وفق الفرز
+                          // 📜 جلب وعرض قائمة الطلاب وتحديث الفلترة بسلاسة
                           Expanded(
                             child: StreamBuilder<QuerySnapshot>(
                               stream: firestore
@@ -452,172 +458,178 @@ class _AssignStudentsPageState extends State<AssignStudentsPage> {
 
                                 if (allDocs.isEmpty) return _buildEmptyState(isDarkMode);
 
-                                // 🔍 تطبيق الفلترة بالبحث والصف الدراسي المقترن
-                                var filteredDocs = allDocs.where((doc) {
-                                  var data = doc.data() as Map<String, dynamic>;
-                                  String name = (data['name'] ?? '').toString().toLowerCase();
-                                  String serial = (data['serial'] ?? '').toString().toLowerCase();
-                                  String studentGrade = (data['grade'] ?? data['class'] ?? 'غير محدد').toString().trim();
+                                return ValueListenableBuilder<String>(
+                                  valueListenable: _searchQueryNotifier,
+                                  builder: (context, searchQuery, child) {
+                                    // 🔍 الفلترة بالسيريال، الاسم، وجميع مسميات الصفوف (schoolGrade, grade, class)
+                                    var filteredDocs = allDocs.where((doc) {
+                                      var data = doc.data() as Map<String, dynamic>;
+                                      String name = (data['name'] ?? '').toString().toLowerCase();
+                                      String serial = (data['serial'] ?? '').toString().toLowerCase();
+                                      
+                                      String rawGrade = (data['schoolGrade'] ?? data['grade'] ?? data['class'] ?? 'غير محدد').toString().trim();
 
-                                  bool matchesSearch = searchQuery.isEmpty || name.contains(searchQuery) || serial.contains(searchQuery);
-                                  bool matchesGrade = selectedGrade == 'الكل' || studentGrade == selectedGrade;
+                                      bool matchesSearch = searchQuery.isEmpty || name.contains(searchQuery) || serial.contains(searchQuery);
+                                      bool matchesGrade = selectedGrade == 'الكل' || rawGrade == selectedGrade;
 
-                                  return matchesSearch && matchesGrade;
-                                }).toList();
+                                      return matchesSearch && matchesGrade;
+                                    }).toList();
 
-                                // 🔢 ترتيب الطلاب حسب السيريال
-                                filteredDocs.sort((a, b) {
-                                  var dataA = a.data() as Map<String, dynamic>;
-                                  var dataB = b.data() as Map<String, dynamic>;
-                                  int serialA = int.tryParse(dataA['serial']?.toString() ?? '') ?? 99999999;
-                                  int serialB = int.tryParse(dataB['serial']?.toString() ?? '') ?? 99999999;
-                                  return serialA.compareTo(serialB);
-                                });
+                                    // 🔢 ترتيب الطلاب حسب السيريال
+                                    filteredDocs.sort((a, b) {
+                                      var dataA = a.data() as Map<String, dynamic>;
+                                      var dataB = b.data() as Map<String, dynamic>;
+                                      int serialA = int.tryParse(dataA['serial']?.toString() ?? '') ?? 99999999;
+                                      int serialB = int.tryParse(dataB['serial']?.toString() ?? '') ?? 99999999;
+                                      return serialA.compareTo(serialB);
+                                    });
 
-                                return filteredDocs.isEmpty
-                                    ? Center(
-                                        child: Text(
-                                          "لا يوجد طلاب في $selectedGrade 🔍",
-                                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white60 : primaryColor),
-                                        ),
-                                      )
-                                    : ListView.builder(
-                                        physics: const BouncingScrollPhysics(),
-                                        padding: const EdgeInsets.only(left: 20, right: 20, top: 5, bottom: 25),
-                                        itemCount: filteredDocs.length,
-                                        itemBuilder: (context, index) {
-                                          final student = filteredDocs[index];
-                                          final data = student.data() as Map<String, dynamic>;
-                                          final String imageUrl = data['imageUrl'] ?? '';
-                                          final String studentName = data['name'] ?? 'بدون اسم';
-                                          final String serial = data['serial']?.toString() ?? '---';
-                                          final String studentGrade = data['grade'] ?? data['class'] ?? '';
-                                          final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
+                                    return filteredDocs.isEmpty
+                                        ? Center(
+                                            child: Text(
+                                              "لا يوجد طلاب متوافقون مع الفرز 🔍",
+                                              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white60 : primaryColor),
+                                            ),
+                                          )
+                                        : ListView.builder(
+                                            physics: const BouncingScrollPhysics(),
+                                            padding: const EdgeInsets.only(left: 20, right: 20, top: 5, bottom: 25),
+                                            itemCount: filteredDocs.length,
+                                            itemBuilder: (context, index) {
+                                              final student = filteredDocs[index];
+                                              final data = student.data() as Map<String, dynamic>;
+                                              final String imageUrl = data['imageUrl'] ?? '';
+                                              final String studentName = data['name'] ?? 'بدون اسم';
+                                              final String serial = data['serial']?.toString() ?? '---';
+                                              final String studentGrade = data['schoolGrade'] ?? data['grade'] ?? data['class'] ?? '';
+                                              final String firstLetter = studentName.isNotEmpty ? studentName.trim().substring(0, 1) : "?";
 
-                                          return Container(
-                                            margin: const EdgeInsets.only(bottom: 10),
-                                            child: _buildGlassContainer(
-                                              isDarkMode: isDarkMode,
-                                              padding: const EdgeInsets.symmetric(vertical: 4),
-                                              child: ListTile(
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                                leading: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                      margin: const EdgeInsets.only(left: 8),
-                                                      decoration: BoxDecoration(
-                                                        color: primaryColor.withValues(alpha: 0.15),
-                                                        borderRadius: BorderRadius.circular(8),
-                                                      ),
-                                                      child: Text(
-                                                        "#$serial",
-                                                        style: TextStyle(
-                                                          fontFamily: 'Cairo',
-                                                          fontSize: 11,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: isDarkMode ? accentGold : primaryColor,
+                                              return Container(
+                                                margin: const EdgeInsets.only(bottom: 10),
+                                                child: _buildGlassContainer(
+                                                  isDarkMode: isDarkMode,
+                                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                                  child: ListTile(
+                                                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                                    leading: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                          margin: const EdgeInsets.only(left: 8),
+                                                          decoration: BoxDecoration(
+                                                            color: primaryColor.withValues(alpha: 0.15),
+                                                            borderRadius: BorderRadius.circular(8),
+                                                          ),
+                                                          child: Text(
+                                                            "#$serial",
+                                                            style: TextStyle(
+                                                              fontFamily: 'Cairo',
+                                                              fontSize: 11,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: isDarkMode ? accentGold : primaryColor,
+                                                            ),
+                                                          ),
                                                         ),
-                                                      ),
-                                                    ),
-                                                    Container(
-                                                      width: 46,
-                                                      height: 46,
-                                                      decoration: BoxDecoration(
-                                                        shape: BoxShape.circle,
-                                                        color: isDarkMode ? Colors.white10 : primaryColor.withValues(alpha: 0.08),
-                                                      ),
-                                                      child: ClipRRect(
-                                                        borderRadius: BorderRadius.circular(23),
-                                                        child: imageUrl.isNotEmpty
-                                                            ? CachedNetworkImage(
-                                                                imageUrl: imageUrl,
-                                                                fit: BoxFit.cover,
-                                                                placeholder: (context, url) => const Center(
-                                                                  child: SizedBox(
-                                                                    width: 18,
-                                                                    height: 18,
-                                                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                                        Container(
+                                                          width: 46,
+                                                          height: 46,
+                                                          decoration: BoxDecoration(
+                                                            shape: BoxShape.circle,
+                                                            color: isDarkMode ? Colors.white10 : primaryColor.withValues(alpha: 0.08),
+                                                          ),
+                                                          child: ClipRRect(
+                                                            borderRadius: BorderRadius.circular(23),
+                                                            child: imageUrl.isNotEmpty
+                                                                ? CachedNetworkImage(
+                                                                    imageUrl: imageUrl,
+                                                                    fit: BoxFit.cover,
+                                                                    placeholder: (context, url) => const Center(
+                                                                      child: SizedBox(
+                                                                        width: 18,
+                                                                        height: 18,
+                                                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                                                      ),
+                                                                    ),
+                                                                    errorWidget: (context, url, error) => Center(
+                                                                      child: Text(
+                                                                        firstLetter,
+                                                                        style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo'),
+                                                                      ),
+                                                                    ),
+                                                                  )
+                                                                : Center(
+                                                                    child: Text(
+                                                                      firstLetter,
+                                                                      style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo'),
+                                                                    ),
                                                                   ),
-                                                                ),
-                                                                errorWidget: (context, url, error) => Center(
-                                                                  child: Text(
-                                                                    firstLetter,
-                                                                    style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo'),
-                                                                  ),
-                                                                ),
-                                                              )
-                                                            : Center(
-                                                                child: Text(
-                                                                  firstLetter,
-                                                                  style: TextStyle(color: isDarkMode ? accentGold : primaryColor, fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo'),
-                                                                ),
-                                                              ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                title: Text(
-                                                  studentName, 
-                                                  style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontSize: 14, fontFamily: 'Cairo'),
-                                                ),
-                                                subtitle: Padding(
-                                                  padding: const EdgeInsets.only(top: 4.0),
-                                                  child: Row(
-                                                    children: [
-                                                      Text(
-                                                        data['supervisorName'] == '' || data['supervisorName'] == null 
-                                                            ? '⚠️ غير موزع' 
-                                                            : "🔹 المشرف: ${data['supervisorName']}",
-                                                        style: TextStyle(
-                                                          fontWeight: FontWeight.bold,
-                                                          fontSize: 11,
-                                                          fontFamily: 'Cairo',
-                                                          color: data['supervisorName'] == '' || data['supervisorName'] == null ? Colors.orange : Colors.green,
-                                                        ),
-                                                      ),
-                                                      if (studentGrade.isNotEmpty) ...[
-                                                        const SizedBox(width: 8),
-                                                        Text(
-                                                          "• $studentGrade",
-                                                          style: TextStyle(
-                                                            fontSize: 10.5,
-                                                            fontFamily: 'Cairo',
-                                                            color: isDarkMode ? Colors.white54 : Colors.black45,
                                                           ),
                                                         ),
                                                       ],
-                                                    ],
-                                                  ),
-                                                ),
-                                                trailing: ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: globalSupervisorId == null 
-                                                        ? (isDarkMode ? Colors.white12 : Colors.grey.shade300) 
-                                                        : (isDarkMode ? accentGold : primaryColor),
-                                                    elevation: globalSupervisorId == null ? 0 : 3,
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                                  ),
-                                                  onPressed: globalSupervisorId == null 
-                                                      ? null 
-                                                      : () => assignStudent(student.id, globalSupervisorId!, globalSupervisorName!),
-                                                  child: Text(
-                                                    "توزيع", 
-                                                    style: TextStyle(
-                                                      fontFamily: 'Cairo',
-                                                      fontWeight: FontWeight.bold, 
-                                                      fontSize: 12,
-                                                      color: globalSupervisorId == null ? Colors.grey : Colors.white,
+                                                    ),
+                                                    title: Text(
+                                                      studentName, 
+                                                      style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontSize: 14, fontFamily: 'Cairo'),
+                                                    ),
+                                                    subtitle: Padding(
+                                                      padding: const EdgeInsets.only(top: 4.0),
+                                                      child: Row(
+                                                        children: [
+                                                          Text(
+                                                            data['supervisorName'] == '' || data['supervisorName'] == null 
+                                                                ? '⚠️ غير موزع' 
+                                                                : "🔹 المشرف: ${data['supervisorName']}",
+                                                            style: TextStyle(
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 11,
+                                                              fontFamily: 'Cairo',
+                                                              color: data['supervisorName'] == '' || data['supervisorName'] == null ? Colors.orange : Colors.green,
+                                                            ),
+                                                          ),
+                                                          if (studentGrade.isNotEmpty) ...[
+                                                            const SizedBox(width: 8),
+                                                            Text(
+                                                              "• $studentGrade",
+                                                              style: TextStyle(
+                                                                fontSize: 10.5,
+                                                                fontFamily: 'Cairo',
+                                                                color: isDarkMode ? Colors.white54 : Colors.black45,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    trailing: ElevatedButton(
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: globalSupervisorId == null 
+                                                            ? (isDarkMode ? Colors.white12 : Colors.grey.shade300) 
+                                                            : (isDarkMode ? accentGold : primaryColor),
+                                                        elevation: globalSupervisorId == null ? 0 : 3,
+                                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                                      ),
+                                                      onPressed: globalSupervisorId == null 
+                                                          ? null 
+                                                          : () => assignStudent(student.id, globalSupervisorId!, globalSupervisorName!),
+                                                      child: Text(
+                                                        "توزيع", 
+                                                        style: TextStyle(
+                                                          fontFamily: 'Cairo',
+                                                          fontWeight: FontWeight.bold, 
+                                                          fontSize: 12,
+                                                          color: globalSupervisorId == null ? Colors.grey : Colors.white,
+                                                        ),
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                            ),
+                                              );
+                                            },
                                           );
-                                        },
-                                      );
+                                  },
+                                );
                               },
                             ),
                           ),

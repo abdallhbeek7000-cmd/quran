@@ -555,25 +555,26 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     return parts.join(" | ");
   }
 
+  // 🛠️ جلب نوع الطالب مع دعم الكاش المحلي لضمان العمل 100% بدون إنترنت
   Future<void> _checkIfStudentIsCompleted() async {
     try {
       String studentId = widget.data['studentId'] ?? '';
       if (studentId.isNotEmpty) {
-        // جلب البيانات مع دعم الكاش لتفادي البطء عند الـ Offline
         DocumentSnapshot studentDoc = await FirebaseFirestore.instance
             .collection('students')
             .doc(studentId)
-            .get(const GetOptions(source: Source.serverAndCache));
+            .get(const GetOptions(source: Source.cache))
+            .catchError((_) => FirebaseFirestore.instance.collection('students').doc(studentId).get());
 
         if (studentDoc.exists && studentDoc.data() != null) {
           Map<String, dynamic> sData = studentDoc.data() as Map<String, dynamic>;
           if (sData['studentType'] == 'completed') {
-            setState(() => isCompletedStudent = true);
+            if (mounted) setState(() => isCompletedStudent = true);
           }
         }
       }
     } catch (e) {
-      print("Error checking student type: $e");
+      debugPrint("تنبيه: تعذر فحص نوع الطالب محلياً: $e");
     } finally {
       if (mounted) setState(() => checkingStudentType = false);
     }
@@ -741,6 +742,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     );
   }
 
+  // 🛠️ تعديل جلب المشرفين ليعتمد أولاً على الكاش لحماية التطبيق من التعليق في حال عدم توفر النت
   void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode, List<Map<String, String>> targetList, String title) {
     showModalBottomSheet(
       context: context,
@@ -766,8 +768,8 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                   Expanded(
                     child: FutureBuilder<List<QuerySnapshot>>(
                       future: Future.wait([
-                        FirebaseFirestore.instance.collection('users').get(const GetOptions(source: Source.serverAndCache)),
-                        FirebaseFirestore.instance.collection('supervisors').get(const GetOptions(source: Source.serverAndCache))
+                        FirebaseFirestore.instance.collection('users').get(const GetOptions(source: Source.cache)).catchError((_) => FirebaseFirestore.instance.collection('users').get()),
+                        FirebaseFirestore.instance.collection('supervisors').get(const GetOptions(source: Source.cache)).catchError((_) => FirebaseFirestore.instance.collection('supervisors').get())
                       ]),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -1227,6 +1229,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     );
   }
 
+  // 🚀 دالة الحفظ المعدلة والمهيأة 100% للعمل أوفلاين
   save() async {
     if (loading) return;
 
@@ -1332,20 +1335,22 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     };
 
     try {
-      // 1️⃣ حفظ البيانات محلياً وفي السيرفر بنفس الوقت عبر Firestore Cache
+      // 1️⃣ التعديل والحفظ فوراً بالفايربيس كاش محلياً وسيرفراً بنفس الوقت
       await FirebaseFirestore.instance.collection('sessions').doc(widget.sessionId).set(updateData, SetOptions(merge: true));
 
-      // 2️⃣ تحديث إجمالي صفحات الطالب محلياً دون إيقاف التطبيق
+      // 2️⃣ تحديث إجمالي صفحات الطالب محلياً بدون إيقاف المجرى
       if (!absent && !isExam && !didNotRecite && studentId.isNotEmpty && !isCompletedStudent) {
         FirebaseFirestore.instance.collection('students').doc(studentId).update({
           'memorizedPages': totalPages,
-        }).catchError((e) => print("تنبيه: سيتم مزامنة إجمالي الصفحات فور الاتصال بالشبكة"));
+        }).catchError((_) {});
       }
 
-      // 3️⃣ حساب الأيام والمتتاليات في الخلفية بدون حجب الواجهة
-      sessionService.recalculateConsecutiveAbsences(studentId).catchError((_) {});
+      // 3️⃣ حساب الغياب المتتالي بطريقة آمنة لا تحجب الواجهة وتلتقط الأخطاء
+      sessionService.recalculateConsecutiveAbsences(studentId).catchError((e) {
+        debugPrint("ملاحظة: المزامنة لفرز الغياب ستكتمل عند الاتصال بالشبكة: $e");
+      });
 
-      // 4️⃣ إرسال وحفظ الإشعار بالطابور دون حظر الواجهة عند انقطاع الإنترنت
+      // 4️⃣ التعامل مع الإشعارات بشكل محمي تماماً من حجب الحفظ أوفلاين
       if (studentId.isNotEmpty) {
         String notifyTitle = "✏️ تعديل في بيانات الحلقة";
         String notifyBody = absent
@@ -1353,20 +1358,30 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
             : (isExam ? "تم تعديل الجلسة وتحديث درجة الاختبار (${examScoreController.text.trim()} من 100)" : "تم تعديل وتحديث بيانات يومية الطالب بنجاح.");
         String notifyType = absent ? "absent" : (isExam ? "exam" : "regular");
 
-        NotificationService.sendAndSaveNotification(
-          studentId: studentId,
-          title: notifyTitle,
-          body: notifyBody,
-          type: notifyType,
-          context: context,
-        ).catchError((error) async {
+        try {
+          NotificationService.sendAndSaveNotification(
+            studentId: studentId,
+            title: notifyTitle,
+            body: notifyBody,
+            type: notifyType,
+            context: context,
+          ).catchError((_) async {
+            await NotificationQueueManager.addToQueue(
+              studentId: studentId,
+              title: notifyTitle,
+              body: notifyBody,
+              type: notifyType,
+            );
+          });
+        } catch (_) {
+          // إضافة للطابور محلياً فوراً في حال الانقطاع التام
           await NotificationQueueManager.addToQueue(
             studentId: studentId,
             title: notifyTitle,
             body: notifyBody,
             type: notifyType,
           );
-        });
+        }
       }
 
       if (!mounted) return;
@@ -1381,7 +1396,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
       Navigator.pop(context);
     } catch (e) {
-      print("خطأ أثناء الحفظ: $e");
+      debugPrint("خطأ أثناء الحفظ: $e");
       if (mounted) {
         GlassToast.show(
           context,
