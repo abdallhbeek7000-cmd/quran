@@ -40,6 +40,7 @@ import '../services/prayer_service.dart';
 import 'institute_expenses_page.dart'; 
 import 'all_cycles_students_page.dart';
 import 'archived_student_sessions_page.dart';
+import 'holiday_management_page.dart';
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -681,6 +682,10 @@ class _HomePageState extends State<HomePage> {
                                 }, isDark),
                                 _buildCreativeMenuCard(Icons.group_add_rounded, "إضافة مشرفين", const [Color(0xfff59e0b), Color(0xffd97706)], () => _nav(const SupervisorPage()), isDark),
                                 _buildCreativeMenuCard(Icons.query_stats_rounded, "الإحصائيات اليومية", const [Color(0xffec4899), Color(0xffbe185d)], () => _nav(const DailyStatsPage()), isDark),
+                                // 🌴 أضيفت هنا داخل قسم المدير فقط
+                                _buildCreativeMenuCard(Icons.beach_access_rounded, "تسجيل العطلات 🌴", const [Color(0xfff59e0b), Color(0xffb45309)], () {
+                                  openPageWithActiveCycle((cycle) => HolidayManagementPage(cycle: cycle, role: widget.role));
+                                }, isDark),
                               ],
 
                               _buildCreativeMenuCard(Icons.groups_rounded, "عرض الطلاب 🎒", const [Color(0xff06b6d4), Color(0xff0891b2)], () {

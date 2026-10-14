@@ -88,7 +88,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     }
   }
 
-  // 📊 دالة التصدير للإكسل بحسب الدورة النشطة
   Future<void> exportSessionsToExcel(BuildContext context, String? cycleId) async {
     try {
       if (cycleId == null || cycleId.isEmpty) {
@@ -127,8 +126,8 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         int dateComparison = dateBObj.compareTo(dateAObj);
 
         if (dateComparison == 0) {
-          Timestamp? tA = dataA['timestamp'] as Timestamp?;
-          Timestamp? tB = dataB['timestamp'] as Timestamp?;
+          Timestamp? tA = dataA['createdAt'] as Timestamp?;
+          Timestamp? tB = dataB['createdAt'] as Timestamp?;
           if (tA != null && tB != null) return tB.compareTo(tA);
           if (tA == null && tB != null) return -1; 
           if (tB == null && tA != null) return 1;
@@ -166,23 +165,27 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         pkg_excel.TextCellValue('ملاحظات'),
       ]);
 
-      int totalSessions = docs.length;
+      int currentSessionCounter = docs.where((doc) => doc.data()['isHoliday'] != true && doc.data()['sessionType'] != 'holiday').length;
 
       for (int i = 0; i < docs.length; i++) {
         var doc = docs[i];
         var data = doc.data();
         
-        int sessionNum = totalSessions - i;
-        
+        bool isHoliday = data['isHoliday'] == true || data['sessionType'] == 'holiday';
+        String sessionNumStr = isHoliday ? 'عطلة' : currentSessionCounter.toString();
+        if (!isHoliday) currentSessionCounter--;
+
         bool isAbsent = data['absent'] ?? false;
         bool isExam = data['isExam'] ?? false;
         bool didNotRecite = data['didNotRecite'] ?? false;
         int selectedJuz = data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
 
         String juzName = selectedJuz > 0 ? _getJuzName(selectedJuz) : '';
-        String sessionType = isAbsent 
-            ? 'غائب' 
-            : (isExam ? 'اختبار' : (didNotRecite ? 'بدون تسميع' : (juzName.isNotEmpty ? 'حلقة ($juzName)' : 'حلقة عادية')));
+        String sessionType = isHoliday
+            ? 'عطلة رسمية / إجازة'
+            : (isAbsent 
+                ? 'غائب' 
+                : (isExam ? 'اختبار' : (didNotRecite ? 'بدون تسميع' : (juzName.isNotEmpty ? 'حلقة ($juzName)' : 'حلقة عادية'))));
         
         String dateStr = data['date']?.toString() ?? '';
         String dayName = _getArabicDayName(dateStr);
@@ -199,7 +202,11 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         String newRevRatingResult = data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? '---';
         String oldRevRatingResult = data['oldReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? '---';
         
-        if (isExam && !isAbsent) {
+        if (isHoliday) {
+          memRatingResult = 'عطلة';
+          newRevRatingResult = 'عطلة';
+          oldRevRatingResult = 'عطلة';
+        } else if (isExam && !isAbsent) {
           memRatingResult = 'علامة: ${data['examScore'] ?? 0} من 100';
           newRevRatingResult = 'اختبار';
           oldRevRatingResult = 'اختبار';
@@ -207,9 +214,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           memRatingResult = '---';
           newRevRatingResult = '---';
           oldRevRatingResult = '---';
-        } else if (isCompleted) {
-          memRatingResult = '---';
-          newRevRatingResult = '---';
         }
 
         String nMemo = data['newMemorization']?.toString().trim() ?? '';
@@ -220,18 +224,15 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         String hwNew = data['newHomework'] ?? '';
         String hwNewRev = data['newReviewHomework'] ?? '';
         String hwOldRev = data['oldReviewHomework'] ?? '';
-        String hwLegacy = data['homework'] ?? '';
 
-        if (hwNew.isEmpty && hwNewRev.isEmpty && hwOldRev.isEmpty && hwLegacy.isNotEmpty) {
-          hwOldRev = hwLegacy; 
-        }
-
-        String absenceInfo = isAbsent 
-            ? "${data['absenceType'] ?? 'بدون عذر'}${data['absenceReason'] != null && data['absenceReason'].toString().isNotEmpty ? ' (' + data['absenceReason'] + ')' : ''}"
-            : '---';
+        String absenceInfo = isHoliday 
+            ? "عطلة (${data['note'] ?? 'إجازة رسمية'})" 
+            : (isAbsent 
+                ? "${data['absenceType'] ?? 'بدون عذر'}${data['absenceReason'] != null && data['absenceReason'].toString().isNotEmpty ? ' (' + data['absenceReason'] + ')' : ''}"
+                : '---');
 
         sheetObject.appendRow([
-          pkg_excel.TextCellValue(sessionNum.toString()),
+          pkg_excel.TextCellValue(sessionNumStr),
           pkg_excel.TextCellValue(dateStr),
           pkg_excel.TextCellValue(dayName), 
           pkg_excel.TextCellValue(actualCreatedTime),
@@ -242,18 +243,18 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           pkg_excel.TextCellValue((memRatingResult.isEmpty || nMemo.isEmpty) ? '---' : memRatingResult),
           pkg_excel.TextCellValue((newRevRatingResult.isEmpty || nRev.isEmpty) ? '---' : newRevRatingResult),
           pkg_excel.TextCellValue((oldRevRatingResult.isEmpty || fRev.isEmpty) ? '---' : oldRevRatingResult),
-          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isCompleted) ? '---' : nMemo),
-          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isCompleted) ? '---' : nRev),
-          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : fRev),
-          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite) ? '---' : sight),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwNew),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwNewRev),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : hwOldRev),
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['religiousActivities'] ?? '')), 
-          pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (selectedJuz > 0 ? 'نظام أجزاء' : (isAbsent ? '---' : (data['total_memorized_pages']?.toString() ?? '---')))), 
-          pkg_excel.TextCellValue((isAbsent || isExam) ? '---' : (data['studentStatus'] ?? 'مهذب')),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isCompleted || isHoliday) ? '---' : nMemo),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isCompleted || isHoliday) ? '---' : nRev),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isHoliday) ? '---' : fRev),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isHoliday) ? '---' : sight),
+          pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : hwNew),
+          pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : hwNewRev),
+          pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : hwOldRev),
+          pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : (data['religiousActivities'] ?? '')), 
+          pkg_excel.TextCellValue(isCompleted ? '604 صفحة' : (selectedJuz > 0 ? 'نظام أجزاء' : (isAbsent || isHoliday ? '---' : (data['total_memorized_pages']?.toString() ?? '---')))), 
+          pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : (data['studentStatus'] ?? 'مهذب')),
           pkg_excel.TextCellValue(absenceInfo),
-          pkg_excel.TextCellValue(data['notes']?.toString() ?? ''),
+          pkg_excel.TextCellValue(data['notes']?.toString() ?? data['note']?.toString() ?? ''),
         ]);
       }
 
@@ -381,7 +382,8 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                           
-                          final sessions = snapshot.data!.docs;
+                          var sessions = snapshot.data!.docs;
+                          
                           if (sessions.isEmpty) return _buildEmptyState(isDarkMode);
 
                           List<QueryDocumentSnapshot> sortedSessions = List.from(sessions);
@@ -396,14 +398,24 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                             int dateComparison = dateBObj.compareTo(dateAObj);
 
                             if (dateComparison == 0) {
-                              Timestamp? tA = dataA['timestamp'] as Timestamp?;
-                              Timestamp? tB = dataB['timestamp'] as Timestamp?;
+                              Timestamp? tA = dataA['createdAt'] as Timestamp?;
+                              Timestamp? tB = dataB['createdAt'] as Timestamp?;
                               if (tA != null && tB != null) return tB.compareTo(tA);
                               if (tA == null && tB != null) return -1; 
                               if (tB == null && tA != null) return 1;
                             }
                             return dateComparison;
                           });
+
+                          // حساب عدد الجلسات النظامية وتخطي العطلة في الترقيم
+                          int normalSessionsTotal = sortedSessions
+                              .where((doc) {
+                                final d = doc.data() as Map<String, dynamic>;
+                                return d['isHoliday'] != true && d['sessionType'] != 'holiday';
+                              })
+                              .length;
+
+                          int runningSessionCounter = normalSessionsTotal;
 
                           return ListView.builder(
                             physics: const BouncingScrollPhysics(),
@@ -412,8 +424,23 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                             itemBuilder: (context, index) {
                               final session = sortedSessions[index];
                               final data = session.data() as Map<String, dynamic>;
-                              int sessionNum = sortedSessions.length - index;
-                              return _buildSessionTimelineItem(context, session.id, data, isDarkMode, isCompletedStudent, sessionNum);
+
+                              bool isHoliday = data['isHoliday'] == true || data['sessionType'] == 'holiday';
+                              int currentNumber = runningSessionCounter;
+
+                              if (!isHoliday) {
+                                runningSessionCounter--;
+                              }
+
+                              return _buildSessionTimelineItem(
+                                context, 
+                                session.id, 
+                                data, 
+                                isDarkMode, 
+                                isCompletedStudent, 
+                                isHoliday ? 0 : currentNumber,
+                                isHoliday: isHoliday,
+                              );
                             },
                           );
                         },
@@ -429,15 +456,147 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     );
   }
 
-  Widget _buildSessionTimelineItem(BuildContext context, String sessionId, Map<String, dynamic> data, bool isDarkMode, bool isCompletedStudent, int sessionNumber) {
+  Widget _buildSessionTimelineItem(
+    BuildContext context, 
+    String sessionId, 
+    Map<String, dynamic> data, 
+    bool isDarkMode, 
+    bool isCompletedStudent, 
+    int sessionNumber, {
+    bool isHoliday = false,
+  }) {
+    String sessionDateRaw = data['date'] ?? '';
+    String dayName = _getArabicDayName(sessionDateRaw);
+    String displayDate = dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
+
+    // 🌴 1. كارت العطلة الرسمية الفاخر + مع تفعيل زري الحذف والتعديل داخل الكارت
+    if (isHoliday) {
+      String holidayReason = data['note'] ?? data['notes'] ?? data['title'] ?? 'عطلة رسمية / إجازة معتمدة';
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: LinearGradient(
+              colors: isDarkMode 
+                  ? [const Color(0xffb45309).withOpacity(0.35), const Color(0xff78350f).withOpacity(0.2)] 
+                  : [const Color(0xfffef3c7), const Color(0xfffde68a)],
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+            ),
+            border: Border.all(
+              color: Colors.amber.shade600.withOpacity(0.6),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.amber.shade900.withOpacity(0.12),
+                blurRadius: 15,
+                offset: const Offset(0, 6),
+              )
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade600,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(color: Colors.amber.shade800.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3)),
+                            ],
+                          ),
+                          child: const Icon(Icons.beach_access_rounded, color: Colors.white, size: 26),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    "عطلة رسمية 🌴",
+                                    style: TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: isDarkMode ? Colors.amber.shade300 : Colors.amber.shade900,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  _buildBadge("إجازة", Colors.amber.shade800),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                displayDate,
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDarkMode ? Colors.white70 : Colors.brown.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? Colors.black26 : Colors.white.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.amber.shade600.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, size: 16, color: isDarkMode ? Colors.amber.shade300 : Colors.brown.shade800),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "السبب: $holidayReason",
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: isDarkMode ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // زر حذف العطلة
+                    _buildActionButtons(context, sessionId, data, isDarkMode),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 📖 2. التصميم الاعتيادي للجلسات
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
     bool didNotRecite = data['didNotRecite'] ?? false;
     int selectedJuz = data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
-
-    String sessionDateRaw = data['date'] ?? '';
-    String dayName = _getArabicDayName(sessionDateRaw);
-    String displayDate = dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
 
     String actualCreatedAt = data['actualCreatedAt']?.toString() ?? '';
     String actualEditedAt = data['actualEditedAt']?.toString() ?? '';
@@ -613,7 +772,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
 
                   Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
 
-                  // 🎯 1. مربعات التسميع (تظهر فقط إذا سمّع الطالب)
                   if (!isAbsent && !isExam && !didNotRecite) ...[
                     if (activeBoxes.isNotEmpty) ...[
                       for (int i = 0; i < activeBoxes.length; i += 2)
@@ -634,7 +792,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                     ],
                   ],
 
-                  // 🎯 2. مربع الواجب القادم (يظهر حتى لو "حضر ولم يسمّع")
                   if (!isAbsent && !isExam) ...[
                     if (nHw.isNotEmpty || nRevHw.isNotEmpty || oRevHw.isNotEmpty || oldHw.isNotEmpty) ...[
                       Container(
@@ -884,19 +1041,22 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
       return const SizedBox();
     }
 
+    bool isHoliday = data['isHoliday'] == true || data['sessionType'] == 'holiday';
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        TextButton.icon(
-          style: TextButton.styleFrom(
-            backgroundColor: isDarkMode ? Colors.orange.withOpacity(0.12) : Colors.orange.withOpacity(0.08),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+        if (!isHoliday)
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              backgroundColor: isDarkMode ? Colors.orange.withOpacity(0.12) : Colors.orange.withOpacity(0.08),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+            ),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditSessionPage(sessionId: id, data: data))),
+            icon: Icon(Icons.edit_rounded, size: 16, color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800),
+            label: Text("تعديل الجلسة", style: TextStyle(color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12)),
           ),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditSessionPage(sessionId: id, data: data))),
-          icon: Icon(Icons.edit_rounded, size: 16, color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800),
-          label: Text("تعديل الجلسة", style: TextStyle(color: isDarkMode ? Colors.orangeAccent : Colors.orange.shade800, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12)),
-        ),
-        if (widget.role == "manager") ...[
+        if (widget.role == "manager" || isHoliday) ...[
           const SizedBox(width: 10),
           TextButton.icon(
             style: TextButton.styleFrom(
@@ -908,8 +1068,8 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                 context: context,
                 builder: (ctx) => AlertDialog(
                   backgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                  title: Text("حذف الجلسة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : Colors.black)),
-                  content: Text("هل أنت تأكد من رغبتك في حذف هذه الجلسة بشكل نهائي؟", style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black87)),
+                  title: Text(isHoliday ? "حذف العطلة" : "حذف الجلسة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : Colors.black)),
+                  content: Text(isHoliday ? "هل أنت متأكد من حذف هذه العطلة المسجلة لهذا الطالب؟" : "هل أنت تأكد من رغبتك في حذف هذه الجلسة بشكل نهائي؟", style: TextStyle(fontFamily: 'Cairo', color: isDarkMode ? Colors.white70 : Colors.black87)),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo'))),
                     TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("حذف", style: TextStyle(fontFamily: 'Cairo', color: Colors.redAccent, fontWeight: FontWeight.bold))),
@@ -918,15 +1078,17 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
               );
 
               if (confirm == true) {
-                await SessionService().deleteSession(id);
-                SessionService().recalculateConsecutiveAbsences(data['studentId']);
+                await FirebaseFirestore.instance.collection('sessions').doc(id).delete();
+                if (!isHoliday) {
+                  SessionService().recalculateConsecutiveAbsences(data['studentId']);
+                }
                 
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الجلسة بنجاح", style: TextStyle(fontFamily: 'Cairo'))));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isHoliday ? "تم حذف العطلة بنجاح" : "تم حذف الجلسة بنجاح", style: const TextStyle(fontFamily: 'Cairo'))));
               }
             },
             icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
-            label: const Text("حذف", style: TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12)),
+            label: Text(isHoliday ? "حذف العطلة" : "حذف", style: const TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12)),
           ),
         ]
       ],
