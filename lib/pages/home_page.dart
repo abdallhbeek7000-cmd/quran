@@ -41,6 +41,8 @@ import 'institute_expenses_page.dart';
 import 'all_cycles_students_page.dart';
 import 'archived_student_sessions_page.dart';
 import 'holiday_management_page.dart';
+import 'honors_record_page.dart';
+import 'honor_suggestions_page.dart'; // 💡 تم ربط صفحة اقتراحات التكريم بشكل صحيح
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -470,6 +472,19 @@ class _HomePageState extends State<HomePage> {
                               _nav(const QuranCompletionsPage());
                             }, isDark),
                           ],
+                          // 💡 توجيه زر اقتراحات التكريم لصفحة الاقتراحات
+                          _buildSheetItem(Icons.tips_and_updates_rounded, "اقتراحات التكريم 💡", Colors.amber, () {
+                            Navigator.pop(context);
+                            openPageWithActiveCycle((cycle) => HonorSuggestionsPage(
+                              cycle: cycle,
+                              role: widget.role,
+                              uid: widget.uid,
+                            ));
+                          }, isDark),
+                          _buildSheetItem(Icons.military_tech_rounded, "سجل التكريمات 🏅", Colors.amberAccent, () {
+                            Navigator.pop(context);
+                            openPageWithActiveCycle((cycle) => HonorsRecordPage(cycle: cycle, role: widget.role));
+                          }, isDark),
                           _buildSheetItem(Icons.workspace_premium_rounded, "لوحة الشرف 🏆", Colors.amber, () {
                             Navigator.pop(context);
                             _nav(HonorBoardPage(role: widget.role));
@@ -682,11 +697,23 @@ class _HomePageState extends State<HomePage> {
                                 }, isDark),
                                 _buildCreativeMenuCard(Icons.group_add_rounded, "إضافة مشرفين", const [Color(0xfff59e0b), Color(0xffd97706)], () => _nav(const SupervisorPage()), isDark),
                                 _buildCreativeMenuCard(Icons.query_stats_rounded, "الإحصائيات اليومية", const [Color(0xffec4899), Color(0xffbe185d)], () => _nav(const DailyStatsPage()), isDark),
-                                // 🌴 أضيفت هنا داخل قسم المدير فقط
                                 _buildCreativeMenuCard(Icons.beach_access_rounded, "تسجيل العطلات 🌴", const [Color(0xfff59e0b), Color(0xffb45309)], () {
                                   openPageWithActiveCycle((cycle) => HolidayManagementPage(cycle: cycle, role: widget.role));
                                 }, isDark),
                               ],
+
+                              // 💡 توجيه بطاقة اقتراحات التكريم لصفحة HonorSuggestionsPage لجميع المستخدمين (المدير والمشرف)
+                              _buildCreativeMenuCard(Icons.tips_and_updates_rounded, "اقتراحات التكريم 💡", const [Color(0xfff59e0b), Color(0xffd97706)], () {
+                                openPageWithActiveCycle((cycle) => HonorSuggestionsPage(
+                                  cycle: cycle,
+                                  role: widget.role,
+                                  uid: widget.uid,
+                                ));
+                              }, isDark),
+
+                              _buildCreativeMenuCard(Icons.military_tech_rounded, "سجل التكريمات 🏅", const [Color(0xffeab308), Color(0xffca8a04)], () {
+                                openPageWithActiveCycle((cycle) => HonorsRecordPage(cycle: cycle, role: widget.role));
+                              }, isDark),
 
                               _buildCreativeMenuCard(Icons.groups_rounded, "عرض الطلاب 🎒", const [Color(0xff06b6d4), Color(0xff0891b2)], () {
                                 openPageWithActiveCycle((cycle) => StudentsPage(cycle: cycle, role: widget.role, uid: widget.uid));

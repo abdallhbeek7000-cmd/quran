@@ -43,7 +43,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     return arabicDays[selectedDate.weekday - 1];
   }
 
-  // 🔍 فحص حالة الحضور للتحقق من المسمى داخل records
   bool _isStudentPresent(dynamic val) {
     if (val == null) return false;
     if (val is bool) return val;
@@ -354,7 +353,6 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     );
   }
 
-  // 🔥 جلب مستند التفقد بالتاريخ
   Widget _buildExpectedSessionsCard(String targetDate, bool isDarkMode) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -700,7 +698,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 }
 
 // =========================================================================
-// 🚀 دالة المساعدة العامة لمعاينة كرت/بوستر الصورة قبل مشاركتها
+// 🚀 دالة المعاينة والمشاركة العامة
 // =========================================================================
 Future<void> _previewAndShareImage({
   required BuildContext context,
@@ -715,7 +713,6 @@ Future<void> _previewAndShareImage({
 
     if (!context.mounted) return;
 
-    // 📸 عرض الصورة للمعاينة بـ Dialog أنيق
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -814,7 +811,7 @@ Future<void> _previewAndShareImage({
 }
 
 // =========================================================================
-// 🚀 1. واجهة المتبقين للتسميع (مع معاينة البوستر وتصديره)
+// 🚀 1. واجهة المتبقين للتسميع
 // =========================================================================
 class PendingSessionsPage extends StatefulWidget {
   final String targetDate;
@@ -1057,7 +1054,6 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
 
                           return Stack(
                             children: [
-                              // 🔥 الرسم خارج الشاشة لضمان أداء التقط الكرت دون أخطاء
                               Positioned(
                                 left: -9999,
                                 child: WidgetsToImage(
@@ -1249,7 +1245,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
     );
   }
 
-  // 🎨 بوستر التصدير الفاخر للمتبقين
+  // 🖼️ استخدام اسم الصورة الصحيح logo500.png
   Widget _buildExportablePoster(List<Map<String, dynamic>> students) {
     return Container(
       padding: const EdgeInsets.all(26),
@@ -1263,10 +1259,27 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.mosque_rounded, color: Color(0xffd4af37), size: 28),
-              SizedBox(width: 10),
-              Text("معهد الشيخ سعيد العبدالله",
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  'assets/logo500.png',
+                  width: 42,
+                  height: 42,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xffd4af37).withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.mosque_rounded,
+                        color: Color(0xffd4af37), size: 26),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text("معهد الشيخ سعيد العبدالله",
                   style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
@@ -1360,7 +1373,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
 }
 
 // =========================================================================
-// 🚀 2. واجهة التسميعات والجلسات اليومية (المحافظ عليها تماماً)
+// 🚀 2. واجهة التسميعات والجلسات اليومية
 // =========================================================================
 class DailyRecitationsPage extends StatefulWidget {
   final String targetDate;
@@ -1379,31 +1392,6 @@ class DailyRecitationsPage extends StatefulWidget {
 class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
-
-  String _getArabicDayName(String dateString) {
-    try {
-      List<String> parts = dateString.split('-');
-      if (parts.length == 3) {
-        int year = int.parse(parts[0]);
-        int month = int.parse(parts[1]);
-        int day = int.parse(parts[2]);
-        DateTime date = DateTime(year, month, day);
-        List<String> arabicDays = [
-          'الإثنين',
-          'الثلاثاء',
-          'الأربعاء',
-          'الخميس',
-          'الجمعة',
-          'السبت',
-          'الأحد'
-        ];
-        return arabicDays[date.weekday - 1];
-      }
-    } catch (e) {
-      return "";
-    }
-    return "";
-  }
 
   String _getJuzName(int juzNum) {
     switch (juzNum) {
@@ -2173,7 +2161,7 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
 }
 
 // =========================================================================
-// 🚀 3. واجهة سجل الغائبين (مع المعاينة قبل المشاركة)
+// 🚀 3. واجهة سجل الغائبين
 // =========================================================================
 class DailyAbsentStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -2278,7 +2266,6 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 
                   return Stack(
                     children: [
-                      // 🔥 الرسم خارج الشاشة للتصدير
                       Positioned(
                         left: -9999,
                         child: WidgetsToImage(
@@ -2427,7 +2414,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
     );
   }
 
-  // 🎨 بوستر التصدير الفاخر للغائبين
+  // 🖼️ استخدام اسم الصورة الصحيح logo500.png
   Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
     return Container(
       padding: const EdgeInsets.all(26),
@@ -2441,10 +2428,27 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.mosque_rounded, color: Color(0xffd4af37), size: 28),
-              SizedBox(width: 10),
-              Text("معهد الشيخ سعيد العبدالله",
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  'assets/logo500.png',
+                  width: 42,
+                  height: 42,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xffd4af37).withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.mosque_rounded,
+                        color: Color(0xffd4af37), size: 26),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text("معهد الشيخ سعيد العبدالله",
                   style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
@@ -2551,7 +2555,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 }
 
 // =========================================================================
-// 🚀 4. واجهة حضر ولم يسمّع (مع المعاينة قبل المشاركة)
+// 🚀 4. واجهة حضر ولم يسمّع
 // =========================================================================
 class DailyDidNotReciteStudentsPage extends StatefulWidget {
   final String targetDate;
@@ -2656,7 +2660,6 @@ class _DailyDidNotReciteStudentsPageState
 
                 return Stack(
                   children: [
-                    // 🔥 الرسم خارج الشاشة للتصدير
                     Positioned(
                       left: -9999,
                       child: WidgetsToImage(
@@ -2802,7 +2805,7 @@ class _DailyDidNotReciteStudentsPageState
     );
   }
 
-  // 🎨 بوستر التصدير الفاخر لحضر ولم يسمّع
+  // 🖼️ استخدام اسم الصورة الصحيح logo500.png
   Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
     return Container(
       padding: const EdgeInsets.all(26),
@@ -2816,10 +2819,27 @@ class _DailyDidNotReciteStudentsPageState
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.mosque_rounded, color: Color(0xffd4af37), size: 28),
-              SizedBox(width: 10),
-              Text("معهد الشيخ سعيد العبدالله",
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  'assets/logo500.png',
+                  width: 42,
+                  height: 42,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xffd4af37).withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.mosque_rounded,
+                        color: Color(0xffd4af37), size: 26),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text("معهد الشيخ سعيد العبدالله",
                   style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
