@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../models/cycle_model.dart';
 import '../services/theme_provider.dart';
+import '../services/notification_service.dart'; // استدعاء خدمة الإشعارات
 
 class HonorSuggestionsPage extends StatefulWidget {
   final CycleModel cycle;
@@ -44,6 +45,55 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
       debugPrint("خطأ في جلب اسم المشرف: $e");
     }
     return "مشرف غير معروف";
+  }
+
+  /// 🔔 دالة إرسال الإشعارات للمشرفين عند إنشاء طلب اقتراح تكريم جديد
+  Future<void> _sendNotificationToSupervisors({
+    required List<String> targetSupervisors,
+    required String requestTitle,
+  }) async {
+    try {
+      QuerySnapshot supSnapshot;
+      if (targetSupervisors.contains('all')) {
+        supSnapshot = await FirebaseFirestore.instance.collection('supervisors').get();
+      } else {
+        supSnapshot = await FirebaseFirestore.instance
+            .collection('supervisors')
+            .where(FieldPath.documentId, whereIn: targetSupervisors)
+            .get();
+      }
+
+      String notifTitle = "💡 طلب اقتراح أسماء للتكريم";
+      String notifBody = "قام المدير بإضافة طلب اقتراح جديد: ($requestTitle). يرجى تقديم ترشيحاتك قبل انتهاء المهلة.";
+
+      for (var doc in supSnapshot.docs) {
+        String supId = doc.id;
+
+        // 1. إضافة الإشعار في القائمة الفرعية notifications داخل مستند المشرف
+        await FirebaseFirestore.instance
+            .collection('supervisors')
+            .doc(supId)
+            .collection('notifications')
+            .add({
+          'title': notifTitle,
+          'body': notifBody,
+          'type': 'honor_suggestion_request',
+          'createdAt': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+
+        // 2. إرسال إشعار FCM للمشرف
+        NotificationService.sendAndSaveNotification(
+          studentId: supId,
+          title: notifTitle,
+          body: notifBody,
+          type: 'honor_suggestion_request',
+          context: context,
+        ).catchError((_) {});
+      }
+    } catch (e) {
+      debugPrint("خطأ أثناء إرسال إشعارات اقتراح التكريم: $e");
+    }
   }
 
   @override
@@ -266,7 +316,6 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
             ),
             const SizedBox(height: 16),
 
-            // تفاعل المشرف أو المدير
             if (!isManager) ...[
               if (!isExpired)
                 StreamBuilder<QuerySnapshot>(
@@ -352,9 +401,6 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
     );
   }
 
-  // ----------------------------------------------------
-  // دالة إلغاء / حذف اقتراح المشرف
-  // ----------------------------------------------------
   Future<void> _deleteSupervisorSuggestion(String docId) async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -379,9 +425,6 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
     }
   }
 
-  // ----------------------------------------------------
-  // دالة حذف طلب المدير بالكامل
-  // ----------------------------------------------------
   Future<void> _confirmDeleteRequest(String reqId) async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -414,7 +457,7 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
   }
 
   // ----------------------------------------------------
-  // 1. إنشاء طلب جديد (عند المدير)
+  // 1. إنشاء طلب جديد مع الإشعار الفوري للمشرفين
   // ----------------------------------------------------
   void _showCreateRequestDialog(bool isDark) {
     TextEditingController titleController = TextEditingController();
@@ -549,16 +592,23 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           ),
                           onPressed: () async {
-                            if (titleController.text.trim().isEmpty) return;
+                            String reqTitle = titleController.text.trim();
+                            if (reqTitle.isEmpty) return;
 
                             await FirebaseFirestore.instance.collection('honor_suggestion_requests').add({
                               'cycleId': widget.cycle.id,
-                              'title': titleController.text.trim(),
+                              'title': reqTitle,
                               'maxStudents': int.tryParse(maxStudentsController.text) ?? 1,
                               'deadline': Timestamp.fromDate(selectedDeadline),
                               'targetSupervisors': selectedSupervisors,
                               'createdAt': FieldValue.serverTimestamp(),
                             });
+
+                            // 🔔 إرسال الإشعارات للمشرفين المستهدفين
+                            _sendNotificationToSupervisors(
+                              targetSupervisors: selectedSupervisors,
+                              requestTitle: reqTitle,
+                            );
 
                             if (!mounted) return;
                             Navigator.pop(context);
@@ -673,7 +723,6 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
                       onPressed: () async {
                         if (selectedStudentsWithReason.isEmpty) return;
 
-                        // جلب الاسم الفعلي للمشرف مباشرة من قاعدة البيانات
                         String actualSupName = await _getActualSupervisorName(widget.uid);
 
                         await FirebaseFirestore.instance.collection('honor_suggestions').add({
@@ -724,7 +773,7 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
   }
 
   // ----------------------------------------------------
-  // 3. عرض نتائج الاقتراحات للمدير بالأشخاص والأسماء الحقيقية
+  // 3. عرض نتائج الاقتراحات للمدير
   // ----------------------------------------------------
   Widget _buildManagerViewSuggestions(String reqId, bool isDark) {
     return StreamBuilder<QuerySnapshot>(
