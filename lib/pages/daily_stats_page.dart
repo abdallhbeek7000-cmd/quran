@@ -698,7 +698,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
 }
 
 // =========================================================================
-// 🚀 دالة المعاينة والمشاركة العامة
+// 🚀 دالة المعاينة والمشاركة العامة المعززة بخيار (فاتح / غامق)
 // =========================================================================
 Future<void> _previewAndShareImage({
   required BuildContext context,
@@ -706,95 +706,215 @@ Future<void> _previewAndShareImage({
   required String shareText,
   required String fileNamePrefix,
   required String targetDate,
+  required Function(bool isPosterDark) onThemeChanged,
+  required bool initialIsDark,
 }) async {
   try {
-    final bytes = await controller.capture();
-    if (bytes == null) throw "فشل التقاط صورة البوستر";
+    bool isPosterDark = initialIsDark;
 
     if (!context.mounted) return;
 
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xff0f172a),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: const EdgeInsets.all(16),
-        title: const Row(
-          children: [
-            Icon(Icons.remove_red_eye_rounded, color: Color(0xffd4af37), size: 22),
-            SizedBox(width: 8),
-            Text(
-              "معاينة الصورة قبل المشاركة",
-              style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            backgroundColor: const Color(0xff0f172a),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            contentPadding: const EdgeInsets.all(16),
+            title: const Row(
+              children: [
+                Icon(Icons.remove_red_eye_rounded, color: Color(0xffd4af37), size: 22),
+                SizedBox(width: 8),
+                Text(
+                  "معاينة واختيار الثيم 🎨",
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
+                ),
+              ],
             ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.55,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 🔘 خيار اختيار ألوان الثيم قبل الالتقاط
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xff1e293b),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xff334155)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            if (isPosterDark) {
+                              setStateDialog(() => isPosterDark = false);
+                              onThemeChanged(false);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: !isPosterDark ? const Color(0xffd4af37) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.wb_sunny_rounded,
+                                    size: 16,
+                                    color: !isPosterDark ? Colors.black : Colors.white70),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "ألوان فاتحة",
+                                  style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: !isPosterDark ? Colors.black : Colors.white70,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            if (!isPosterDark) {
+                              setStateDialog(() => isPosterDark = true);
+                              onThemeChanged(true);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isPosterDark ? const Color(0xffd4af37) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.nightlight_round,
+                                    size: 16,
+                                    color: isPosterDark ? Colors.black : Colors.white70),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "ألوان غامقة",
+                                  style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: isPosterDark ? Colors.black : Colors.white70,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xff334155)),
+                const SizedBox(height: 14),
+
+                // 📸 التقاط ومعاينة الصورة الحالية
+                FutureBuilder<Uint8List?>(
+                  future: Future.delayed(const Duration(milliseconds: 150), () => controller.capture()),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Container(
+                        height: 220,
+                        alignment: Alignment.center,
+                        child: const CircularProgressIndicator(color: Color(0xffd4af37)),
+                      );
+                    }
+
+                    if (snapshot.hasError || snapshot.data == null) {
+                      return Container(
+                        height: 150,
+                        alignment: Alignment.center,
+                        child: const Text("حدث خطأ أثناء التقاط المعاينة",
+                            style: TextStyle(color: Colors.white70, fontFamily: 'Cairo')),
+                      );
+                    }
+
+                    final bytes = snapshot.data!;
+
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.45,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: const Color(0xff334155)),
+                        ),
+                        child: SingleChildScrollView(
+                          child: Image.memory(bytes, fit: BoxFit.contain),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                child: SingleChildScrollView(
-                  child: Image.memory(bytes, fit: BoxFit.contain),
+
+                const SizedBox(height: 12),
+                const Text(
+                  "اختر النمط المناسب ثم اضغط تأكيد للمشاركة على الواتساب",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontFamily: 'Cairo', fontSize: 11, color: Colors.white60),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("إلغاء",
+                    style: TextStyle(fontFamily: 'Cairo', color: Colors.grey)),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xff2563eb),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () async {
+                  final capturedBytes = await controller.capture();
+                  if (capturedBytes == null) return;
+
+                  if (ctx.mounted) Navigator.pop(ctx);
+
+                  final tempDir = await getTemporaryDirectory();
+                  final safeDate = targetDate.replaceAll('/', '_');
+                  final file = await File(
+                          '${tempDir.path}/${fileNamePrefix}_$safeDate.png')
+                      .create();
+                  await file.writeAsBytes(capturedBytes);
+
+                  await Share.shareXFiles(
+                    [XFile(file.path)],
+                    text: shareText,
+                  );
+                },
+                icon: const Icon(Icons.share_rounded, size: 18, color: Colors.white),
+                label: const Text(
+                  "تأكيد والمشاركة 🚀",
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              "تأكد من وضوح البيانات المنسقة قبل إرسالها لجروب الواتساب",
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontFamily: 'Cairo', fontSize: 11, color: Colors.white60),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("إلغاء",
-                style: TextStyle(fontFamily: 'Cairo', color: Colors.grey)),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xff2563eb),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final tempDir = await getTemporaryDirectory();
-              final safeDate = targetDate.replaceAll('/', '_');
-              final file = await File(
-                      '${tempDir.path}/${fileNamePrefix}_$safeDate.png')
-                  .create();
-              await file.writeAsBytes(bytes);
-
-              await Share.shareXFiles(
-                [XFile(file.path)],
-                text: shareText,
-              );
-            },
-            icon: const Icon(Icons.share_rounded, size: 18, color: Colors.white),
-            label: const Text(
-              "تأكيد والمشاركة 🚀",
-              style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   } catch (e) {
@@ -825,6 +945,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
   final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
   bool isExporting = false;
+  bool isPosterDark = true; // التحكم بثيم الصورة
 
   bool _isStudentPresent(dynamic val) {
     if (val == null) return false;
@@ -844,19 +965,21 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
   Future<void> _handleShareProcess(
       List<Map<String, dynamic>> pendingStudentsList) async {
     if (pendingStudentsList.isEmpty) return;
-    setState(() => isExporting = true);
-    await Future.delayed(const Duration(milliseconds: 300));
 
     await _previewAndShareImage(
       context: context,
       controller: controller,
       fileNamePrefix: "pending_recitations",
       targetDate: widget.targetDate,
+      initialIsDark: isPosterDark,
+      onThemeChanged: (bool isDark) {
+        setState(() {
+          isPosterDark = isDark;
+        });
+      },
       shareText:
           '⏳ تذكير بالطلاب المتبقين للتسميع اليوم (${widget.targetDate})\nنرجو من الإخوة المشرفين تسجيل التسميعات 🌸\nمعهد الشيخ سعيد العبدالله 🕌',
     );
-
-    if (mounted) setState(() => isExporting = false);
   }
 
   @override
@@ -1063,7 +1186,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                     child: SizedBox(
                                       width: 600,
                                       child: _buildExportablePoster(
-                                          pendingStudentsList),
+                                          pendingStudentsList, isPosterDark),
                                     ),
                                   ),
                                 ),
@@ -1085,24 +1208,13 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                                   BorderRadius.circular(16)),
                                           elevation: 3,
                                         ),
-                                        onPressed: isExporting
-                                            ? null
-                                            : () => _handleShareProcess(
-                                                pendingStudentsList),
-                                        icon: isExporting
-                                            ? const SizedBox(
-                                                width: 18,
-                                                height: 18,
-                                                child: CircularProgressIndicator(
-                                                    color: Colors.white,
-                                                    strokeWidth: 2))
-                                            : const Icon(Icons.share_rounded,
-                                                color: Colors.white, size: 20),
-                                        label: Text(
-                                          isExporting
-                                              ? "جاري الإنشاء..."
-                                              : "معاينة ومشاركة التذكير 📸",
-                                          style: const TextStyle(
+                                        onPressed: () => _handleShareProcess(
+                                            pendingStudentsList),
+                                        icon: const Icon(Icons.share_rounded,
+                                            color: Colors.white, size: 20),
+                                        label: const Text(
+                                          "معاينة ومشاركة التذكير 📸",
+                                          style: TextStyle(
                                               fontFamily: 'Cairo',
                                               fontWeight: FontWeight.bold,
                                               fontSize: 13,
@@ -1245,14 +1357,20 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
     );
   }
 
-  // 🖼️ استخدام اسم الصورة الصحيح logo500.png
-  Widget _buildExportablePoster(List<Map<String, dynamic>> students) {
+  // 🖼️ دالة بناء البوستر تدعم نمطي الفاتح والغامق
+  Widget _buildExportablePoster(List<Map<String, dynamic>> students, bool isDark) {
+    final bgColor = isDark ? const Color(0xff0f172a) : const Color(0xffffffff);
+    final borderColor = isDark ? const Color(0xff334155) : const Color(0xffe2e8f0);
+    final textColor = isDark ? Colors.white : const Color(0xff1e293b);
+    final headerBg = isDark ? const Color(0xff1e293b) : const Color(0xfff1f5f9);
+    final subTextColor = isDark ? const Color(0xff94a3b8) : const Color(0xff64748b);
+
     return Container(
       padding: const EdgeInsets.all(26),
       decoration: BoxDecoration(
-        color: const Color(0xff0f172a),
+        color: bgColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xff334155), width: 2),
+        border: Border.all(color: borderColor, width: 2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1279,11 +1397,11 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                 ),
               ),
               const SizedBox(width: 10),
-              const Text("معهد الشيخ سعيد العبدالله",
+              Text("معهد الشيخ سعيد العبدالله",
                   style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                      color: textColor,
                       fontFamily: 'Cairo')),
             ],
           ),
@@ -1297,9 +1415,9 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
             ),
             child: Text(
               "⏳ قائمة الطلاب المتبقين للتسميع - ${widget.targetDate}",
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 13,
-                  color: Color(0xfffde68a),
+                  color: isDark ? const Color(0xfffde68a) : const Color(0xffb45309),
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Cairo'),
             ),
@@ -1307,29 +1425,29 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
           const SizedBox(height: 20),
           Table(
             border: TableBorder.all(
-                color: const Color(0xff334155),
+                color: borderColor,
                 width: 1,
                 borderRadius: BorderRadius.circular(12)),
             children: [
               TableRow(
-                decoration: const BoxDecoration(color: Color(0xff1e293b)),
-                children: const [
+                decoration: BoxDecoration(color: headerBg),
+                children: [
                   Padding(
-                    padding: EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(10),
                     child: Text("اسم الطالب",
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                            color: Color(0xff94a3b8),
+                            color: subTextColor,
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.bold,
                             fontSize: 12)),
                   ),
                   Padding(
-                    padding: EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(10),
                     child: Text("المشرف المسؤول",
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                            color: Color(0xff94a3b8),
+                            color: subTextColor,
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.bold,
                             fontSize: 12)),
@@ -1341,8 +1459,8 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                       padding: const EdgeInsets.all(10),
                       child: Text(s['name'] ?? '',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              color: Colors.white,
+                          style: TextStyle(
+                              color: textColor,
                               fontFamily: 'Cairo',
                               fontWeight: FontWeight.bold,
                               fontSize: 12)),
@@ -1351,8 +1469,8 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                       padding: const EdgeInsets.all(10),
                       child: Text(s['supervisorName'] ?? '',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              color: Color(0xffcbd5e1),
+                          style: TextStyle(
+                              color: subTextColor,
                               fontFamily: 'Cairo',
                               fontSize: 12)),
                     ),
@@ -1360,11 +1478,11 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
             ],
           ),
           const SizedBox(height: 18),
-          const Text(
+          Text(
             "نرجو من الإخوة المشرفين الكرام المتابعة وتسجيل التسميعات 📖",
             textAlign: TextAlign.center,
             style: TextStyle(
-                color: Color(0xff94a3b8), fontSize: 11, fontFamily: 'Cairo'),
+                color: subTextColor, fontSize: 11, fontFamily: 'Cairo'),
           )
         ],
       ),
@@ -2176,22 +2294,25 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
   final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
   bool isExporting = false;
+  bool isPosterDark = true;
 
   Future<void> _handleShareProcess(List<QueryDocumentSnapshot> docs) async {
     if (docs.isEmpty) return;
-    setState(() => isExporting = true);
-    await Future.delayed(const Duration(milliseconds: 300));
 
     await _previewAndShareImage(
       context: context,
       controller: controller,
       fileNamePrefix: "absent_students",
       targetDate: widget.targetDate,
+      initialIsDark: isPosterDark,
+      onThemeChanged: (bool isDark) {
+        setState(() {
+          isPosterDark = isDark;
+        });
+      },
       shareText:
           '🚨 كرت الغياب اليومي (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
     );
-
-    if (mounted) setState(() => isExporting = false);
   }
 
   @override
@@ -2274,7 +2395,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                             color: Colors.transparent,
                             child: SizedBox(
                               width: 600,
-                              child: _buildExportablePoster(absentDocs),
+                              child: _buildExportablePoster(absentDocs, isPosterDark),
                             ),
                           ),
                         ),
@@ -2294,23 +2415,12 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                                       borderRadius: BorderRadius.circular(16)),
                                   elevation: 3,
                                 ),
-                                onPressed: isExporting
-                                    ? null
-                                    : () => _handleShareProcess(absentDocs),
-                                icon: isExporting
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2))
-                                    : const Icon(Icons.share_rounded,
-                                        color: Colors.white, size: 20),
-                                label: Text(
-                                  isExporting
-                                      ? "جاري الإنشاء..."
-                                      : "معاينة ومشاركة كرت الغياب 📸",
-                                  style: const TextStyle(
+                                onPressed: () => _handleShareProcess(absentDocs),
+                                icon: const Icon(Icons.share_rounded,
+                                    color: Colors.white, size: 20),
+                                label: const Text(
+                                  "معاينة ومشاركة كرت الغياب 📸",
+                                  style: TextStyle(
                                       fontFamily: 'Cairo',
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
@@ -2414,14 +2524,20 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
     );
   }
 
-  // 🖼️ استخدام اسم الصورة الصحيح logo500.png
-  Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
+  // 🖼️ دالة بناء البوستر تدعم الثيم الفاتح والغامق
+  Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs, bool isDark) {
+    final bgColor = isDark ? const Color(0xff0f172a) : const Color(0xffffffff);
+    final borderColor = isDark ? const Color(0xff334155) : const Color(0xffe2e8f0);
+    final textColor = isDark ? Colors.white : const Color(0xff1e293b);
+    final headerBg = isDark ? const Color(0xff1e293b) : const Color(0xfff1f5f9);
+    final subTextColor = isDark ? const Color(0xff94a3b8) : const Color(0xff64748b);
+
     return Container(
       padding: const EdgeInsets.all(26),
       decoration: BoxDecoration(
-        color: const Color(0xff0f172a),
+        color: bgColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xff334155), width: 2),
+        border: Border.all(color: borderColor, width: 2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2448,11 +2564,11 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                 ),
               ),
               const SizedBox(width: 10),
-              const Text("معهد الشيخ سعيد العبدالله",
+              Text("معهد الشيخ سعيد العبدالله",
                   style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                      color: textColor,
                       fontFamily: 'Cairo')),
             ],
           ),
@@ -2466,9 +2582,9 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
             ),
             child: Text(
               "🔴 جدول الطلاب الغائبين - ${widget.targetDate}",
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 13,
-                  color: Color(0xfffca5a5),
+                  color: isDark ? const Color(0xfffca5a5) : const Color(0xff991b1b),
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Cairo'),
             ),
@@ -2476,29 +2592,29 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
           const SizedBox(height: 20),
           Table(
             border: TableBorder.all(
-                color: const Color(0xff334155),
+                color: borderColor,
                 width: 1,
                 borderRadius: BorderRadius.circular(12)),
             children: [
               TableRow(
-                decoration: const BoxDecoration(color: Color(0xff1e293b)),
-                children: const [
+                decoration: BoxDecoration(color: headerBg),
+                children: [
                   Padding(
-                    padding: EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(10),
                     child: Text("اسم الطالب",
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                            color: Color(0xff94a3b8),
+                            color: subTextColor,
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.bold,
                             fontSize: 12)),
                   ),
                   Padding(
-                    padding: EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(10),
                     child: Text("حالة الغياب / العذر",
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                            color: Color(0xff94a3b8),
+                            color: subTextColor,
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.bold,
                             fontSize: 12)),
@@ -2517,8 +2633,8 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                     padding: const EdgeInsets.all(10),
                     child: Text(s['studentName'] ?? '',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.white,
+                        style: TextStyle(
+                            color: textColor,
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.bold,
                             fontSize: 12)),
@@ -2530,8 +2646,8 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           color: hasExcused
-                              ? const Color(0xff34d399)
-                              : const Color(0xfff87171),
+                              ? const Color(0xff059669)
+                              : const Color(0xffdc2626),
                           fontFamily: 'Cairo',
                           fontWeight: FontWeight.bold,
                           fontSize: 11.5),
@@ -2542,11 +2658,11 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
             ],
           ),
           const SizedBox(height: 18),
-          const Text(
+          Text(
             "يرجى من أولياء الأمور الكرام الحرص والمتابعة لعدم التكرار 🌺",
             textAlign: TextAlign.center,
             style: TextStyle(
-                color: Color(0xff94a3b8), fontSize: 11, fontFamily: 'Cairo'),
+                color: subTextColor, fontSize: 11, fontFamily: 'Cairo'),
           )
         ],
       ),
@@ -2571,22 +2687,25 @@ class _DailyDidNotReciteStudentsPageState
   final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
   bool isExporting = false;
+  bool isPosterDark = true;
 
   Future<void> _handleShareProcess(List<QueryDocumentSnapshot> docs) async {
     if (docs.isEmpty) return;
-    setState(() => isExporting = true);
-    await Future.delayed(const Duration(milliseconds: 300));
 
     await _previewAndShareImage(
       context: context,
       controller: controller,
       fileNamePrefix: "not_recited_students",
       targetDate: widget.targetDate,
+      initialIsDark: isPosterDark,
+      onThemeChanged: (bool isDark) {
+        setState(() {
+          isPosterDark = isDark;
+        });
+      },
       shareText:
           '⚠ إشعار الطلاب (حضر ولم يسمّع) اليوم (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
     );
-
-    if (mounted) setState(() => isExporting = false);
   }
 
   @override
@@ -2668,7 +2787,7 @@ class _DailyDidNotReciteStudentsPageState
                           color: Colors.transparent,
                           child: SizedBox(
                             width: 600,
-                            child: _buildExportablePoster(docs),
+                            child: _buildExportablePoster(docs, isPosterDark),
                           ),
                         ),
                       ),
@@ -2688,22 +2807,12 @@ class _DailyDidNotReciteStudentsPageState
                                     borderRadius: BorderRadius.circular(16)),
                                 elevation: 3,
                               ),
-                              onPressed: isExporting
-                                  ? null
-                                  : () => _handleShareProcess(docs),
-                              icon: isExporting
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                          color: Colors.white, strokeWidth: 2))
-                                  : const Icon(Icons.share_rounded,
-                                      color: Colors.white, size: 20),
-                              label: Text(
-                                isExporting
-                                    ? "جاري الإنشاء..."
-                                    : "معاينة ومشاركة القائمة للأهالي 📸",
-                                style: const TextStyle(
+                              onPressed: () => _handleShareProcess(docs),
+                              icon: const Icon(Icons.share_rounded,
+                                  color: Colors.white, size: 20),
+                              label: const Text(
+                                "معاينة ومشاركة القائمة للأهالي 📸",
+                                style: TextStyle(
                                     fontFamily: 'Cairo',
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,
@@ -2805,14 +2914,20 @@ class _DailyDidNotReciteStudentsPageState
     );
   }
 
-  // 🖼️ استخدام اسم الصورة الصحيح logo500.png
-  Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs) {
+  // 🖼️ دالة بناء البوستر تدعم الثيم الفاتح والغامق
+  Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs, bool isDark) {
+    final bgColor = isDark ? const Color(0xff0f172a) : const Color(0xffffffff);
+    final borderColor = isDark ? const Color(0xff334155) : const Color(0xffe2e8f0);
+    final textColor = isDark ? Colors.white : const Color(0xff1e293b);
+    final headerBg = isDark ? const Color(0xff1e293b) : const Color(0xfff1f5f9);
+    final subTextColor = isDark ? const Color(0xff94a3b8) : const Color(0xff64748b);
+
     return Container(
       padding: const EdgeInsets.all(26),
       decoration: BoxDecoration(
-        color: const Color(0xff0f172a),
+        color: bgColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xff334155), width: 2),
+        border: Border.all(color: borderColor, width: 2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2839,11 +2954,11 @@ class _DailyDidNotReciteStudentsPageState
                 ),
               ),
               const SizedBox(width: 10),
-              const Text("معهد الشيخ سعيد العبدالله",
+              Text("معهد الشيخ سعيد العبدالله",
                   style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                      color: textColor,
                       fontFamily: 'Cairo')),
             ],
           ),
@@ -2857,9 +2972,9 @@ class _DailyDidNotReciteStudentsPageState
             ),
             child: Text(
               "⚠️ قائمة الطلاب الذين حضروا ولم يسْمَعوا - ${widget.targetDate}",
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 13,
-                  color: Color(0xfffde68a),
+                  color: isDark ? const Color(0xfffde68a) : const Color(0xffb45309),
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Cairo'),
             ),
@@ -2867,29 +2982,29 @@ class _DailyDidNotReciteStudentsPageState
           const SizedBox(height: 20),
           Table(
             border: TableBorder.all(
-                color: const Color(0xff334155),
+                color: borderColor,
                 width: 1,
                 borderRadius: BorderRadius.circular(12)),
             children: [
               TableRow(
-                decoration: const BoxDecoration(color: Color(0xff1e293b)),
-                children: const [
+                decoration: BoxDecoration(color: headerBg),
+                children: [
                   Padding(
-                    padding: EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(10),
                     child: Text("اسم الطالب",
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                            color: Color(0xff94a3b8),
+                            color: subTextColor,
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.bold,
                             fontSize: 12)),
                   ),
                   Padding(
-                    padding: EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(10),
                     child: Text("المشرف المسؤول",
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                            color: Color(0xff94a3b8),
+                            color: subTextColor,
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.bold,
                             fontSize: 12)),
@@ -2903,8 +3018,8 @@ class _DailyDidNotReciteStudentsPageState
                     padding: const EdgeInsets.all(10),
                     child: Text(s['studentName'] ?? '',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.white,
+                        style: TextStyle(
+                            color: textColor,
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.bold,
                             fontSize: 12)),
@@ -2913,8 +3028,8 @@ class _DailyDidNotReciteStudentsPageState
                     padding: const EdgeInsets.all(10),
                     child: Text(s['supervisorName'] ?? 'غير محدد',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Color(0xffcbd5e1),
+                        style: TextStyle(
+                            color: subTextColor,
                             fontFamily: 'Cairo',
                             fontSize: 12)),
                   ),
@@ -2923,11 +3038,11 @@ class _DailyDidNotReciteStudentsPageState
             ],
           ),
           const SizedBox(height: 18),
-          const Text(
+          Text(
             "يرجى من أولياء الأمور الكرام الحرص على إعداد وتسميع المقرر بالبيت 📖",
             textAlign: TextAlign.center,
             style: TextStyle(
-                color: Color(0xff94a3b8), fontSize: 11, fontFamily: 'Cairo'),
+                color: subTextColor, fontSize: 11, fontFamily: 'Cairo'),
           )
         ],
       ),

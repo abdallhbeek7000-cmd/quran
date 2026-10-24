@@ -166,6 +166,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   List<Map<String, dynamic>> newRevRanges = [];
   List<Map<String, dynamic>> oldRevRanges = [];
   List<Map<String, dynamic>> readingRanges = [];
+  List<Map<String, dynamic>> ijazahRanges = []; // 🎯 جديد: قائمة الإجازة
   List<Map<String, dynamic>> newHwRanges = [];
   List<Map<String, dynamic>> newRevHwRanges = [];
   List<Map<String, dynamic>> oldRevHwRanges = [];
@@ -184,6 +185,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   bool hasNewMemorization = true;
   bool hasReview = true;
   bool hasReading = false;
+  bool hasIjazah = false; // 🎯 جديد: مطفأة تلقائياً
 
   String absenceType = "بدون عذر";
   String memorizationRating = "جيد";
@@ -338,7 +340,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   }
 
   void _ensureNonEmptyRanges() {
-    for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+    for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, ijazahRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
       if (list.isEmpty) {
         list.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()});
       }
@@ -569,6 +571,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     _disposeRanges(newRevRanges);
     _disposeRanges(oldRevRanges);
     _disposeRanges(readingRanges);
+    _disposeRanges(ijazahRanges); // 🎯 جديد: التخلص من ذاكرة مصفوفة الإجازة
     _disposeRanges(newHwRanges);
     _disposeRanges(newRevHwRanges);
     _disposeRanges(oldRevHwRanges);
@@ -1190,7 +1193,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         if (selected) {
           setState(() {
             selectedJuz = juzNum;
-            for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
+            for (var list in [newMemoRanges, newRevRanges, oldRevRanges, readingRanges, ijazahRanges, newHwRanges, newRevHwRanges, oldRevHwRanges]) {
               for (var item in list) {
                 item['surah'] = '';
                 item['toSurah'] = '';
@@ -1240,6 +1243,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevRanges);
     String finalFarReview = (!hasReview || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(oldRevRanges);
     String finalReading = (!hasReading || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(readingRanges);
+    String finalIjazah = (!hasIjazah || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(ijazahRanges); // 🎯 جديد: الإجازة
 
     String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
     String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
@@ -1299,6 +1303,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'newReviewHomework': finalNewRevHW,
       'oldReviewHomework': finalOldRevHW,
       'readingBySight': finalReading,
+      'ijazah': finalIjazah, // 🎯 جديد: تخزين مقدار الإجازة
       'memorizationRating': finalMemoRating,
       'newReviewRating': finalNewRevRating,
       'oldReviewRating': finalOldRevRating,
@@ -1572,7 +1577,14 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     const SizedBox(height: 10),
                                   ],
 
-                                  _buildToggleTile("قراءة نظراً من المصحف", hasReading, Colors.purpleAccent, (v) => setState(() => hasReading = v), isDarkMode),
+                                  Row(
+                                    children: [
+                                      Expanded(child: _buildToggleTile("قراءة نظراً من المصحف", hasReading, Colors.purpleAccent, (v) => setState(() => hasReading = v), isDarkMode)),
+                                      const SizedBox(width: 10),
+                                      // 🎯 جديد: التبديل الخاص بالإجازة (مطفأة تلقائياً)
+                                      Expanded(child: _buildToggleTile("إجازة في القرآن الكريم 📜", hasIjazah, Colors.amber, (v) => setState(() => hasIjazah = v), isDarkMode)),
+                                    ],
+                                  ),
                                   const SizedBox(height: 20),
 
                                   if (!isCompletedStudent && hasNewMemorization) ...[
@@ -1614,6 +1626,18 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                       ranges: readingRanges,
                                       onAdd: () => setState(() => readingRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
                                       onRemove: () { if (readingRanges.length > 1) setState(() { var r = readingRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
+                                      isDarkMode: isDarkMode,
+                                    ),
+                                  ],
+
+                                  // 🎯 جديد: قسم الإجازة في القرآن الكريم
+                                  if (hasIjazah) ...[
+                                    _buildUniversalQuranSection(
+                                      title: "المقدار المسموع في إجازة القرآن الكريم",
+                                      icon: Icons.workspace_premium,
+                                      ranges: ijazahRanges,
+                                      onAdd: () => setState(() => ijazahRanges.add({'surah': '', 'toSurah': '', 'isFullSurah': true, 'from': TextEditingController(), 'to': TextEditingController()})),
+                                      onRemove: () { if (ijazahRanges.length > 1) setState(() { var r = ijazahRanges.removeLast(); (r['from'] as TextEditingController?)?.dispose(); (r['to'] as TextEditingController?)?.dispose(); }); },
                                       isDarkMode: isDarkMode,
                                     ),
                                   ],

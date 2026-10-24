@@ -155,6 +155,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         pkg_excel.TextCellValue('مراجعة جديد'),
         pkg_excel.TextCellValue(isCompleted ? 'مراجعة الختمة الشاملة' : 'مراجعة قديم'),
         pkg_excel.TextCellValue('قراءة نظراً'),
+        pkg_excel.TextCellValue('الإجازة القرآنية 📜'), // 📜 عمود الإجازة في الإكسل
         pkg_excel.TextCellValue('واجب حفظ جديد'),
         pkg_excel.TextCellValue('واجب مراجعة جديد'),
         pkg_excel.TextCellValue('واجب مراجعة قديم'),
@@ -220,6 +221,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         String nRev = data['nearReview']?.toString().trim() ?? '';
         String fRev = data['farReview']?.toString().trim() ?? (isCompleted ? (data['review']?.toString().trim() ?? '') : '');
         String sight = data['readingBySight']?.toString().trim() ?? '';
+        String ijazahText = data['ijazah']?.toString().trim() ?? ''; // 📜 قراءة نص الإجازة
 
         String hwNew = data['newHomework'] ?? '';
         String hwNewRev = data['newReviewHomework'] ?? '';
@@ -247,6 +249,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isCompleted || isHoliday) ? '---' : nRev),
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isHoliday) ? '---' : fRev),
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isHoliday) ? '---' : sight),
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isHoliday) ? '---' : ijazahText), // 📜 قيمة الإجازة في Excel
           pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : hwNew),
           pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : hwNewRev),
           pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : hwOldRev),
@@ -407,7 +410,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                             return dateComparison;
                           });
 
-                          // حساب عدد الجلسات النظامية وتخطي العطلة في الترقيم
                           int normalSessionsTotal = sortedSessions
                               .where((doc) {
                                 final d = doc.data() as Map<String, dynamic>;
@@ -469,7 +471,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     String dayName = _getArabicDayName(sessionDateRaw);
     String displayDate = dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
 
-    // 🌴 1. كارت العطلة الرسمية الفاخر + مع تفعيل زري الحذف والتعديل داخل الكارت
     if (isHoliday) {
       String holidayReason = data['note'] ?? data['notes'] ?? data['title'] ?? 'عطلة رسمية / إجازة معتمدة';
 
@@ -581,7 +582,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // زر حذف العطلة
                     _buildActionButtons(context, sessionId, data, isDarkMode),
                   ],
                 ),
@@ -592,7 +592,6 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
       );
     }
 
-    // 📖 2. التصميم الاعتيادي للجلسات
     bool isAbsent = data['absent'] ?? false;
     bool isExam = data['isExam'] ?? false;
     bool didNotRecite = data['didNotRecite'] ?? false;
@@ -605,6 +604,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     String nRev = data['nearReview']?.toString().trim() ?? '';
     String fRev = data['farReview']?.toString().trim() ?? (isCompletedStudent ? (data['review']?.toString().trim() ?? '') : '');
     String sight = data['readingBySight']?.toString().trim() ?? '';
+    String ijazahText = data['ijazah']?.toString().trim() ?? ''; // 📜 قراءة حقل الإجازة
 
     String memRating = data['memorizationRating'] ?? data['rating'] ?? "";
     String newRevRating = data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
@@ -635,6 +635,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         if (fRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.history_toggle_off_rounded, "مراجعة قديم", fRev, Colors.blueGrey, isDarkMode));
       }
       if (sight.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.chrome_reader_mode_rounded, "قراءة نظراً", sight, Colors.indigoAccent, isDarkMode));
+      if (ijazahText.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.workspace_premium_rounded, "الإجازة القرآنية 📜", ijazahText, Colors.deepOrangeAccent, isDarkMode)); // 📜 كارت عرض الإجازة
     }
 
     String juzChipTitle = selectedJuz > 0 ? _getJuzName(selectedJuz) : '';
@@ -680,6 +681,10 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                         children: [
                           if (juzChipTitle.isNotEmpty && !isAbsent && !isExam) ...[
                             _buildBadge("نظام: جزء $juzChipTitle 📖", Colors.purple),
+                            const SizedBox(width: 4),
+                          ],
+                          if (ijazahText.isNotEmpty && !isAbsent && !isExam) ...[ // 📜 وسام إظهار وجود إجازة
+                            _buildBadge("إجازة 📜", Colors.deepOrange),
                             const SizedBox(width: 4),
                           ],
                           if (isAbsent) 

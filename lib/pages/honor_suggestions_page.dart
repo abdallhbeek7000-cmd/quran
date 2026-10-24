@@ -29,6 +29,23 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
 
   bool get isManager => widget.role == 'manager';
 
+  /// دالة جلب اسم المشرف الحقيقي من الفايربيس
+  Future<String> _getActualSupervisorName(String supUid) async {
+    try {
+      var supDoc = await FirebaseFirestore.instance.collection('supervisors').doc(supUid).get();
+      if (supDoc.exists && supDoc.data()?['name'] != null && (supDoc.data()?['name'] as String).isNotEmpty) {
+        return supDoc.data()!['name'];
+      }
+      var userDoc = await FirebaseFirestore.instance.collection('users').doc(supUid).get();
+      if (userDoc.exists && userDoc.data()?['name'] != null && (userDoc.data()?['name'] as String).isNotEmpty) {
+        return userDoc.data()!['name'];
+      }
+    } catch (e) {
+      debugPrint("خطأ في جلب اسم المشرف: $e");
+    }
+    return "مشرف غير معروف";
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
@@ -225,6 +242,14 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
                     ),
                   ),
                 ),
+                if (isManager) ...[
+                  const SizedBox(width: 6),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+                    tooltip: "حذف الطلب",
+                    onPressed: () => _confirmDeleteRequest(reqId),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 12),
@@ -255,28 +280,37 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
                         hasSubmittedSnap.hasData && hasSubmittedSnap.data!.docs.isNotEmpty;
 
                     if (alreadySubmitted) {
+                      String suggestionDocId = hasSubmittedSnap.data!.docs.first.id;
                       return Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(14),
+                          color: Colors.green.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Row(
                           children: [
-                            Icon(Icons.check_circle_rounded, color: Colors.green, size: 18),
-                            SizedBox(width: 8),
-                            Text(
-                              "تم إرسال اقتراحك بنجاح ✅ (تم القفل)",
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
-                                fontSize: 13,
+                            const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                "تم إرسال اقتراحك بنجاح ✅",
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.redAccent,
+                              ),
+                              icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                              label: const Text("تعديل / إلغاء", style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
+                              onPressed: () => _deleteSupervisorSuggestion(suggestionDocId),
+                            )
                           ],
                         ),
                       );
@@ -316,6 +350,67 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
         ),
       ),
     );
+  }
+
+  // ----------------------------------------------------
+  // دالة إلغاء / حذف اقتراح المشرف
+  // ----------------------------------------------------
+  Future<void> _deleteSupervisorSuggestion(String docId) async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("تأكيد التعديل والإلغاء", style: TextStyle(fontFamily: 'Cairo')),
+        content: const Text("هل ترغب في إلغاء اقتراحك وإتاحة إمكانية الاختيار مجدداً؟", style: TextStyle(fontFamily: 'Cairo')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo'))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("نعم، احذف وحرر", style: TextStyle(fontFamily: 'Cairo', color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance.collection('honor_suggestions').doc(docId).delete();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم إلغاء الاقتراح، يمكنك تقديم اقتراح جديد الآن ✨", style: TextStyle(fontFamily: 'Cairo'))));
+    }
+  }
+
+  // ----------------------------------------------------
+  // دالة حذف طلب المدير بالكامل
+  // ----------------------------------------------------
+  Future<void> _confirmDeleteRequest(String reqId) async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("حذف طلب التكريم", style: TextStyle(fontFamily: 'Cairo')),
+        content: const Text("هل أنت تأكد من حذف هذا الطلب؟ سيتم حذف جميع الاقتراحات الواردة بخصوصه أيضاً.", style: TextStyle(fontFamily: 'Cairo')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo'))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("حذف النهائي", style: TextStyle(fontFamily: 'Cairo', color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance.collection('honor_suggestion_requests').doc(reqId).delete();
+      var batch = FirebaseFirestore.instance.batch();
+      var suggestions = await FirebaseFirestore.instance.collection('honor_suggestions').where('requestId', isEqualTo: reqId).get();
+      for (var doc in suggestions.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الطلب وجميع الاقتراحات المترتبة عليه 🗑️", style: TextStyle(fontFamily: 'Cairo'))));
+    }
   }
 
   // ----------------------------------------------------
@@ -578,9 +673,8 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
                       onPressed: () async {
                         if (selectedStudentsWithReason.isEmpty) return;
 
-                        // جلب الاسم الفعلي للمشرف من الفايربيس
-                        var supDoc = await FirebaseFirestore.instance.collection('supervisors').doc(widget.uid).get();
-                        String actualSupName = supDoc.exists ? (supDoc.data()?['name'] ?? 'مشرف') : 'مشرف';
+                        // جلب الاسم الفعلي للمشرف مباشرة من قاعدة البيانات
+                        String actualSupName = await _getActualSupervisorName(widget.uid);
 
                         await FirebaseFirestore.instance.collection('honor_suggestions').add({
                           'requestId': reqId,
@@ -630,7 +724,7 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
   }
 
   // ----------------------------------------------------
-  // 3. عرض نتائج الاقتراحات الجذابة لجهات المدير
+  // 3. عرض نتائج الاقتراحات للمدير بالأشخاص والأسماء الحقيقية
   // ----------------------------------------------------
   Widget _buildManagerViewSuggestions(String reqId, bool isDark) {
     return StreamBuilder<QuerySnapshot>(
@@ -673,63 +767,73 @@ class _HonorSuggestionsPageState extends State<HonorSuggestionsPage> {
             ...docs.map((doc) {
               var data = doc.data() as Map<String, dynamic>;
               List students = data['students'] ?? [];
-              String supName = data['supervisorName'] ?? 'مشرف';
+              String supUid = data['supervisorId'] ?? '';
+              String storedSupName = data['supervisorName'] ?? '';
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xff0f172a).withValues(alpha: 0.6) : const Color(0xfff8fafc),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              return FutureBuilder<String>(
+                future: (storedSupName.isNotEmpty && storedSupName != 'مشرف')
+                    ? Future.value(storedSupName)
+                    : _getActualSupervisorName(supUid),
+                builder: (context, nameSnap) {
+                  String displaySupName = nameSnap.data ?? "جاري التحميل...";
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xff0f172a).withValues(alpha: 0.6) : const Color(0xfff8fafc),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor: accentGold.withValues(alpha: 0.2),
-                          child: Icon(Icons.person, size: 14, color: accentGold),
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundColor: accentGold.withValues(alpha: 0.2),
+                              child: Icon(Icons.person, size: 14, color: accentGold),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "المشرف: $displaySupName",
+                              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? accentGold : primaryNavy),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          "المشرف: $supName",
-                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? accentGold : primaryNavy),
-                        ),
+                        const SizedBox(height: 8),
+                        ...students.map((st) => Container(
+                              margin: const EdgeInsets.only(top: 6),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text("🌟 ", style: TextStyle(fontSize: 12)),
+                                  Expanded(
+                                    child: RichText(
+                                      text: TextSpan(
+                                        style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: isDark ? Colors.white : Colors.black87),
+                                        children: [
+                                          TextSpan(text: "${st['name']}: ", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                          TextSpan(text: "${st['reason']}", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    ...students.map((st) => Container(
-                          margin: const EdgeInsets.only(top: 6),
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text("🌟 ", style: TextStyle(fontSize: 12)),
-                              Expanded(
-                                child: RichText(
-                                  text: TextSpan(
-                                    style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: isDark ? Colors.white : Colors.black87),
-                                    children: [
-                                      TextSpan(text: "${st['name']}: ", style: const TextStyle(fontWeight: FontWeight.bold)),
-                                      TextSpan(text: "${st['reason']}", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )),
-                  ],
-                ),
+                  );
+                },
               );
             }).toList(),
           ],
