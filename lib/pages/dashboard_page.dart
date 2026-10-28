@@ -216,13 +216,20 @@ class _DashboardPageState extends State<DashboardPage> {
                               }
                             }
 
+                            // 🎯 حساب الحلقات الفعالة (المشرفون الذين لديهم طلاب نشطون مسندون)
+                            Set<String> activeCircleSupervisorIds = {};
+
                             for (var s in students) {
                               final data = s.data() as Map<String, dynamic>;
-                              if (data['supervisorId'] == null || data['supervisorId'].toString().trim().isEmpty) {
+                              String supId = data['supervisorId']?.toString().trim() ?? '';
+                              if (supId.isEmpty) {
                                 noSupervisor++;
+                              } else {
+                                activeCircleSupervisorIds.add(supId);
                               }
                             }
 
+                            int activeCirclesCount = activeCircleSupervisorIds.length;
                             int totalStudents = students.length;
                             int assignedStudents = totalStudents - noSupervisor;
                             double assignedPercentage = totalStudents > 0 ? (assignedStudents / totalStudents) : 0.0;
@@ -242,22 +249,35 @@ class _DashboardPageState extends State<DashboardPage> {
                                     isDarkMode: isDarkMode,
                                   ),
                                   const SizedBox(height: 20),
+                                  
+                                  // 🎯 شبكة الإحصائيات مع إضافة كارت الحلقات الفعالة
                                   GridView.count(
                                     crossAxisCount: 2,
                                     shrinkWrap: true,
                                     physics: const NeverScrollableScrollPhysics(),
                                     crossAxisSpacing: 15,
                                     mainAxisSpacing: 15,
-                                    childAspectRatio: 1.05,
+                                    childAspectRatio: 1.0,
                                     children: [
                                       _buildGlassStatCard(
                                         title: "إجمالي الطلاب",
                                         value: totalStudents.toString(),
-                                        subtitle: "طلاب نشطون",
+                                        subtitle: "طلاب نشطون 👨‍🎓",
                                         icon: Icons.people_alt_rounded,
                                         color: isDarkMode ? Colors.lightBlueAccent : Colors.blue.shade600,
                                         isDarkMode: isDarkMode,
                                       ),
+                                      
+                                      // 🌟 كارت الحلقات الفعالة
+                                      _buildGlassStatCard(
+                                        title: "الحلقات الفعالة",
+                                        value: activeCirclesCount.toString(),
+                                        subtitle: "مشرف لديه طلاب 🕌",
+                                        icon: Icons.groups_rounded,
+                                        color: Colors.tealAccent.shade700,
+                                        isDarkMode: isDarkMode,
+                                      ),
+
                                       InkWell(
                                         borderRadius: BorderRadius.circular(25),
                                         onTap: () {
@@ -275,6 +295,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                           isDarkMode: isDarkMode,
                                         ),
                                       ),
+
                                       _buildGlassStatCard(
                                         title: "إجمالي الجلسات",
                                         value: sessions.length.toString(),
@@ -283,6 +304,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                         color: Colors.greenAccent.shade700,
                                         isDarkMode: isDarkMode,
                                       ),
+
                                       InkWell(
                                         borderRadius: BorderRadius.circular(25),
                                         onTap: () {

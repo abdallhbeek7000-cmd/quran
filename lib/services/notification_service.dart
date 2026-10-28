@@ -73,11 +73,12 @@ class NotificationService {
 
   // 🚀 الدالة الجوكر: ترسل الإشعار للطالب أو المشرف بذكاء
   static Future<void> sendAndSaveNotification({
-    required String studentId, // يعمل كمعرف عام (يستقبل آي دي طالب أو مشرف)
+    required String studentId, // يعمل كمعرف عام (يستقبل آي دي طالب أو مشرف أو مدير)
     required String title,
     required String body,
     required String type, 
     String? chatStudentId, // 💬 معرف الطالب الخاص بالمحادثة لتجميع الإشعارات
+    String? requestId,     // 📝 معرف طلب الاستئذان للانتقال بتركيز للطلب المحدد
     BuildContext? context, 
   }) async {
     try {
@@ -113,6 +114,9 @@ class NotificationService {
         'title': title,
         'body': body,
         'type': type,
+        'studentId': studentId,
+        if (requestId != null) 'requestId': requestId,
+        if (chatStudentId != null) 'chatStudentId': chatStudentId,
         'timestamp': FieldValue.serverTimestamp(),
         'isRead': false,
       });
@@ -143,7 +147,7 @@ class NotificationService {
           notificationTag = 'chat_${chatStudentId ?? studentId}';
         }
 
-        // 🎯 بناء الـ Payload المعتمد القاطع لـ FCM v1
+        // 🎯 بناء الـ Payload المعتمد لـ FCM v1
         Map<String, dynamic> messagePayload = {
           'token': fcmToken,
           'notification': {
@@ -151,10 +155,12 @@ class NotificationService {
             'body': body,
           },
           'data': {
+            'click_action': 'FLUTTER_NOTIFICATION_CLICK',
             'title': title,
             'body': body,
             'studentId': studentId,
             'type': type,
+            if (requestId != null) 'requestId': requestId,
             if (chatStudentId != null) 'chatStudentId': chatStudentId,
           },
           'android': {
@@ -176,7 +182,7 @@ class NotificationService {
         } else {
           print("FCM V1 Broadcast Status: ${response.statusCode} - ${response.body}");
 
-          // 🛠️ معالجة التوكن التالف ومسحه لتنظيف Firestore بدون إزعاج المستخدم
+          // 🛠️ معالجة التوكن التالف ومسحه لتنظيف Firestore
           if (response.body.contains("UNREGISTERED") || 
               response.body.contains("NOT_FOUND") || 
               response.body.contains("INVALID_ARGUMENT")) {

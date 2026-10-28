@@ -5,15 +5,20 @@ import 'package:provider/provider.dart';
 import '../models/cycle_model.dart';
 import '../services/theme_provider.dart';
 import '../services/notification_service.dart';
+import '../widgets/offline_wrapper.dart';
 
 class LeaveRequestsPage extends StatefulWidget {
   final String supervisorId;
   final String role;
+  final String? studentId;
+  final String? requestId;
 
   const LeaveRequestsPage({
     super.key,
-    required this.supervisorId,
-    required this.role,
+    this.supervisorId = '',
+    this.role = 'manager',
+    this.studentId,
+    this.requestId,
   });
 
   @override
@@ -205,7 +210,6 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
               SetOptions(merge: true),
             );
       } else if (status == 'rejected') {
-        // إلغاء كرت الجلسة إن كان أُنشئ سابقاً بعذر
         var existingSession = await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).get();
         if (existingSession.exists && (existingSession.data()?['absenceReason'] == reason)) {
           await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).delete();
@@ -255,176 +259,177 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('cycles').snapshots(),
-      builder: (context, cycleSnap) {
-        CycleModel? activeCycle;
+    return OfflineWrapper(
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('cycles').snapshots(),
+        builder: (context, cycleSnap) {
+          CycleModel? activeCycle;
 
-        if (cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty) {
-          for (var doc in cycleSnap.data!.docs) {
-            var data = doc.data() as Map<String, dynamic>;
-            bool isCurrent = data['isCurrent'] == true || data['isActive'] == true;
-            bool isActive = data['status'] == 'active' || data['active'] == true;
-            bool isNotClosed = data['isClosed'] != true && data['archived'] != true;
+          if (cycleSnap.hasData && cycleSnap.data!.docs.isNotEmpty) {
+            for (var doc in cycleSnap.data!.docs) {
+              var data = doc.data() as Map<String, dynamic>;
+              bool isCurrent = data['isCurrent'] == true || data['isActive'] == true;
+              bool isActive = data['status'] == 'active' || data['active'] == true;
+              bool isNotClosed = data['isClosed'] != true && data['archived'] != true;
 
-            if ((isCurrent || isActive) && isNotClosed) {
-              activeCycle = CycleModel(
-                id: doc.id,
-                name: data['name'] ?? '',
-                type: data['type']?.toString() ?? '',
-                year: int.tryParse(data['year']?.toString() ?? '') ?? DateTime.now().year,
-                cycleNumber: int.tryParse(data['cycleNumber']?.toString() ?? '') ?? 1,
-                startDate: data['startDate']?.toString() ?? '',
-                endDate: data['endDate']?.toString() ?? '',
-                active: true,
-                archived: false,
-              );
-              break;
+              if ((isCurrent || isActive) && isNotClosed) {
+                activeCycle = CycleModel(
+                  id: doc.id,
+                  name: data['name'] ?? '',
+                  type: data['type']?.toString() ?? '',
+                  year: int.tryParse(data['year']?.toString() ?? '') ?? DateTime.now().year,
+                  cycleNumber: int.tryParse(data['cycleNumber']?.toString() ?? '') ?? 1,
+                  startDate: data['startDate']?.toString() ?? '',
+                  endDate: data['endDate']?.toString() ?? '',
+                  active: true,
+                  archived: false,
+                );
+                break;
+              }
             }
           }
-        }
 
-        return DefaultTabController(
-          length: 2,
-          child: Scaffold(
-            extendBodyBehindAppBar: true,
-            backgroundColor: isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
-            appBar: AppBar(
-              elevation: 0,
-              backgroundColor: Colors.transparent,
-              title: Text(
-                "طلبات الاستئذان 📑",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : primaryColor,
-                  fontFamily: 'Cairo',
-                  fontSize: 19,
+          return DefaultTabController(
+            length: 2,
+            child: Scaffold(
+              extendBodyBehindAppBar: true,
+              backgroundColor: isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
+              appBar: AppBar(
+                elevation: 0,
+                backgroundColor: Colors.transparent,
+                title: Text(
+                  "طلبات الاستئذان 📑",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isDarkMode ? Colors.white : primaryColor,
+                    fontFamily: 'Cairo',
+                    fontSize: 19,
+                  ),
                 ),
+                centerTitle: true,
+                iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
               ),
-              centerTitle: true,
-              iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-            ),
-            body: Stack(
-              children: [
-                // خلفية متدرجة
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isDarkMode
-                          ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
-                          : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: -60,
-                  right: -50,
-                  child: Container(
-                    width: 280,
-                    height: 280,
+              body: Stack(
+                children: [
+                  Container(
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isDarkMode ? primaryColor.withOpacity(0.18) : primaryColor.withOpacity(0.12),
+                      gradient: LinearGradient(
+                        colors: isDarkMode
+                            ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
+                            : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                     ),
                   ),
-                ),
-                Positioned(
-                  bottom: 80,
-                  left: -60,
-                  child: Container(
-                    width: 250,
-                    height: 250,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15),
+                  Positioned(
+                    top: -60,
+                    right: -50,
+                    child: Container(
+                      width: 280,
+                      height: 280,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDarkMode ? primaryColor.withOpacity(0.18) : primaryColor.withOpacity(0.12),
+                      ),
                     ),
                   ),
-                ),
+                  Positioned(
+                    bottom: 80,
+                    left: -60,
+                    child: Container(
+                      width: 250,
+                      height: 250,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15),
+                      ),
+                    ),
+                  ),
 
-                SafeArea(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 10),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(22),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
-                                borderRadius: BorderRadius.circular(22),
-                                border: Border.all(
-                                  color: isDarkMode ? Colors.white12 : Colors.white.withOpacity(0.8),
-                                  width: 1.2,
+                  SafeArea(
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 10),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(22),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+                                  borderRadius: BorderRadius.circular(22),
+                                  border: Border.all(
+                                    color: isDarkMode ? Colors.white12 : Colors.white.withOpacity(0.8),
+                                    width: 1.2,
+                                  ),
                                 ),
-                              ),
-                              child: TabBar(
-                                indicator: BoxDecoration(
-                                  color: isDarkMode ? accentGold : primaryColor,
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.35),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
+                                child: TabBar(
+                                  indicator: BoxDecoration(
+                                    color: isDarkMode ? accentGold : primaryColor,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.35),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  labelColor: isDarkMode ? Colors.black87 : Colors.white,
+                                  unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
+                                  labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
+                                  tabs: const [
+                                    Tab(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.mark_email_unread_rounded, size: 18),
+                                          SizedBox(width: 8),
+                                          Text("طلبات معلقة 📥"),
+                                        ],
+                                      ),
+                                    ),
+                                    Tab(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.inventory_2_rounded, size: 18),
+                                          SizedBox(width: 8),
+                                          Text("السجل والأرشيف 📁"),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
-                                labelColor: isDarkMode ? Colors.black87 : Colors.white,
-                                unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
-                                labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
-                                tabs: const [
-                                  Tab(
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.mark_email_unread_rounded, size: 18),
-                                        SizedBox(width: 8),
-                                        Text("طلبات معلقة 📥"),
-                                      ],
-                                    ),
-                                  ),
-                                  Tab(
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.inventory_2_rounded, size: 18),
-                                        SizedBox(width: 8),
-                                        Text("السجل والأرشيف 📁"),
-                                      ],
-                                    ),
-                                  ),
-                                ],
                               ),
                             ),
                           ),
                         ),
-                      ),
 
-                      const SizedBox(height: 15),
+                        const SizedBox(height: 15),
 
-                      Expanded(
-                        child: TabBarView(
-                          physics: const BouncingScrollPhysics(),
-                          children: [
-                            _buildRequestsList(context, isDarkMode, isHistory: false, activeCycle: activeCycle),
-                            _buildRequestsList(context, isDarkMode, isHistory: true, activeCycle: activeCycle),
-                          ],
+                        Expanded(
+                          child: TabBarView(
+                            physics: const BouncingScrollPhysics(),
+                            children: [
+                              _buildRequestsList(context, isDarkMode, isHistory: false, activeCycle: activeCycle),
+                              _buildRequestsList(context, isDarkMode, isHistory: true, activeCycle: activeCycle),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -438,7 +443,6 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
       return _buildNoActiveCycleState(isDarkMode);
     }
 
-    // 🎯 استعلام الخادم بدون .orderBy للتغلب على خطأ Firestore Index Error
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('leave_requests')
@@ -462,7 +466,6 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
           return _buildEmptyState(isDarkMode, isHistory);
         }
 
-        // 🎯 تصفية النتائج برمجياً بحسب دور المستلم وواجهة Tab
         var docs = snapshot.data!.docs.where((doc) {
           var data = doc.data() as Map<String, dynamic>;
           String currentStatus = data['status'] ?? 'pending';
@@ -470,8 +473,13 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
           bool statusMatches = isHistory ? (currentStatus != 'pending') : (currentStatus == 'pending');
           bool isMyStudent = true;
 
-          if (widget.role == 'supervisor') {
+          if (widget.role == 'supervisor' && widget.supervisorId.isNotEmpty) {
             isMyStudent = data['supervisorId'] == widget.supervisorId;
+          }
+
+          if (widget.studentId != null && widget.studentId!.isNotEmpty) {
+            bool matchesStudent = data['studentId'] == widget.studentId;
+            return statusMatches && isMyStudent && matchesStudent;
           }
 
           return statusMatches && isMyStudent;
@@ -479,7 +487,6 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
 
         if (docs.isEmpty) return _buildEmptyState(isDarkMode, isHistory);
 
-        // 🎯 ترتيب البرمجة بدلاً من ترتيب قاعدة البيانات لمنع أخطاء Index
         docs.sort((a, b) {
           var dataA = a.data() as Map<String, dynamic>;
           var dataB = b.data() as Map<String, dynamic>;
@@ -499,6 +506,8 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
             String currentStatus = data['status'] ?? 'pending';
             String requestTime = data['requestTime'] ?? 'غير محدد';
 
+            bool isHighlighted = widget.requestId != null && widget.requestId == doc.id;
+
             return Container(
               margin: const EdgeInsets.only(bottom: 16),
               child: ClipRRect(
@@ -513,10 +522,12 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
                           : Colors.white.withOpacity(0.65),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: isDarkMode
-                            ? Colors.white.withOpacity(0.12)
-                            : Colors.white.withOpacity(0.85),
-                        width: 1.5,
+                        color: isHighlighted
+                            ? (isDarkMode ? accentGold : primaryColor)
+                            : (isDarkMode
+                                ? Colors.white.withOpacity(0.12)
+                                : Colors.white.withOpacity(0.85)),
+                        width: isHighlighted ? 2.0 : 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(

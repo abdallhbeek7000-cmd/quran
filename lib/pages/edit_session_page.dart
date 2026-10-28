@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:intl/intl.dart';
@@ -62,7 +63,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     {'id': 18, 'name': 'الكهف', 'startPage': 293, 'endPage': 304, 'verses': 110},
     {'id': 19, 'name': 'مريم', 'startPage': 305, 'endPage': 312, 'verses': 98},
     {'id': 20, 'name': 'طه', 'startPage': 312, 'endPage': 321, 'verses': 135},
-    {'id': 21, 'name': 'الأننبياء', 'startPage': 322, 'endPage': 331, 'verses': 112},
+    {'id': 21, 'name': 'الأنبياء', 'startPage': 322, 'endPage': 331, 'verses': 112},
     {'id': 22, 'name': 'الحج', 'startPage': 332, 'endPage': 341, 'verses': 78},
     {'id': 23, 'name': 'المؤمنون', 'startPage': 342, 'endPage': 349, 'verses': 118},
     {'id': 24, 'name': 'النور', 'startPage': 350, 'endPage': 359, 'verses': 64},
@@ -195,6 +196,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
   bool isCompletedStudent = false;
   bool checkingStudentType = true;
+  bool isAdmin = false; // 👑 حالة الإدارة / المجيز (دعم manager و admin)
 
   List<Map<String, String>> selectedNewMemoSupervisors = [];
   List<Map<String, String>> selectedReviewSupervisors = [];
@@ -253,7 +255,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
 
     _loadSupervisorsFromData(data);
     _parseExistingData(data);
-    _checkIfStudentIsCompleted();
+    _checkUserRoleAndStudentType();
   }
 
   void _loadSupervisorsFromData(Map<String, dynamic> data) {
@@ -559,9 +561,36 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     return parts.join(" | ");
   }
 
-  // 🛠️ جلب نوع الطالب مع دعم الكاش المحلي لضمان العمل 100% بدون إنترنت
-  Future<void> _checkIfStudentIsCompleted() async {
+  // 👑 فحص دور المستخدم (مدير/مجيز manager أو admin) ونوع الطالب مع دعم الكاش محلياً
+  Future<void> _checkUserRoleAndStudentType() async {
     try {
+      // 1. فحص الدور من الخريطة الممررة بالجلسة أولاً
+      String roleFromData = widget.data['currentUserRole'] ?? '';
+      if (roleFromData == 'admin' || roleFromData == 'manager') {
+        isAdmin = true;
+      } else if (widget.data['isAdmin'] == true) {
+        isAdmin = true;
+      } else {
+        // فحص من الفايربيس للمستخدم المسجل دخوله حالياً باستخدام الكاش المحلي
+        User? currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          var userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .get(const GetOptions(source: Source.cache))
+              .catchError((_) => FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get());
+
+          if (userDoc.exists && userDoc.data() != null) {
+            var uData = userDoc.data()!;
+            String role = uData['role'] ?? '';
+            if (role == 'admin' || role == 'manager' || uData['isAdmin'] == true) {
+              isAdmin = true;
+            }
+          }
+        }
+      }
+
+      // 2. فحص نوع الطالب
       String studentId = widget.data['studentId'] ?? '';
       if (studentId.isNotEmpty) {
         DocumentSnapshot studentDoc = await FirebaseFirestore.instance
@@ -578,7 +607,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
         }
       }
     } catch (e) {
-      debugPrint("تنبيه: تعذر فحص نوع الطالب محلياً: $e");
+      debugPrint("تنبيه: تعذر فحص الصلاحيات/نوع الطالب محلياً: $e");
     } finally {
       if (mounted) setState(() => checkingStudentType = false);
     }
@@ -747,7 +776,6 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     );
   }
 
-  // 🛠️ تعديل جلب المشرفين ليعتمد أولاً على الكاش لحماية التطبيق من التعليق في حال عدم توفر النت
   void _showStaffSelectionBottomSheet(BuildContext context, bool isDarkMode, List<Map<String, String>> targetList, String title) {
     showModalBottomSheet(
       context: context,
@@ -1265,7 +1293,7 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevRanges);
     String finalFarReview = (!hasReview || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(oldRevRanges);
     String finalReading = (!hasReading || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(readingRanges);
-    String finalIjazah = (!hasIjazah || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(ijazahRanges); // 📜 كود حفظ الإجازة
+    String finalIjazah = (!hasIjazah || absent || isExam || didNotRecite || !isAdmin) ? '' : _buildFormattedSectionText(ijazahRanges); // 📜 حفظ الإجازة للمدير فقط
 
     String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
     String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
@@ -1620,8 +1648,11 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                   Row(
                                     children: [
                                       Expanded(child: _buildToggleTile("قراءة نظراً من المصحف", hasReading, Colors.purpleAccent, (v) => setState(() => hasReading = v), isDarkMode)),
-                                      const SizedBox(width: 10),
-                                      Expanded(child: _buildToggleTile("إجازة قرآنية 📜", hasIjazah, Colors.deepOrangeAccent, (v) => setState(() => hasIjazah = v), isDarkMode)), // 📜 تبديل الإجازة
+                                      // 📜 إظهار خيار تفعيل الإجازة القرآنية للإدارة فقط
+                                      if (isAdmin) ...[
+                                        const SizedBox(width: 10),
+                                        Expanded(child: _buildToggleTile("إجازة قرآنية 📜", hasIjazah, Colors.deepOrangeAccent, (v) => setState(() => hasIjazah = v), isDarkMode)),
+                                      ],
                                     ],
                                   ),
                                   const SizedBox(height: 20),
@@ -1669,7 +1700,8 @@ class _EditSessionPageState extends State<EditSessionPage> with SingleTickerProv
                                     ),
                                   ],
 
-                                  if (hasIjazah) ...[ // 📜 كارت تفاصيل الإجازة القرآنية
+                                  // 📜 إظهار كارت قسم الإجازة القرآنية للمدير فقط وحال تفعيله
+                                  if (isAdmin && hasIjazah) ...[
                                     _buildUniversalQuranSection(
                                       title: "المقدار المقروء في الإجازة القرآنية 📜",
                                       icon: Icons.workspace_premium_rounded,

@@ -43,7 +43,7 @@ import 'archived_student_sessions_page.dart';
 import 'holiday_management_page.dart';
 import 'honors_record_page.dart';
 import 'honor_suggestions_page.dart';
-import 'student_stats_qr_page.dart'; // 👈 استدعاء صفحة مسح QR الجديدة
+import 'student_stats_qr_page.dart';
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -92,11 +92,16 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  /// إعداد وجدولة إشعارات الصلاة (قبل ساعة وقبل 10 دقائق)
   Future<void> _initAndSchedulePrayerNotifications() async {
     try {
       tz.initializeTimeZones();
       const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const iosSettings = DarwinInitializationSettings();
+      const iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
       const initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
 
       await _localNotifications.initialize(initSettings);
@@ -115,26 +120,40 @@ class _HomePageState extends State<HomePage> {
       final now = DateTime.now();
 
       final List<Map<String, dynamic>> list = [
-        {"name": "الفجر", "time": times.fajr, "id": 101},
-        {"name": "الظهر", "time": times.dhuhr, "id": 102},
-        {"name": "العصر", "time": times.asr, "id": 103},
-        {"name": "المغرب", "time": times.maghrib, "id": 104},
-        {"name": "العشاء", "time": times.isha, "id": 105},
+        {"name": "الفجر", "time": times.fajr, "baseId": 100},
+        {"name": "الظهر", "time": times.dhuhr, "baseId": 200},
+        {"name": "العصر", "time": times.asr, "baseId": 300},
+        {"name": "المغرب", "time": times.maghrib, "baseId": 400},
+        {"name": "العشاء", "time": times.isha, "baseId": 500},
       ];
 
       for (var item in list) {
         DateTime prayerTime = item["time"] as DateTime;
-        DateTime notificationTime = prayerTime.subtract(const Duration(minutes: 5));
+        int baseId = item["baseId"] as int;
+        String name = item["name"] as String;
 
-        if (notificationTime.isBefore(now)) {
-          notificationTime = notificationTime.add(const Duration(days: 1));
+        // 1. إشعار قبل ساعة (60 دقيقة)
+        DateTime hourBefore = prayerTime.subtract(const Duration(minutes: 60));
+        if (hourBefore.isBefore(now)) {
+          hourBefore = hourBefore.add(const Duration(days: 1));
         }
-
         await _scheduleNotification(
-          id: item["id"],
-          title: "اقتربت صلاة ${item['name']} 🕌",
-          body: "باقي 5 دقائق على أذان صلاة ${item['name']}. استعد للصلاة!",
-          scheduledDate: notificationTime,
+          id: baseId + 1,
+          title: "اقترب موعد صلاة $name 🕌",
+          body: "باقي ساعة واحدة على أذان صلاة $name. تجهّز للصلاة!",
+          scheduledDate: hourBefore,
+        );
+
+        // 2. إشعار قبل 10 دقائق
+        DateTime tenMinBefore = prayerTime.subtract(const Duration(minutes: 10));
+        if (tenMinBefore.isBefore(now)) {
+          tenMinBefore = tenMinBefore.add(const Duration(days: 1));
+        }
+        await _scheduleNotification(
+          id: baseId + 2,
+          title: "اقتربت صلاة $name جداً 🕌",
+          body: "باقي 10 دقائق فقط على أذان صلاة $name. استعد للوضوء والصلاة!",
+          scheduledDate: tenMinBefore,
         );
       }
     } catch (e) {
@@ -149,15 +168,19 @@ class _HomePageState extends State<HomePage> {
     required DateTime scheduledDate,
   }) async {
     const androidDetails = AndroidNotificationDetails(
-      'prayer_channel_id_v2',
-      'إشعارات أوقات الصلاة',
-      channelDescription: 'تنبيهات اقتراب موعد الصلاة قبل 5 دقائق',
+      'prayer_channel_v3',
+      'تنبيهات مواقيت الصلاة',
+      channelDescription: 'تنبيهات اقتراب موعد الصلاة قبل ساعة وقبل 10 دقائق',
       importance: Importance.max,
       priority: Priority.high,
       playSound: true,
       enableVibration: true,
+      fullScreenIntent: true,
     );
-    const notificationDetails = NotificationDetails(android: androidDetails, iOS: DarwinNotificationDetails(presentSound: true, presentAlert: true));
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(presentSound: true, presentAlert: true, presentBadge: true),
+    );
 
     await _localNotifications.zonedSchedule(
       id,
@@ -190,6 +213,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// إعداد وقراءة رمز FCM وتحديثه بداخل مجموعة users أو supervisors حسب الدور
   Future<void> _setupNotifications() async {
     try {
       FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -199,9 +223,24 @@ class _HomePageState extends State<HomePage> {
       if (token != null && widget.uid.isNotEmpty) {
         String collection = widget.role == "manager" ? "users" : "supervisors";
         await FirebaseFirestore.instance.collection(collection).doc(widget.uid).set(
-          {'fcmToken': token}, SetOptions(merge: true)
+          {
+            'fcmToken': token,
+            'lastTokenUpdate': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
         );
       }
+
+      // إبقاء الرمز متزامناً عند تغيره تلقائياً
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+        if (widget.uid.isNotEmpty) {
+          String collection = widget.role == "manager" ? "users" : "supervisors";
+          await FirebaseFirestore.instance.collection(collection).doc(widget.uid).set(
+            {'fcmToken': newToken},
+            SetOptions(merge: true),
+          );
+        }
+      });
     } catch (e) {
       debugPrint("❌ خطأ في إعداد الإشعارات: $e");
     }
@@ -427,7 +466,6 @@ class _HomePageState extends State<HomePage> {
                         crossAxisSpacing: 12,
                         childAspectRatio: 0.95,
                         children: [
-                          // 📷 إضافة خيار ماسح الـ QR الجديد
                           _buildSheetItem(Icons.qr_code_scanner_rounded, "مسح بطاقة QR 📷", Colors.cyanAccent, () {
                             Navigator.pop(context);
                             _nav(const StudentStatsQrPage());
@@ -576,7 +614,6 @@ class _HomePageState extends State<HomePage> {
               bool isNotClosed = data['isClosed'] != true && data['archived'] != true;
 
               if ((isCurrent || isActive) && isNotClosed) {
-                var data = doc.data() as Map<String, dynamic>;
                 activeCycleModel = CycleModel(
                   id: doc.id,
                   name: data['name'] ?? '',

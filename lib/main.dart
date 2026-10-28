@@ -22,6 +22,7 @@ import 'pages/login_page.dart';
 import 'pages/home_page.dart';
 import 'pages/splash_screen.dart'; 
 import 'pages/update_checker.dart'; 
+import 'pages/leave_requests_page.dart'; // 📝 استيراد صفحة طلبات الاستئذان المعدلة
 import 'services/theme_provider.dart'; 
 import 'services/prayer_service.dart'; // 🕌 خدمة أوقات الصلاة
 import 'services/cycle_service.dart';  // 🔄 خدمة الدورات
@@ -114,6 +115,27 @@ Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
   );
 }
 
+// 🎯 دالة التوجيه المباشر لصفحة الاستئذان بناءً على بيانات الإشعار
+void _navigateToTargetPage(Map<String, dynamic> data) {
+  print("🚀 جاري التوجيه من الإشعار مع البيانات: $data");
+
+  String type = data['type']?.toString().toLowerCase() ?? '';
+
+  // 📝 عند استقبال إشعار طلب استئذان جديد أو إشعارات الاستئذان المرتبطة
+  if (type == 'leave_request' || type == 'permission_request' || type == 'permission' || type == 'leave_status') {
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => LeaveRequestsPage(
+          studentId: data['studentId']?.toString(),
+          requestId: data['requestId']?.toString(),
+          supervisorId: data['supervisorId']?.toString() ?? '',
+          role: data['role']?.toString() ?? 'manager',
+        ),
+      ),
+    );
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -149,10 +171,25 @@ void main() async {
   // 💬 تهيئة الإشعارات المحلية وإشعارات أوقات الصلاة
   if (!kIsWeb) {
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initSettings = InitializationSettings(
+    
+    final InitializationSettings initSettings = InitializationSettings(
       android: initializationSettingsAndroid,
     );
-    await flutterLocalNotificationsPlugin.initialize(initSettings);
+
+    // 🔔 ربط الاستماع للنقر على الإشعارات المحلية التجميعية
+    await flutterLocalNotificationsPlugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        if (response.payload != null && response.payload!.isNotEmpty) {
+          try {
+            Map<String, dynamic> data = jsonDecode(response.payload!);
+            _navigateToTargetPage(data);
+          } catch (e) {
+            print("❌ خطأ في فك تشفير حمولة الإشعار المحلي: $e");
+          }
+        }
+      },
+    );
 
     // 🔑 طلب صلاحية الإشعارات لأندرويد 13+
     final androidImplementation = flutterLocalNotificationsPlugin
@@ -253,16 +290,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _setupInteractedMessage() async {
+    // 1️⃣ عند فتح التطبيق من حالة الإغلاق التام عبر ضغط الإشعار
     RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
     if (initialMessage != null) {
       _handleNotificationTap(initialMessage);
     }
 
+    // 2️⃣ عند فتح التطبيق من الخلفية عبر ضغط الإشعار
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
   }
 
   void _handleNotificationTap(RemoteMessage message) {
     print("Notification tapped! Data: ${message.data}");
+    _navigateToTargetPage(message.data);
   }
 
   @override

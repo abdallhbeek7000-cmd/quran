@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:intl/intl.dart';
@@ -166,7 +167,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   List<Map<String, dynamic>> newRevRanges = [];
   List<Map<String, dynamic>> oldRevRanges = [];
   List<Map<String, dynamic>> readingRanges = [];
-  List<Map<String, dynamic>> ijazahRanges = []; // 🎯 جديد: قائمة الإجازة
+  List<Map<String, dynamic>> ijazahRanges = [];
   List<Map<String, dynamic>> newHwRanges = [];
   List<Map<String, dynamic>> newRevHwRanges = [];
   List<Map<String, dynamic>> oldRevHwRanges = [];
@@ -185,7 +186,9 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
   bool hasNewMemorization = true;
   bool hasReview = true;
   bool hasReading = false;
-  bool hasIjazah = false; // 🎯 جديد: مطفأة تلقائياً
+  bool hasIjazah = false;
+
+  bool isManager = false; // 👑 خاص بالتحقق من حسابات الإدارة
 
   String absenceType = "بدون عذر";
   String memorizationRating = "جيد";
@@ -213,8 +216,37 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
 
     _speech = stt.SpeechToText();
 
+    _checkUserRole();
     _fetchActiveCycleId();
     _checkIfStudentIsCompletedAndLoadData();
+  }
+
+  // 👑 فحص سريع لدور المستخدم لمعرفة هل هو مدير (Manager) لتمكين خيار الإجازة
+  Future<void> _checkUserRole() async {
+    try {
+      User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get(const GetOptions(source: Source.cache));
+
+        if (!userDoc.exists || userDoc.data() == null) {
+          userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+        }
+
+        if (userDoc.exists && userDoc.data() != null) {
+          Map<String, dynamic> uData = userDoc.data() as Map<String, dynamic>;
+          if (mounted) {
+            setState(() {
+              isManager = (uData['role']?.toString().toLowerCase() == 'manager');
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("خطأ في فحص دور المستخدم: $e");
+    }
   }
 
   // 🎯 جلب سريع من الـ Cache فوراً بدون تعليق الواجهة
@@ -571,7 +603,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     _disposeRanges(newRevRanges);
     _disposeRanges(oldRevRanges);
     _disposeRanges(readingRanges);
-    _disposeRanges(ijazahRanges); // 🎯 جديد: التخلص من ذاكرة مصفوفة الإجازة
+    _disposeRanges(ijazahRanges);
     _disposeRanges(newHwRanges);
     _disposeRanges(newRevHwRanges);
     _disposeRanges(oldRevHwRanges);
@@ -1211,7 +1243,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     );
   }
 
-  // 🎯 دالة الحفظ الفوري المجهزة للأوفلاين والأونلاين
   save() async {
     if (loading) return;
 
@@ -1243,7 +1274,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     String finalNearReview = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : _buildFormattedSectionText(newRevRanges);
     String finalFarReview = (!hasReview || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(oldRevRanges);
     String finalReading = (!hasReading || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(readingRanges);
-    String finalIjazah = (!hasIjazah || absent || isExam || didNotRecite) ? '' : _buildFormattedSectionText(ijazahRanges); // 🎯 جديد: الإجازة
+    String finalIjazah = (!hasIjazah || absent || isExam || didNotRecite || !isManager) ? '' : _buildFormattedSectionText(ijazahRanges);
 
     String finalMemoRating = (!hasNewMemorization || absent || isExam || isCompletedStudent || didNotRecite) ? '' : memorizationRating;
     String finalNewRevRating = (!hasReview || absent || isExam || isCompletedStudent || didNotRecite) ? '' : newReviewRating;
@@ -1303,7 +1334,7 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
       'newReviewHomework': finalNewRevHW,
       'oldReviewHomework': finalOldRevHW,
       'readingBySight': finalReading,
-      'ijazah': finalIjazah, // 🎯 جديد: تخزين مقدار الإجازة
+      'ijazah': finalIjazah,
       'memorizationRating': finalMemoRating,
       'newReviewRating': finalNewRevRating,
       'oldReviewRating': finalOldRevRating,
@@ -1320,7 +1351,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
     try {
       String customDocId = "${widget.studentId}_$date";
       
-      // ⚡ إرسال الحفظ للـ Firestore محلياً بدون انتظار مزامنة الشبكة لكي ينتهي الفراغ فوراً
       FirebaseFirestore.instance
           .collection('sessions')
           .doc(customDocId)
@@ -1335,7 +1365,6 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
         }).catchError((e) => debugPrint("تنبيه في تحديث الطالب أوفلاين: $e"));
       }
 
-      // ⚡ معالجة الإشعار خلف الكواليس بدون await لمنع تجميد الشاشة أوفلاين
       if (widget.studentId.isNotEmpty) {
         String notifyTitle = "📖 جلسة جديدة في الحلقة";
         String notifyBody = absent
@@ -1580,9 +1609,11 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                   Row(
                                     children: [
                                       Expanded(child: _buildToggleTile("قراءة نظراً من المصحف", hasReading, Colors.purpleAccent, (v) => setState(() => hasReading = v), isDarkMode)),
-                                      const SizedBox(width: 10),
-                                      // 🎯 جديد: التبديل الخاص بالإجازة (مطفأة تلقائياً)
-                                      Expanded(child: _buildToggleTile("إجازة في القرآن الكريم 📜", hasIjazah, Colors.amber, (v) => setState(() => hasIjazah = v), isDarkMode)),
+                                      // 👑 يظهر خيار الإجازة فقط إذا كان المستخدم من حسابات الإدارة
+                                      if (isManager) ...[
+                                        const SizedBox(width: 10),
+                                        Expanded(child: _buildToggleTile("إجازة في القرآن الكريم 📜", hasIjazah, Colors.amber, (v) => setState(() => hasIjazah = v), isDarkMode)),
+                                      ],
                                     ],
                                   ),
                                   const SizedBox(height: 20),
@@ -1630,8 +1661,8 @@ class _AddSessionPageState extends State<AddSessionPage> with SingleTickerProvid
                                     ),
                                   ],
 
-                                  // 🎯 جديد: قسم الإجازة في القرآن الكريم
-                                  if (hasIjazah) ...[
+                                  // 👑 قسم الإجازة يظهر فقط للإدارة وفقط عند تفعيله
+                                  if (isManager && hasIjazah) ...[
                                     _buildUniversalQuranSection(
                                       title: "المقدار المسموع في إجازة القرآن الكريم",
                                       icon: Icons.workspace_premium,
