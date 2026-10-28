@@ -43,6 +43,7 @@ import 'archived_student_sessions_page.dart';
 import 'holiday_management_page.dart';
 import 'honors_record_page.dart';
 import 'honor_suggestions_page.dart';
+import 'student_stats_qr_page.dart'; // 👈 استدعاء صفحة مسح QR الجديدة
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -426,6 +427,11 @@ class _HomePageState extends State<HomePage> {
                         crossAxisSpacing: 12,
                         childAspectRatio: 0.95,
                         children: [
+                          // 📷 إضافة خيار ماسح الـ QR الجديد
+                          _buildSheetItem(Icons.qr_code_scanner_rounded, "مسح بطاقة QR 📷", Colors.cyanAccent, () {
+                            Navigator.pop(context);
+                            _nav(const StudentStatsQrPage());
+                          }, isDark),
                           _buildSheetItem(Icons.view_list_rounded, "عرض الدورات", Colors.indigoAccent, () {
                             Navigator.pop(context);
                             _nav(const CyclesPage());
