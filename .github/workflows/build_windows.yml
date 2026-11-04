@@ -15,7 +15,7 @@ jobs:
         with:
           channel: 'stable'
 
-      # 🎯 كتابة ملف الحساب السري في الجذر والـ assets
+      # 🎯 كتابة ملف الحساب السري
       - name: Create Service Account File
         shell: bash
         run: |
@@ -44,33 +44,51 @@ jobs:
         shell: powershell
         run: |
           $dir = "build/windows/x64/extracted/firebase_cpp_sdk_windows"
-          if (Test-Path $dir) {
-              Get-ChildItem -Path $dir -Recurse -Filter "CMakeLists.txt" | ForEach-Object {
-                  (Get-Content $_.FullName) -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $_.FullName
-              }
+          Get-ChildItem -Path $dir -Recurse -Filter "CMakeLists.txt" | ForEach-Object {
+              Write-Host "Patching file: $($_.FullName)"
+              (Get-Content $_.FullName) -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $_.FullName
           }
 
-      # 🚀 3. البناء النهائي
+      # 🚀 3. البناء النهائي مع تعطيل تحذير Coroutine MSVC
       - name: Build Windows Executable
         shell: cmd
         run: |
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 🛠️ 4. نسخ ملفات الـ DLL وزرع ملف الخادم السري داخل مجلد data مباشرة
-      - name: Bundle Complete Dependencies & Assets
+      # 🛠️ 4. نسخ مجلد flutter_assets والأكواد والمكتبات قسراً لإنشاء مجلد data الصحيح + زرع ملف الـ JSON
+      - name: Force Construct Data Directory and Bundle
         shell: powershell
         run: |
           $target = "build/windows/x64/runner/Release"
           
-          # نسخ الـ DLLs
-          Get-ChildItem -Path "build/windows" -Recurse -Filter "*.dll" | ForEach-Object {
+          # 1. نسخ flutter_windows.dll
+          $flutterDll = Get-ChildItem -Path "$env:GITHUB_WORKSPACE" -Recurse -Filter "flutter_windows.dll" | Select-Object -First 1
+          if ($flutterDll -and -not (Test-Path "$target\flutter_windows.dll")) {
+              Copy-Item -Path $flutterDll.FullName -Destination $target -Force
+          }
+
+          # 2. نسخ كافة مكتبات الـ DLL
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "*.dll" | ForEach-Object {
               if (-not (Test-Path "$target\$($_.Name)")) {
                   Copy-Item -Path $_.FullName -Destination $target -Force
               }
           }
 
-          # زرع ملف service-account.json في مسارات القراءة المحتملة داخل Release
+          # 3. إنشاء مجلد data ونسخ الـ assets والـ app_data إليه قسراً
+          New-Item -ItemType Directory -Force -Path "$target\data"
+          
+          $assetsDir = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "flutter_assets" | Select-Object -First 1
+          if ($assetsDir) {
+              Copy-Item -Path $assetsDir.FullName -Destination "$target\data\flutter_assets" -Recurse -Force
+          }
+
+          $appDataDir = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "app_data" | Select-Object -First 1
+          if ($appDataDir) {
+              Copy-Item -Path $appDataDir.FullName -Destination "$target\data\app_data" -Recurse -Force
+          }
+
+          # 🔑 4. زرع ملف service-account.json داخل الـ Release ومجلد data/flutter_assets لضمان قراءته
           if (Test-Path "assets/service-account.json") {
               Copy-Item -Path "assets/service-account.json" -Destination $target -Force
               if (Test-Path "$target\data\flutter_assets") {
@@ -79,7 +97,7 @@ jobs:
               }
           }
 
-      # 📦 5. رفع المجلد المكتمل
+      # 📦 5. رفع كامل مجلد Release
       - name: Upload Windows Build Artifact
         uses: actions/upload-artifact@v4
         with:
