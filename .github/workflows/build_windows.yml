@@ -31,12 +31,9 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🚀 بناء ملف الـ EXE مع فرض السياسة في بيئة الويندوز
+      # 🚀 بناء ملف الـ EXE
       - name: Build Windows Executable
-        shell: powershell
-        run: |
-          $env:CMAKE_ARGS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
-          flutter build windows --release
+        run: flutter build windows --release
 
       # 📦 رفع ملفات الويندوز
       - uses: actions/upload-artifact@v4

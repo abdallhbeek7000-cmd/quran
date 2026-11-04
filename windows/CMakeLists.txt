@@ -1,3 +1,7 @@
+# 🛠️ حل مشكلة التوافقية مع Firebase C++ SDK في CMake الحديث
+cmake_policy(SET CMP0000 OLD)
+set(CMAKE_POLICY_VERSION_MINIMUM "3.5" CACHE STRING "" FORCE)
+
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
 project(quran_habal LANGUAGES CXX)
