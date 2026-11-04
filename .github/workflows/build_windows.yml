@@ -56,8 +56,8 @@ jobs:
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 🛠️ 4. نسخ كل ملفات الـ DLL ومجلد data المكتمل بدون شروط معقدة
-      - name: Bundle Complete Dependencies and Data
+      # 🛠️ 4. نسخ مجلد flutter_assets والأكواد والمكتبات قسراً لإنشاء مجلد data الصحيح
+      - name: Force Construct Data Directory and Bundle
         shell: powershell
         run: |
           $target = "build/windows/x64/runner/Release"
@@ -68,21 +68,27 @@ jobs:
               Copy-Item -Path $flutterDll.FullName -Destination $target -Force
           }
 
-          # 2. نسخ كافة ملفات الـ DLL
+          # 2. نسخ كافة مكتبات الـ DLL
           Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "*.dll" | ForEach-Object {
               if (-not (Test-Path "$target\$($_.Name)")) {
                   Copy-Item -Path $_.FullName -Destination $target -Force
               }
           }
 
-          # 3. نسخ مجلد data الصريح والكامل
-          $dataSrc = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "data" | Select-Object -First 1
-          if ($dataSrc -and -not (Test-Path "$target\data")) {
-              Write-Host "Copying data folder from: $($dataSrc.FullName)"
-              Copy-Item -Path $dataSrc.FullName -Destination "$target\data" -Recurse -Force
+          # 3. إنشاء مجلد data ونسخ الـ assets والـ app_data إليه قسراً
+          New-Item -ItemType Directory -Force -Path "$target\data"
+          
+          $assetsDir = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "flutter_assets" | Select-Object -First 1
+          if ($assetsDir) {
+              Copy-Item -Path $assetsDir.FullName -Destination "$target\data\flutter_assets" -Recurse -Force
           }
 
-      # 📦 5. رفع كامل مجلد Release المحزّم
+          $appDataDir = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "app_data" | Select-Object -First 1
+          if ($appDataDir) {
+              Copy-Item -Path $appDataDir.FullName -Destination "$target\data\app_data" -Recurse -Force
+          }
+
+      # 📦 5. رفع كامل مجلد Release
       - name: Upload Windows Build Artifact
         uses: actions/upload-artifact@v4
         with:
