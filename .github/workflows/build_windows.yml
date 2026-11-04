@@ -56,9 +56,9 @@ jobs:
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 📦 رفع ملفات الويندوز
+      # 📦 رفع ملفات الويندوز الكاملة بالـ DLLs والمجلدات
       - name: Upload Windows Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-app-release
-          path: build/windows/x64/runner/Release/
+          path: build/windows/x64/runner/Release/*
