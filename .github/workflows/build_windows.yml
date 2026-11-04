@@ -31,7 +31,7 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🛠️ 1. التوليد المبدئي لفك ضغط Firebase بدون إيقاف السكريبت عند الخطأ
+      # 🛠️ 1. التوليد المبدئي لفك ضغط Firebase
       - name: Extract Firebase SDK
         shell: powershell
         run: |
@@ -39,7 +39,7 @@ jobs:
           flutter build windows --release
           exit 0
 
-      # 🛠️ 2. تعديل الملف المستخرج مباشرة
+      # 🛠️ 2. تعديل ملف Firebase المستخرج
       - name: Patch Firebase CMake File
         shell: powershell
         run: |
@@ -49,9 +49,12 @@ jobs:
               (Get-Content $_.FullName) -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $_.FullName
           }
 
-      # 🚀 3. البناء النهائي المستقر
+      # 🚀 3. البناء النهائي مع تعطيل تحذير Coroutine MSVC
       - name: Build Windows Executable
-        run: flutter build windows --release
+        shell: cmd
+        run: |
+          set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+          flutter build windows --release
 
       # 📦 رفع ملفات الويندوز
       - name: Upload Windows Build Artifact
