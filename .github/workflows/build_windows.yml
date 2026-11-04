@@ -31,9 +31,9 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🚀 بناء ملف الـ EXE مع التمرير المباشر لوسم CMake
+      # 🚀 بناء ملف الـ EXE مع التمرير الصحيح لـ CMake
       - name: Build Windows Executable
-        run: flutter build windows --release -- -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        run: flutter build windows --release --build-arg="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
 
       # 📦 رفع ملفات الويندوز
       - name: Upload Windows Build Artifact
