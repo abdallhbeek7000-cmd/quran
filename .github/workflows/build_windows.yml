@@ -56,7 +56,7 @@ jobs:
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 🛠️ 4. نسخ كل ملفات الـ DLL ومجلد data الأساسي قسراً بجانب الـ EXE
+      # 🛠️ 4. نسخ كل ملفات الـ DLL ومجلد data المكتمل بدون شروط معقدة
       - name: Bundle Complete Dependencies and Data
         shell: powershell
         run: |
@@ -68,18 +68,18 @@ jobs:
               Copy-Item -Path $flutterDll.FullName -Destination $target -Force
           }
 
-          # 2. نسخ كافة ملفات الـ DLL الخارجيين
+          # 2. نسخ كافة ملفات الـ DLL
           Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "*.dll" | ForEach-Object {
               if (-not (Test-Path "$target\$($_.Name)")) {
                   Copy-Item -Path $_.FullName -Destination $target -Force
               }
           }
 
-          # 3. نسخ مجلد data بالكامل (الذي يحوي الـ assets والأكواد)
-          $dataDir = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "data" | Where-Object { Test-Path "$($_.FullName)\flutter_assets" } | Select-Object -First 1
-          if ($dataDir) {
-              Write-Host "Copying data folder from: $($dataDir.FullName)"
-              Copy-Item -Path $dataDir.FullName -Destination "$target\data" -Recurse -Force
+          # 3. نسخ مجلد data الصريح والكامل
+          $dataSrc = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "data" | Select-Object -First 1
+          if ($dataSrc -and -not (Test-Path "$target\data")) {
+              Write-Host "Copying data folder from: $($dataSrc.FullName)"
+              Copy-Item -Path $dataSrc.FullName -Destination "$target\data" -Recurse -Force
           }
 
       # 📦 5. رفع كامل مجلد Release المحزّم
