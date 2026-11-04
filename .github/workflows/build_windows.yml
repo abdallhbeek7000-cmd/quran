@@ -31,29 +31,27 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🛠️ استخراج وتعديل ملف Firebase بشكل مسبق وقاطع
-      - name: Pre-generate and Patch Firebase
+      # 🚀 بناء ملف الـ EXE مع تعديل سياسة Firebase ديناميكياً
+      - name: Build Windows Executable
         shell: powershell
         run: |
-          # 1. إنشاء مجلد البناء المبدئي
-          New-Item -ItemType Directory -Force -Path build/windows/x64
-          Set-Location build/windows/x64
-          
-          # 2. توليد ملفات CMake المبدئية لفك ضغط firebase_cpp_sdk_windows
-          cmake -G "Visual Studio 17 2022" -A x64 ../../windows
-          
-          Set-Location ../../
-          
-          # 3. استبدال السطر المسبب للمشكلة داخل ملف Firebase بالكامل
-          $file = "build/windows/x64/extracted/firebase_cpp_sdk_windows/CMakeLists.txt"
-          if (Test-Path $file) {
-              Write-Host "Modifying Firebase CMake file..."
-              (Get-Content $file) -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $file
+          # 1. تشغيل مراقب في الخلفية يصحح ملف Firebase فور استخراجه
+          $job = Start-Job -ScriptBlock {
+              $file = "build/windows/x64/extracted/firebase_cpp_sdk_windows/CMakeLists.txt"
+              while ($true) {
+                  if (Test-Path $file) {
+                      (Get-Content $file) -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $file
+                      break
+                  }
+                  Start-Sleep -Milliseconds 200
+              }
           }
-
-      # 🚀 بناء ملف الـ EXE النهائي
-      - name: Build Windows Executable
-        run: flutter build windows --release
+          
+          # 2. تشغيل أمر البناء الأصلي
+          flutter build windows --release
+          
+          # 3. إنهاء المهمة
+          Stop-Job $job | Remove-Job
 
       # 📦 رفع ملفات الويندوز
       - name: Upload Windows Build Artifact
