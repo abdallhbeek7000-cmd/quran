@@ -1,0 +1,42 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # 🎯 كتابة ملف الحساب السري (مثل ملف الأندرويد)
+      - name: Create Service Account File
+        shell: bash
+        run: |
+          mkdir -p assets
+          cat << 'EOF' > assets/service-account.json
+          ${{ secrets.SERVICE_ACCOUNT_JSON }}
+          EOF
+
+      # 🧹 تفعيل الويندوز وتنظيف المشروع
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - run: flutter clean
+      - run: flutter pub get
+
+      # 🚀 بناء ملف الـ EXE للويندوز
+      - name: Build Windows Executable
+        run: flutter build windows --release
+
+      # 📦 رفع ملفات الويندوز
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-app-release
+          path: build/windows/x64/runner/Release/
