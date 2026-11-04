@@ -31,11 +31,12 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🚀 بناء ملف الـ EXE مع حل مشكلة CMake التوافقية
+      # 🚀 بناء ملف الـ EXE مع فرض السياسة في بيئة الويندوز
       - name: Build Windows Executable
-        run: flutter build windows --release
-        env:
-          CMAKE_ARGS: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+        shell: powershell
+        run: |
+          $env:CMAKE_ARGS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+          flutter build windows --release
 
       # 📦 رفع ملفات الويندوز
       - uses: actions/upload-artifact@v4
