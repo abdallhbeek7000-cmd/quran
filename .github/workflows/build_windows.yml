@@ -49,23 +49,25 @@ jobs:
               (Get-Content $_.FullName) -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $_.FullName
           }
 
-      # 🚀 3. البناء النهائي
+      # 🚀 3. البناء النهائي مع تعطيل تحذير Coroutine MSVC
       - name: Build Windows Executable
         shell: cmd
         run: |
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 🛠️ 4. نسخ كل ملفات الـ DLL من الإضافات المبعثرة إلى مجلد Release الرئيسي بأمان
-      - name: Copy Plugin DLLs safely
+      # 🛠️ 4. تجميع كافة الـ DLLs المتبقية وتأكيد وجود flutter_windows.dll
+      - name: Bundle All Dependencies
         shell: powershell
         run: |
           $targetDir = "build/windows/x64/runner/Release"
-          Get-ChildItem -Path "build/windows/x64/plugins" -Recurse -Filter "*.dll" | ForEach-Object {
-              Copy-Item -Path $_.FullName -Destination $targetDir -Force
+          Get-ChildItem -Path "build/windows/x64" -Recurse -Filter "*.dll" | ForEach-Object {
+              if ($_.FullName -ne "$targetDir\$($_.Name)") {
+                  Copy-Item -Path $_.FullName -Destination $targetDir -Force
+              }
           }
 
-      # 📦 رفع مجلد Release المكتمل
+      # 📦 5. رفع كامل المجلد النظيف والمكتمل
       - name: Upload Windows Build Artifact
         uses: actions/upload-artifact@v4
         with:
