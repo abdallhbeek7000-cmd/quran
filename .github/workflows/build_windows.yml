@@ -31,13 +31,12 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🚀 بناء ملف الـ EXE مع التمرير المباشر لسياسة CMake
+      # 🚀 بناء ملف الـ EXE مع التمرير المباشر لسياسة CMake عبر موجه الأوامر cmd
       - name: Build Windows Executable
+        shell: cmd
         run: |
-          flutter build windows --release --extra-gen-snapshot-options=--enable-asserts
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-          EXTRA_CMAKE_ARGS: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+          set CMAKE_ARGS=-DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          flutter build windows --release
 
       # 📦 رفع ملفات الويندوز
       - uses: actions/upload-artifact@v4
