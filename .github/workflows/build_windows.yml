@@ -24,12 +24,6 @@ jobs:
           ${{ secrets.SERVICE_ACCOUNT_JSON }}
           EOF
 
-      # 🛠️ إنشاء ملف إعدادات CMake المباشر لحل توافقية Firebase
-      - name: Setup CMake Policy Overrides
-        shell: bash
-        run: |
-          echo 'set(CMAKE_POLICY_VERSION_MINIMUM "3.5" CACHE STRING "" FORCE)' > cmake_init.txt
-
       # 🧹 تفعيل الويندوز وتنظيف المشروع
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
@@ -37,11 +31,29 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🚀 بناء ملف الـ EXE مع حشو الإعداد المباشر
+      # 🛠️ توليد ملفات البناء وتعديل ملف Firebase الداخلي تلقائياً
+      - name: Patch Firebase CMake Compatibility
+        shell: powershell
+        run: |
+          # تشغيل التوليد المبدئي لفك ضغط الحزم
+          flutter pub get
+          
+          # مسح ملفات البناء القديمة إذا وجدت
+          if (Test-Path "build\windows") { Remove-Item -Recurse -Force "build\windows" }
+          
+          # استخراج وتعديل ملف CMake الخاص بـ Firebase تلقائياً قبل البناء
+          $cmakeFile = "build/windows/x64/extracted/firebase_cpp_sdk_windows/CMakeLists.txt"
+          
+          # في حال وجود حزم Firebase، يتم التعديل فور استخراجها
+          $null = flutter build windows --release 2>&1
+          if (Test-Path $cmakeFile) {
+            (Get-Content $cmakeFile) -replace 'cmake_minimum_required\(VERSION 3.2\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $cmakeFile
+            (Get-Content $cmakeFile) -replace 'cmake_minimum_required\(VERSION 3.3\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $cmakeFile
+          }
+
+      # 🚀 بناء ملف الـ EXE النهائيات
       - name: Build Windows Executable
         run: flutter build windows --release
-        env:
-          CMAKE_INITIAL_CACHE: "${{ github.workspace }}/cmake_init.txt"
 
       # 📦 رفع ملفات الويندوز
       - name: Upload Windows Build Artifact
