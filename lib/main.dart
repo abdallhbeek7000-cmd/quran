@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
 import 'package:firebase_core/firebase_core.dart';
@@ -26,7 +27,7 @@ import 'pages/leave_requests_page.dart'; // 📝 استيراد صفحة طلب�
 import 'services/theme_provider.dart'; 
 import 'services/prayer_service.dart'; // 🕌 خدمة أوقات الصلاة
 import 'services/cycle_service.dart';  // 🔄 خدمة الدورات
-import 'models/cycle_model.dart';      // 📖 موديل الدورة
+import 'models/cycle_model.dart';       // 📖 موديل الدورة
 import 'widgets/offline_wrapper.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -146,30 +147,38 @@ void main() async {
     ),
   );
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    print("⚠️ Firebase Init Error: $e");
+  }
 
   // ⚡ إعداد الكاش المحلي وحفظ البيانات أوفلاين لـ Firestore
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
+  try {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } catch (_) {}
 
   // 🚀 تهيئة التخزين المحلي المبكر
   await SharedPreferences.getInstance();
 
-  // 🌍 🔑 تهيئة التوقيت والمنطقة الزمنية المحلية لحساب الجدولة الدقيقة للإشعارات
+  // 🌍 🔑 تهيئة التوقيت والمنطقة الزمنية المحمية
   try {
     tz.initializeTimeZones();
-    final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(currentTimeZone));
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(currentTimeZone));
+    }
   } catch (e) {
-    print("⚠️ فشل تحديد المنطقة الزمنية تلقائياً، سيتم استخدام UTC: $e");
+    print("⚠️ فشل تحديد المنطقة الزمنية تلقائياً: $e");
   }
 
-  // 💬 تهيئة الإشعارات المحلية وإشعارات أوقات الصلاة
-  if (!kIsWeb) {
+  // 💬 تهيئة الإشعارات المحلية للموبايل فقط
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     
     final InitializationSettings initSettings = InitializationSettings(
@@ -207,25 +216,33 @@ void main() async {
     }
   }
 
-  // 🚀 تهيئة محرك الخلفية الفوري
-  if (!kIsWeb) {
-    await Workmanager().initialize(
-      callbackDispatcher,
-      isInDebugMode: false, 
-    );
+  // 🚀 تهيئة محرك الخلفية الفوري (مخصص لأندرويد وآيفون فقط)
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    try {
+      await Workmanager().initialize(
+        callbackDispatcher,
+        isInDebugMode: false, 
+      );
 
-    await Workmanager().registerPeriodicTask(
-      "periodic_sync_id_01",
-      syncTaskName,
-      frequency: const Duration(minutes: 15), 
-      constraints: Constraints(
-        networkType: NetworkType.connected, 
-      ),
-    );
+      await Workmanager().registerPeriodicTask(
+        "periodic_sync_id_01",
+        syncTaskName,
+        frequency: const Duration(minutes: 15), 
+        constraints: Constraints(
+          networkType: NetworkType.connected, 
+        ),
+      );
+    } catch (e) {
+      print("⚠️ Workmanager init failed: $e");
+    }
   }
 
-  FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  try {
+    FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    }
+  } catch (_) {}
   
   // 3️⃣ استخدام MultiProvider لبث الدورة النشطة + الثيمات لجميع أرجاء التطبيق
   runApp(
@@ -254,11 +271,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _setupInteractedMessage();
     
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _showGroupedLocalNotification(message);
-    });
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      _setupInteractedMessage();
+      
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        _showGroupedLocalNotification(message);
+      });
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       UpdateChecker.checkForUpdates();
@@ -280,7 +300,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _triggerInstantSyncIfOnline() {
-    if (!kIsWeb) {
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       Workmanager().registerOneOffTask(
         "instant_sync_${DateTime.now().millisecondsSinceEpoch}",
         syncTaskName,
