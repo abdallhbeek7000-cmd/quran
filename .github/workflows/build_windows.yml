@@ -24,6 +24,12 @@ jobs:
           ${{ secrets.SERVICE_ACCOUNT_JSON }}
           EOF
 
+      # 🛠️ إنشاء ملف إعدادات CMake المباشر لحل توافقية Firebase
+      - name: Setup CMake Policy Overrides
+        shell: bash
+        run: |
+          echo 'set(CMAKE_POLICY_VERSION_MINIMUM "3.5" CACHE STRING "" FORCE)' > cmake_init.txt
+
       # 🧹 تفعيل الويندوز وتنظيف المشروع
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
@@ -31,9 +37,11 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🚀 بناء ملف الـ EXE مع التمرير الصحيح لـ CMake
+      # 🚀 بناء ملف الـ EXE مع حشو الإعداد المباشر
       - name: Build Windows Executable
-        run: flutter build windows --release --build-arg="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+        run: flutter build windows --release
+        env:
+          CMAKE_INITIAL_CACHE: "${{ github.workspace }}/cmake_init.txt"
 
       # 📦 رفع ملفات الويندوز
       - name: Upload Windows Build Artifact
