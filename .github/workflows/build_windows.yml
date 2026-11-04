@@ -56,18 +56,24 @@ jobs:
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 🛠️ 4. تجميع كافة الـ DLLs المتبقية وتأكيد وجود flutter_windows.dll
-      - name: Bundle All Dependencies
+      # 🛠️ 4. تجميع كافة ملفات الـ DLL الناقصة (بما فيها flutter_windows.dll) بأمان وبدون تكرار
+      - name: Collect All DLLs and Assets
         shell: powershell
         run: |
-          $targetDir = "build/windows/x64/runner/Release"
-          Get-ChildItem -Path "build/windows/x64" -Recurse -Filter "*.dll" | ForEach-Object {
-              if ($_.FullName -ne "$targetDir\$($_.Name)") {
-                  Copy-Item -Path $_.FullName -Destination $targetDir -Force
+          $target = "build/windows/x64/runner/Release"
+          
+          # نسخ flutter_windows.dll ومجلد البيانات data والمكتبات الخارجية
+          Get-ChildItem -Path "build/windows/x64" -Recurse -Include "*.dll" | ForEach-Object {
+              if ($_.DirectoryName -ne (Resolve-Path $target).Path) {
+                  Copy-Item -Path $_.FullName -Destination $target -Force
               }
           }
+          
+          if (Test-Path "build/windows/x64/data") {
+              Copy-Item -Path "build/windows/x64/data" -Destination $target -Recurse -Force
+          }
 
-      # 📦 5. رفع كامل المجلد النظيف والمكتمل
+      # 📦 رفع كامل مجلد البناء النهائي
       - name: Upload Windows Build Artifact
         uses: actions/upload-artifact@v4
         with:
