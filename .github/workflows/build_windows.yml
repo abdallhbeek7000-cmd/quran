@@ -11,6 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 🛠️ تثبيت إصدار CMake متوافق مع Firebase تلقائياً لإنهاء جميع المشاكل
+      - name: Setup Compatible CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.28.3'
+
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
@@ -31,25 +37,7 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🛠️ فك ضغط وتوليد ملفات Firebase دون إيقاف التدفّق ثم تعديل ملف CMake
-      - name: Generate and Patch Firebase CMake
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'SilentlyContinue'
-          
-          # تشغيل البناء الأولي لاستخراج مجلد firebase_cpp_sdk_windows
-          cmd /c "flutter build windows --release"
-          
-          $cmakeFile = "build/windows/x64/extracted/firebase_cpp_sdk_windows/CMakeLists.txt"
-          
-          if (Test-Path $cmakeFile) {
-            Write-Host "Patching Firebase CMakeLists.txt..."
-            $content = Get-Content $cmakeFile
-            $content = $content -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)'
-            Set-Content -Path $cmakeFile -Value $content
-          }
-
-      # 🚀 البناء النهائي بعد تعديل ملف التوافقية
+      # 🚀 بناء ملف الـ EXE
       - name: Build Windows Executable
         run: flutter build windows --release
 
