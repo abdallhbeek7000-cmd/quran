@@ -56,12 +56,16 @@ jobs:
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 📦 رفع كل ملفات الـ Release والـ DLLs من كامل مجلد البناء
+      # 🛠️ 4. تجميع كافة ملفات الـ DLL ومجلد data بجانب الـ exe مباشرة
+      - name: Flatten Build Output
+        shell: powershell
+        run: |
+          $targetDir = "build/windows/x64/runner/Release"
+          Get-ChildItem -Path "build/windows/x64" -Recurse -Filter "*.dll" | Copy-Item -Destination $targetDir -Force
+
+      # 📦 رفع كامل المجلد المكتمل
       - name: Upload Windows Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-app-release
-          path: |
-            build/windows/x64/runner/Release/*
-            build/windows/runner/Release/*
-            build/windows/x64/plugins/**/*.dll
+          path: build/windows/x64/runner/Release/
