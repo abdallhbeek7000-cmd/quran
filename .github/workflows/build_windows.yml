@@ -31,27 +31,25 @@ jobs:
       - run: flutter clean
       - run: flutter pub get
 
-      # 🛠️ توليد ملفات البناء وتعديل ملف Firebase الداخلي تلقائياً
-      - name: Patch Firebase CMake Compatibility
+      # 🛠️ فك ضغط وتوليد ملفات Firebase دون إيقاف التدفّق ثم تعديل ملف CMake
+      - name: Generate and Patch Firebase CMake
         shell: powershell
         run: |
-          # تشغيل التوليد المبدئي لفك ضغط الحزم
-          flutter pub get
+          $ErrorActionPreference = 'SilentlyContinue'
           
-          # مسح ملفات البناء القديمة إذا وجدت
-          if (Test-Path "build\windows") { Remove-Item -Recurse -Force "build\windows" }
+          # تشغيل البناء الأولي لاستخراج مجلد firebase_cpp_sdk_windows
+          cmd /c "flutter build windows --release"
           
-          # استخراج وتعديل ملف CMake الخاص بـ Firebase تلقائياً قبل البناء
           $cmakeFile = "build/windows/x64/extracted/firebase_cpp_sdk_windows/CMakeLists.txt"
           
-          # في حال وجود حزم Firebase، يتم التعديل فور استخراجها
-          $null = flutter build windows --release 2>&1
           if (Test-Path $cmakeFile) {
-            (Get-Content $cmakeFile) -replace 'cmake_minimum_required\(VERSION 3.2\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $cmakeFile
-            (Get-Content $cmakeFile) -replace 'cmake_minimum_required\(VERSION 3.3\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $cmakeFile
+            Write-Host "Patching Firebase CMakeLists.txt..."
+            $content = Get-Content $cmakeFile
+            $content = $content -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)'
+            Set-Content -Path $cmakeFile -Value $content
           }
 
-      # 🚀 بناء ملف الـ EXE النهائيات
+      # 🚀 البناء النهائي بعد تعديل ملف التوافقية
       - name: Build Windows Executable
         run: flutter build windows --release
 
