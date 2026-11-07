@@ -58,39 +58,47 @@ jobs:
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 🛠️ 4. نسخ كافة الملحقات ونقل مجلد data الأصلي كاملاً بدون نقص
+      # 🛠️ 4. نسخ كافة الملحقات ومنع نسخ الملف على نفسه
       - name: Force Construct Data Directory and Bundle
         shell: powershell
         run: |
           $target = "build/windows/x64/runner/Release"
           
           # 1. نسخ flutter_windows.dll
-          $flutterDll = Get-ChildItem -Path "$env:GITHUB_WORKSPACE" -Recurse -Filter "flutter_windows.dll" | Select-Object -First 1
+          $flutterDll = Get-ChildItem -Path "$env:GITHUB_WORKSPACE" -Recurse -Filter "flutter_windows.dll" | Where-Object { $_.FullName -notlike "*runner\Release*" } | Select-Object -First 1
           if ($flutterDll -and -not (Test-Path "$target\flutter_windows.dll")) {
               Copy-Item -Path $flutterDll.FullName -Destination $target -Force
           }
 
-          # 2. نسخ كافة مكتبات الـ DLL من كامل مسار البناء
-          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build\windows" -Recurse -Filter "*.dll" | ForEach-Object {
+          # 2. نسخ كافة مكتبات الـ DLL
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build\windows" -Recurse -Filter "*.dll" | Where-Object { $_.FullName -notlike "*runner\Release*" } | ForEach-Object {
               if (-not (Test-Path "$target\$($_.Name)")) {
                   Copy-Item -Path $_.FullName -Destination $target -Force
               }
           }
 
-          # 3. العثور على مجلد data الأصلي كاملاً ونقله (يحتوي على icudtl.dat و app.so و flutter_assets)
-          $originalData = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "data" | Where-Object { Test-Path "$($_.FullName)\icudtl.dat" } | Select-Object -First 1
-          if ($originalData) {
-              Copy-Item -Path "$($originalData.FullName)\*" -Destination "$target\data" -Recurse -Force
-          } else {
-              # في حال عدم وجود المجلد الأصلي، يتم تجميعه يدويًا مع ضمان icudtl.dat
-              New-Item -ItemType Directory -Force -Path "$target\data"
-              Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "icudtl.dat" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "$target\data\" -Force }
-              Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "app.so" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "$target\data\" -Force }
-              $assetsDir = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "flutter_assets" | Select-Object -First 1
-              if ($assetsDir) { Copy-Item -Path $assetsDir.FullName -Destination "$target\data\flutter_assets" -Recurse -Force }
+          # 3. التأكد من إنشاء مجلد data
+          New-Item -ItemType Directory -Force -Path "$target\data"
+
+          # 4. نسخ الملفات الأساسية مع استثناء المجلد الهدف لتجنب خطأ Overwrite
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "icudtl.dat" | Where-Object { $_.FullName -notlike "*runner\Release*" } | ForEach-Object {
+              if (-not (Test-Path "$target\data\icudtl.dat")) {
+                  Copy-Item -Path $_.FullName -Destination "$target\data\icudtl.dat" -Force
+              }
           }
 
-          # 🔑 4. زرع ملف service-account.json
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "app.so" | Where-Object { $_.FullName -notlike "*runner\Release*" } | ForEach-Object {
+              if (-not (Test-Path "$target\data\app.so")) {
+                  Copy-Item -Path $_.FullName -Destination "$target\data\app.so" -Force
+              }
+          }
+
+          $assetsDir = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "flutter_assets" | Where-Object { $_.FullName -notlike "*runner\Release*" } | Select-Object -First 1
+          if ($assetsDir -and -not (Test-Path "$target\data\flutter_assets")) {
+              Copy-Item -Path $assetsDir.FullName -Destination "$target\data\flutter_assets" -Recurse -Force
+          }
+
+          # 🔑 5. زرع ملف service-account.json
           if (Test-Path "assets/service-account.json") {
               Copy-Item -Path "assets/service-account.json" -Destination $target -Force
               if (Test-Path "$target\data\flutter_assets") {
