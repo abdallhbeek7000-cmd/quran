@@ -56,7 +56,7 @@ jobs:
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 🛠️ 4. نسخ مجلد flutter_assets والأكواد والمكتبات قسراً لإنشاء مجلد data الصحيح + زرع ملف الـ JSON
+      # 🛠️ 4. نسخ مجلد flutter_assets والأكواد والمكتبات قسراً لإنشاء مجلد data الصحيح + زرع ملف الـ JSON وكافة مكتبات الـ DLL
       - name: Force Construct Data Directory and Bundle
         shell: powershell
         run: |
@@ -68,8 +68,8 @@ jobs:
               Copy-Item -Path $flutterDll.FullName -Destination $target -Force
           }
 
-          # 2. نسخ كافة مكتبات الـ DLL
-          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "*.dll" | ForEach-Object {
+          # 2. نسخ كافة مكتبات الـ DLL من كامل مسار البناء (بما فيها مكتبات Firebase الديناميكية)
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build\windows" -Recurse -Filter "*.dll" | ForEach-Object {
               if (-not (Test-Path "$target\$($_.Name)")) {
                   Copy-Item -Path $_.FullName -Destination $target -Force
               }
