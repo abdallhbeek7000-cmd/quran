@@ -130,6 +130,17 @@ void _navigateToTargetPage(Map<String, dynamic> data) {
 }
 
 void main() async {
+  // 🛡️ 1. التقاط كافة الأخطاء البرمجية وغير المعالجة لتأمين عدم إغلاق التطبيق نهائياً
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    print('⚠️ [Flutter Error Handler]: ${details.exception}');
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    print('⚠️ [Async Error Handler]: $error');
+    return true; // يمنع إغلاق النافذة صامتاً
+  };
+
   WidgetsFlutterBinding.ensureInitialized();
   
   SystemChrome.setSystemUIOverlayStyle(
@@ -139,7 +150,7 @@ void main() async {
     ),
   );
 
-  // 1️⃣ تهيئة محميّة لـ Firebase لمنع الإغلاق الفوري على الويندوز
+  // 🛡️ 2. تهيئة Firebase مع ضمان تفادي الأخطاء على الويندوز
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -149,17 +160,16 @@ void main() async {
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
   } catch (e) {
-    print("⚠️ Firebase init bypassed or failed on desktop: $e");
+    print("⚠️ Firebase Init Error (Bypassed): $e");
   }
 
-  // 2️⃣ تهيئة التخزين المحلي المبكر
+  // 🛡️ 3. تهيئة التخزين المحلي المبكر
   try {
     await SharedPreferences.getInstance();
   } catch (_) {}
 
-  // 3️⃣ خدمات مخصصة فقط للأندرويد والآيفون (الموبايل)
+  // 🛡️ 4. خدمات الموبايل حصراً (أندرويد وآيفون)
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-    // تهيئة التوقيت والمنطقة الزمنية
     try {
       tz.initializeTimeZones();
       final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
@@ -168,7 +178,6 @@ void main() async {
       print("⚠️ فشل تحديد المنطقة الزمنية تلقائياً: $e");
     }
 
-    // تهيئة الإشعارات المحلية
     try {
       const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
       final InitializationSettings initSettings = InitializationSettings(android: initializationSettingsAndroid);
@@ -199,7 +208,6 @@ void main() async {
       print("❌ خطأ في الإشعارات المحلية: $e");
     }
 
-    // تهيئة Workmanager ومحرك الخلفية
     try {
       await Workmanager().initialize(
         callbackDispatcher,
@@ -222,14 +230,23 @@ void main() async {
     } catch (_) {}
   }
 
-  // 4️⃣ تشغيل الواجهات دائماً
+  // 🛡️ 5. تشغيل واجهة التطبيق بأمان
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        // حماية StreamProvider من أي خطأ إذا لم تكن الفايربيز متصلة على الويندوز
         StreamProvider<CycleModel?>(
-          create: (_) => CycleService().streamCurrentCycle(),
+          create: (_) {
+            try {
+              return CycleService().streamCurrentCycle();
+            } catch (e) {
+              print("⚠️ StreamProvider cycle error: $e");
+              return Stream.value(null);
+            }
+          },
           initialData: null,
+          catchError: (_, error) => null,
         ),
       ],
       child: const MyApp(),
@@ -259,8 +276,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      UpdateChecker.checkForUpdates();
-      _triggerInstantSyncIfOnline();
+      try {
+        UpdateChecker.checkForUpdates();
+        _triggerInstantSyncIfOnline();
+      } catch (e) {
+        print("⚠️ PostFrameCallback bypassed: $e");
+      }
     });
   }
 
@@ -288,12 +309,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _setupInteractedMessage() async {
-    RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
-    if (initialMessage != null) {
-      _handleNotificationTap(initialMessage);
-    }
+    try {
+      RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+      if (initialMessage != null) {
+        _handleNotificationTap(initialMessage);
+      }
 
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+    } catch (_) {}
   }
 
   void _handleNotificationTap(RemoteMessage message) {
