@@ -13,7 +13,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:flutter/foundation.dart'; 
 
-// 🔑 مكاتب التوقيت والمنطقة الزمنية للإشعارات المجدولة
+// 🔑 مكتب التوقيت والمنطقة الزمنية للإشعارات المجدولة
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -27,7 +27,7 @@ import 'pages/leave_requests_page.dart';
 import 'services/theme_provider.dart'; 
 import 'services/prayer_service.dart';
 import 'services/cycle_service.dart';  
-import 'models/cycle_model.dart';       
+import 'models/cycle_model.dart';        
 import 'widgets/offline_wrapper.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -142,7 +142,7 @@ void main() async {
   };
 
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent, 
@@ -277,7 +277,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
-        UpdateChecker.checkForUpdates();
+        if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+          UpdateChecker.checkForUpdates();
+        }
         _triggerInstantSyncIfOnline();
       } catch (e) {
         print("⚠️ PostFrameCallback bypassed: $e");
