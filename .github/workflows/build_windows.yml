@@ -28,8 +28,10 @@ jobs:
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
 
-      - run: flutter clean
-        - run: flutter pub get
+      - name: Clean and Get Packages
+        run: |
+          flutter clean
+          flutter pub get
 
       # 🛠️ 1. التوليد المبدئي لفك ضغط Firebase
       - name: Extract Firebase SDK
@@ -56,7 +58,7 @@ jobs:
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 🛠️ 4. نسخ مجلد data المكتمل + ملف app.so وباقي الملحقات
+      # 🛠️ 4. نسخ مجلد data المكتمل والمحرك وباقي الملحقات
       - name: Force Construct Data Directory and Bundle
         shell: powershell
         run: |
@@ -68,22 +70,16 @@ jobs:
               Copy-Item -Path $flutterDll.FullName -Destination $target -Force
           }
 
-          # 2. نسخ كافة مكتبات الـ DLL من كامل مسار البناء
+          # 2. نسخ كافة مكتبات الـ DLL
           Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build\windows" -Recurse -Filter "*.dll" | ForEach-Object {
               if (-not (Test-Path "$target\$($_.Name)")) {
                   Copy-Item -Path $_.FullName -Destination $target -Force
               }
           }
 
-          # 3. إنشاء مجلد data ونسخ الـ assets والـ app_data والـ app.so إليه
+          # 3. إنشاء مجلد data ونسخ الـ assets والـ app_data
           New-Item -ItemType Directory -Force -Path "$target\data"
           
-          # 🎯 الإصلاح الأهم: نسخ ملف app.so المفقود
-          $appSo = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "app.so" | Select-Object -First 1
-          if ($appSo) {
-              Copy-Item -Path $appSo.FullName -Destination "$target\data\app.so" -Force
-          }
-
           $assetsDir = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "flutter_assets" | Select-Object -First 1
           if ($assetsDir) {
               Copy-Item -Path $assetsDir.FullName -Destination "$target\data\flutter_assets" -Recurse -Force
