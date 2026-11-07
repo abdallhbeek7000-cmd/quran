@@ -13,7 +13,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:flutter/foundation.dart'; 
 
-// 🔑 مكتب التوقيت والمنطقة الزمنية للإشعارات المجدولة
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -39,14 +38,11 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterL
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
-    print("🎯 [Background Worker] تم استشعار تغيير بالشبكة! بدء رفع الجلسات المعلقة بالخلفية...");
     try {
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
       await FirebaseFirestore.instance.waitForPendingWrites();
-      print("✅ [Background Worker] تم مزامنة ورفع كاش الجلسات المعلقة بنجاح دون أي تكرار!");
       return Future.value(true);
     } catch (e) {
-      print("❌ [Background Worker] خطأ أثناء المزامنة بالخلفية: $e");
       return Future.value(false);
     }
   });
@@ -55,13 +51,11 @@ void callbackDispatcher() {
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  print("Background message received: ${message.messageId}");
 }
 
 Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
   RemoteNotification? notification = message.notification;
   Map<String, dynamic> data = message.data;
-
   if (notification == null) return;
 
   String studentId = data['studentId'] ?? 'default_group';
@@ -111,10 +105,7 @@ Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
 }
 
 void _navigateToTargetPage(Map<String, dynamic> data) {
-  print("🚀 جاري التوجيه من الإشعار مع البيانات: $data");
-
   String type = data['type']?.toString().toLowerCase() ?? '';
-
   if (type == 'leave_request' || type == 'permission_request' || type == 'permission' || type == 'leave_status') {
     navigatorKey.currentState?.push(
       MaterialPageRoute(
@@ -130,15 +121,12 @@ void _navigateToTargetPage(Map<String, dynamic> data) {
 }
 
 void main() async {
-  // 🛡️ 1. التقاط كافة الأخطاء البرمجية وغير المعالجة لتأمين عدم إغلاق التطبيق نهائياً
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
-    print('⚠️ [Flutter Error Handler]: ${details.exception}');
   };
 
   PlatformDispatcher.instance.onError = (error, stack) {
-    print('⚠️ [Async Error Handler]: $error');
-    return true; // يمنع إغلاق النافذة صامتاً
+    return true; 
   };
 
   WidgetsFlutterBinding.ensureInitialized();
@@ -150,7 +138,6 @@ void main() async {
     ),
   );
 
-  // 🛡️ 2. تهيئة Firebase مع ضمان تفادي الأخطاء على الويندوز
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -159,24 +146,19 @@ void main() async {
       persistenceEnabled: true,
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
-  } catch (e) {
-    print("⚠️ Firebase Init Error (Bypassed): $e");
-  }
+  } catch (_) {}
 
-  // 🛡️ 3. تهيئة التخزين المحلي المبكر
   try {
     await SharedPreferences.getInstance();
   } catch (_) {}
 
-  // 🛡️ 4. خدمات الموبايل حصراً (أندرويد وآيفون)
+  // 🛡️ حماية التوقيت والإشعارات حصراً للموبايل (وهذا السطر هو الذي كان يسقط التطبيق بالويندوز)
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     try {
       tz.initializeTimeZones();
       final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(currentTimeZone));
-    } catch (e) {
-      print("⚠️ فشل تحديد المنطقة الزمنية تلقائياً: $e");
-    }
+    } catch (_) {}
 
     try {
       const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -189,9 +171,7 @@ void main() async {
             try {
               Map<String, dynamic> data = jsonDecode(response.payload!);
               _navigateToTargetPage(data);
-            } catch (e) {
-              print("❌ خطأ في فك تشفير حمولة الإشعار المحلي: $e");
-            }
+            } catch (_) {}
           }
         },
       );
@@ -204,9 +184,7 @@ void main() async {
       }
 
       await PrayerService.schedulePrayerAlerts(flutterLocalNotificationsPlugin);
-    } catch (e) {
-      print("❌ خطأ في الإشعارات المحلية: $e");
-    }
+    } catch (_) {}
 
     try {
       await Workmanager().initialize(
@@ -220,9 +198,7 @@ void main() async {
         frequency: const Duration(minutes: 15), 
         constraints: Constraints(networkType: NetworkType.connected),
       );
-    } catch (e) {
-      print("⚠️ Workmanager init failed: $e");
-    }
+    } catch (_) {}
 
     try {
       FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
@@ -230,18 +206,15 @@ void main() async {
     } catch (_) {}
   }
 
-  // 🛡️ 5. تشغيل واجهة التطبيق بأمان
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        // حماية StreamProvider من أي خطأ إذا لم تكن الفايربيز متصلة على الويندوز
         StreamProvider<CycleModel?>(
           create: (_) {
             try {
               return CycleService().streamCurrentCycle();
-            } catch (e) {
-              print("⚠️ StreamProvider cycle error: $e");
+            } catch (_) {
               return Stream.value(null);
             }
           },
@@ -281,9 +254,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           UpdateChecker.checkForUpdates();
         }
         _triggerInstantSyncIfOnline();
-      } catch (e) {
-        print("⚠️ PostFrameCallback bypassed: $e");
-      }
+      } catch (_) {}
     });
   }
 
@@ -322,7 +293,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    print("Notification tapped! Data: ${message.data}");
     _navigateToTargetPage(message.data);
   }
 
