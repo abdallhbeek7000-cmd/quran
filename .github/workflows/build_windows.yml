@@ -46,9 +46,11 @@ jobs:
         shell: powershell
         run: |
           $dir = "build/windows/x64/extracted/firebase_cpp_sdk_windows"
-          Get-ChildItem -Path $dir -Recurse -Filter "CMakeLists.txt" | ForEach-Object {
-              Write-Host "Patching file: $($_.FullName)"
-              (Get-Content $_.FullName) -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $_.FullName
+          if (Test-Path $dir) {
+              Get-ChildItem -Path $dir -Recurse -Filter "CMakeLists.txt" | ForEach-Object {
+                  Write-Host "Patching file: $($_.FullName)"
+                  (Get-Content $_.FullName) -replace 'cmake_minimum_required\(VERSION .*\)', 'cmake_minimum_required(VERSION 3.10...3.25)' | Set-Content $_.FullName
+              }
           }
 
       # 🚀 3. البناء النهائي مع تعطيل تحذير Coroutine MSVC
@@ -58,47 +60,51 @@ jobs:
           set CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           flutter build windows --release
 
-      # 🛠️ 4. نسخ كافة الملحقات ومنع نسخ الملف على نفسه
+      # 🛠️ 4. تجميع كافة الملفات المطلوبة وتوفير icudtl.dat قسراً
       - name: Force Construct Data Directory and Bundle
         shell: powershell
         run: |
           $target = "build/windows/x64/runner/Release"
           
-          # 1. نسخ flutter_windows.dll
+          # 1. إنشاء مجلد data
+          New-Item -ItemType Directory -Force -Path "$target\data"
+
+          # 2. نسخ flutter_windows.dll
           $flutterDll = Get-ChildItem -Path "$env:GITHUB_WORKSPACE" -Recurse -Filter "flutter_windows.dll" | Where-Object { $_.FullName -notlike "*runner\Release*" } | Select-Object -First 1
           if ($flutterDll -and -not (Test-Path "$target\flutter_windows.dll")) {
               Copy-Item -Path $flutterDll.FullName -Destination $target -Force
           }
 
-          # 2. نسخ كافة مكتبات الـ DLL
+          # 3. نسخ كافة مكتبات الـ DLL
           Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build\windows" -Recurse -Filter "*.dll" | Where-Object { $_.FullName -notlike "*runner\Release*" } | ForEach-Object {
               if (-not (Test-Path "$target\$($_.Name)")) {
                   Copy-Item -Path $_.FullName -Destination $target -Force
               }
           }
 
-          # 3. التأكد من إنشاء مجلد data
-          New-Item -ItemType Directory -Force -Path "$target\data"
-
-          # 4. نسخ الملفات الأساسية مع استثناء المجلد الهدف لتجنب خطأ Overwrite
-          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "icudtl.dat" | Where-Object { $_.FullName -notlike "*runner\Release*" } | ForEach-Object {
-              if (-not (Test-Path "$target\data\icudtl.dat")) {
-                  Copy-Item -Path $_.FullName -Destination "$target\data\icudtl.dat" -Force
-              }
+          # 4. البحث الشامل عن icudtl.dat في مسار فلاتر كاملاً وفي المشروع ونقله إلى data
+          $icuFile = Get-ChildItem -Path "$env:GITHUB_WORKSPACE" -Recurse -Filter "icudtl.dat" | Where-Object { $_.FullName -notlike "*runner\Release*" } | Select-Object -First 1
+          if (-not $icuFile) {
+              # بحث إضافي في مجلد محرك Flutter المستضاف على GitHub
+              $icuFile = Get-ChildItem -Path "C:\hostedtoolcache\windows\flutter" -Recurse -Filter "icudtl.dat" | Select-Object -First 1
+          }
+          if ($icuFile) {
+              Copy-Item -Path $icuFile.FullName -Destination "$target\data\icudtl.dat" -Force
           }
 
-          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "app.so" | Where-Object { $_.FullName -notlike "*runner\Release*" } | ForEach-Object {
-              if (-not (Test-Path "$target\data\app.so")) {
-                  Copy-Item -Path $_.FullName -Destination "$target\data\app.so" -Force
-              }
+          # 5. نسخ app.so
+          $appSo = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Filter "app.so" | Where-Object { $_.FullName -notlike "*runner\Release*" } | Select-Object -First 1
+          if ($appSo) {
+              Copy-Item -Path $appSo.FullName -Destination "$target\data\app.so" -Force
           }
 
+          # 6. نسخ flutter_assets
           $assetsDir = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\build" -Recurse -Directory -Filter "flutter_assets" | Where-Object { $_.FullName -notlike "*runner\Release*" } | Select-Object -First 1
           if ($assetsDir -and -not (Test-Path "$target\data\flutter_assets")) {
               Copy-Item -Path $assetsDir.FullName -Destination "$target\data\flutter_assets" -Recurse -Force
           }
 
-          # 🔑 5. زرع ملف service-account.json
+          # 🔑 7. زرع ملف service-account.json
           if (Test-Path "assets/service-account.json") {
               Copy-Item -Path "assets/service-account.json" -Destination $target -Force
               if (Test-Path "$target\data\flutter_assets") {
