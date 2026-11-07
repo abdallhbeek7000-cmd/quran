@@ -23,31 +23,26 @@ import 'pages/login_page.dart';
 import 'pages/home_page.dart';
 import 'pages/splash_screen.dart'; 
 import 'pages/update_checker.dart'; 
-import 'pages/leave_requests_page.dart'; // 📝 استيراد صفحة طلبات الاستئذان المعدلة
+import 'pages/leave_requests_page.dart';
 import 'services/theme_provider.dart'; 
-import 'services/prayer_service.dart'; // 🕌 خدمة أوقات الصلاة
-import 'services/cycle_service.dart';  // 🔄 خدمة الدورات
-import 'models/cycle_model.dart';       // 📖 موديل الدورة
+import 'services/prayer_service.dart';
+import 'services/cycle_service.dart';  
+import 'models/cycle_model.dart';       
 import 'widgets/offline_wrapper.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 const String syncTaskName = "sync_sessions_data_forced";
 
-// 💬 إنشاء كائن الإشعارات المحلية لتجميع الرسائل والتنبيهات
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
-// 🚀 محرك الخلفية: يستيقظ فوراً عند توفر الإنترنت والتطبيق مغلق لرفع الكاش أوتوماتيكياً
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
     print("🎯 [Background Worker] تم استشعار تغيير بالشبكة! بدء رفع الجلسات المعلقة بالخلفية...");
     try {
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-      
-      // ⚡ إجبار محرك الفايرستور على دفع ومزامنة كافة التغييرات الجاهزة بالذاكرة المحلية للسيرفر
       await FirebaseFirestore.instance.waitForPendingWrites();
-
       print("✅ [Background Worker] تم مزامنة ورفع كاش الجلسات المعلقة بنجاح دون أي تكرار!");
       return Future.value(true);
     } catch (e) {
@@ -63,7 +58,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print("Background message received: ${message.messageId}");
 }
 
-// 💬 دالة إظهار الإشعار المحلي التجميعي الذكي مثل واتساب
 Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
   RemoteNotification? notification = message.notification;
   Map<String, dynamic> data = message.data;
@@ -116,13 +110,11 @@ Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
   );
 }
 
-// 🎯 دالة التوجيه المباشر لصفحة الاستئذان بناءً على بيانات الإشعار
 void _navigateToTargetPage(Map<String, dynamic> data) {
   print("🚀 جاري التوجيه من الإشعار مع البيانات: $data");
 
   String type = data['type']?.toString().toLowerCase() ?? '';
 
-  // 📝 عند استقبال إشعار طلب استئذان جديد أو إشعارات الاستئذان المرتبطة
   if (type == 'leave_request' || type == 'permission_request' || type == 'permission' || type == 'leave_status') {
     navigatorKey.currentState?.push(
       MaterialPageRoute(
@@ -147,77 +139,67 @@ void main() async {
     ),
   );
 
+  // 1️⃣ تهيئة محميّة لـ Firebase لمنع الإغلاق الفوري على الويندوز
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-  } catch (e) {
-    print("⚠️ Firebase Init Error: $e");
-  }
-
-  // ⚡ إعداد الكاش المحلي وحفظ البيانات أوفلاين لـ Firestore
-  try {
     FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: true,
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
+  } catch (e) {
+    print("⚠️ Firebase init bypassed or failed on desktop: $e");
+  }
+
+  // 2️⃣ تهيئة التخزين المحلي المبكر
+  try {
+    await SharedPreferences.getInstance();
   } catch (_) {}
 
-  // 🚀 تهيئة التخزين المحلي المبكر
-  await SharedPreferences.getInstance();
-
-  // 🌍 🔑 تهيئة التوقيت والمنطقة الزمنية المحمية
-  try {
-    tz.initializeTimeZones();
-    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+  // 3️⃣ خدمات مخصصة فقط للأندرويد والآيفون (الموبايل)
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    // تهيئة التوقيت والمنطقة الزمنية
+    try {
+      tz.initializeTimeZones();
       final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(currentTimeZone));
-    }
-  } catch (e) {
-    print("⚠️ فشل تحديد المنطقة الزمنية تلقائياً: $e");
-  }
-
-  // 💬 تهيئة الإشعارات المحلية للموبايل فقط
-  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    
-    final InitializationSettings initSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-    );
-
-    // 🔔 ربط الاستماع للنقر على الإشعارات المحلية التجميعية
-    await flutterLocalNotificationsPlugin.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        if (response.payload != null && response.payload!.isNotEmpty) {
-          try {
-            Map<String, dynamic> data = jsonDecode(response.payload!);
-            _navigateToTargetPage(data);
-          } catch (e) {
-            print("❌ خطأ في فك تشفير حمولة الإشعار المحلي: $e");
-          }
-        }
-      },
-    );
-
-    // 🔑 طلب صلاحية الإشعارات لأندرويد 13+
-    final androidImplementation = flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    if (androidImplementation != null) {
-      await androidImplementation.requestNotificationsPermission();
-      await androidImplementation.requestExactAlarmsPermission();
+    } catch (e) {
+      print("⚠️ فشل تحديد المنطقة الزمنية تلقائياً: $e");
     }
 
-    // 🕌 جدولة تنبيهات أوقات الصلاة لـ (المغرب والعشاء) قبل 10 و5 دقائق
+    // تهيئة الإشعارات المحلية
     try {
+      const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+      final InitializationSettings initSettings = InitializationSettings(android: initializationSettingsAndroid);
+      
+      await flutterLocalNotificationsPlugin.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          if (response.payload != null && response.payload!.isNotEmpty) {
+            try {
+              Map<String, dynamic> data = jsonDecode(response.payload!);
+              _navigateToTargetPage(data);
+            } catch (e) {
+              print("❌ خطأ في فك تشفير حمولة الإشعار المحلي: $e");
+            }
+          }
+        },
+      );
+
+      final androidImplementation = flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      if (androidImplementation != null) {
+        await androidImplementation.requestNotificationsPermission();
+        await androidImplementation.requestExactAlarmsPermission();
+      }
+
       await PrayerService.schedulePrayerAlerts(flutterLocalNotificationsPlugin);
     } catch (e) {
-      print("❌ خطأ في جدولة إشعارات الصلاة: $e");
+      print("❌ خطأ في الإشعارات المحلية: $e");
     }
-  }
 
-  // 🚀 تهيئة محرك الخلفية الفوري (مخصص لأندرويد وآيفون فقط)
-  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    // تهيئة Workmanager ومحرك الخلفية
     try {
       await Workmanager().initialize(
         callbackDispatcher,
@@ -228,23 +210,19 @@ void main() async {
         "periodic_sync_id_01",
         syncTaskName,
         frequency: const Duration(minutes: 15), 
-        constraints: Constraints(
-          networkType: NetworkType.connected, 
-        ),
+        constraints: Constraints(networkType: NetworkType.connected),
       );
     } catch (e) {
       print("⚠️ Workmanager init failed: $e");
     }
+
+    try {
+      FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    } catch (_) {}
   }
 
-  try {
-    FirebaseStorage.instanceFor(bucket: "gs://quran-habal.firebasestorage.app");
-    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    }
-  } catch (_) {}
-  
-  // 3️⃣ استخدام MultiProvider لبث الدورة النشطة + الثيمات لجميع أرجاء التطبيق
+  // 4️⃣ تشغيل الواجهات دائماً
   runApp(
     MultiProvider(
       providers: [
@@ -310,13 +288,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _setupInteractedMessage() async {
-    // 1️⃣ عند فتح التطبيق من حالة الإغلاق التام عبر ضغط الإشعار
     RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
     if (initialMessage != null) {
       _handleNotificationTap(initialMessage);
     }
 
-    // 2️⃣ عند فتح التطبيق من الخلفية عبر ضغط الإشعار
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
   }
 
