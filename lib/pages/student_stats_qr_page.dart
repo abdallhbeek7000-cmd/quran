@@ -1,4 +1,6 @@
 import 'dart:ui';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -92,6 +94,18 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
   }
 
   void _openQrScanner() {
+    bool isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+    if (!isMobile) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("ميزة مسح الـ QR مخصصة للهواتف المحمولة فقط 📱", style: TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -261,7 +275,6 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
               ),
             ),
           ),
-
           SafeArea(
             child: scannedStudentId == null
                 ? _buildInitialView(isDark)
@@ -373,7 +386,8 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
 
             var docs = sessionsSnap.data!.docs;
 
-            List<Map<String, dynamic>> allSessions = docs.map((d) => d.data() as Map<String, dynamic>).toList();
+            List<Map<String, dynamic>> allSessions =
+              docs.map((d) => d.data() as Map<String, dynamic>).toList();
             allSessions.sort((a, b) {
               DateTime? dA = _parseDate(a['date'] ?? '');
               DateTime? dB = _parseDate(b['date'] ?? '');
@@ -461,7 +475,6 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
               physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
-                  // 1️⃣ كارت البروفايل بالمنتصف
                   _buildLiquidCard(
                     isDark: isDark,
                     padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
@@ -520,10 +533,7 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 18),
-
-                  // 2️⃣ سجل آخر 3 تسميعات
                   _buildLiquidCard(
                     isDark: isDark,
                     child: Column(
@@ -632,10 +642,7 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 18),
-
-                  // 3️⃣ تواريخ الغيابات
                   _buildLiquidCard(
                     isDark: isDark,
                     child: Column(
@@ -704,10 +711,7 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 18),
-
-                  // 4️⃣ نسبة الالتزام بالحضور
                   _buildLiquidCard(
                     isDark: isDark,
                     child: Column(
@@ -733,10 +737,7 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 18),
-
-                  // 5️⃣ شبكة الإحصائيات (أسبوعي وشكري)
                   GridView.count(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -753,10 +754,7 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
                       _buildLiquidStatTile("غياب الشهر ⚠️", "$monthlyAbsences أيام", Colors.redAccent, isDark),
                     ],
                   ),
-
                   const SizedBox(height: 22),
-
-                  // 6️⃣ زر مسح طالب آخر
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -854,7 +852,6 @@ class _StudentStatsQrPageState extends State<StudentStatsQrPage> {
   }
 }
 
-/// 💡 ويدجت مستقل لعرض تفاصيل الجلسة بدون Re-render للصفحة الرئيسية
 class SessionDetailsBottomSheet extends StatelessWidget {
   final Map<String, dynamic> sData;
   final bool isDark;
@@ -925,7 +922,6 @@ class SessionDetailsBottomSheet extends StatelessWidget {
                 ),
                 const Divider(),
                 const SizedBox(height: 10),
-
                 if (isAbsent)
                   _buildDetailRow("الحالة:", "غائب عن الجلسة ❌", Colors.redAccent, isDark)
                 else if (didNotRecite)

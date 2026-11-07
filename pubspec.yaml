@@ -69,11 +69,11 @@ dependencies:
   permission_handler: ^11.0.1 # إدارة أذونات الموقع
   adhan: ^2.0.0            # مكتبة حساب أوقات الصلاة (تضم طريقة رابطة العالم الإسلامي)
   timezone: ^0.9.2         # لضبط المواعيد بدقة حسب التوقيت المحلي
-  #flutter_compass: ^0.8.0 # 👈 مكتبة البوصلة الحديثة والمدعومة
+  flutter_compass: ^0.8.0 # 👈 مكتبة البوصلة الحديثة والمدعومة
   flutter_timezone: ^2.0.1
   record: ^5.1.2      # للتسجيل الصوتي وإخراج ملفات m4a/aac
   audioplayers: ^6.0.0 # لتشغيل التسجيلات داخل الشات
-  #mobile_scanner: ^5.2.3
+  mobile_scanner: ^5.2.3
   qr_flutter: ^4.1.0
 
 
