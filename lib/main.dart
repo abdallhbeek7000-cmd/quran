@@ -23,6 +23,7 @@ import 'pages/home_page.dart';
 import 'pages/splash_screen.dart'; 
 import 'pages/update_checker.dart'; 
 import 'pages/leave_requests_page.dart';
+import 'pages/supervisor_chat_page.dart'; // 💬 تم استيراد صفحة المحادثة
 import 'services/theme_provider.dart'; 
 import 'services/prayer_service.dart';
 import 'services/cycle_service.dart';  
@@ -104,9 +105,44 @@ Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
   );
 }
 
-void _navigateToTargetPage(Map<String, dynamic> data) {
+// 🚀 دالة التوجيه الذكية والجديدة للإشعارات
+Future<void> _navigateToTargetPage(Map<String, dynamic> data) async {
   String type = data['type']?.toString().toLowerCase() ?? '';
-  if (type == 'leave_request' || type == 'permission_request' || type == 'permission' || type == 'leave_status') {
+  String studentId = data['chatStudentId']?.toString() ?? data['studentId']?.toString() ?? '';
+
+  if (type == 'chat' && studentId.isNotEmpty) {
+    try {
+      // 1. جلب بيانات الطالب لضمان الاسم والمشرف التابع له
+      var studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
+      
+      String studentName = "الطالب";
+      String supervisorId = data['supervisorId']?.toString() ?? '';
+
+      if (studentDoc.exists) {
+        var sData = studentDoc.data()!;
+        studentName = sData['name'] ?? sData['studentName'] ?? "الطالب";
+        if (supervisorId.isEmpty) {
+          supervisorId = sData['supervisorId'] ?? '';
+        }
+      }
+
+      String chatId = studentId;
+
+      // 2. الفتح المباشر لصفحة الشات
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => SupervisorChatPage(
+            chatId: chatId,
+            studentId: studentId,
+            studentName: studentName,
+            supervisorId: supervisorId,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint("❌ خطأ أثناء فتح المحادثة من الإشعار: $e");
+    }
+  } else if (type == 'leave_request' || type == 'permission_request' || type == 'permission' || type == 'leave_status') {
     navigatorKey.currentState?.push(
       MaterialPageRoute(
         builder: (_) => LeaveRequestsPage(
@@ -152,7 +188,6 @@ void main() async {
     await SharedPreferences.getInstance();
   } catch (_) {}
 
-  // 🛡️ حماية التوقيت والإشعارات حصراً للموبايل (وهذا السطر هو الذي كان يسقط التطبيق بالويندوز)
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     try {
       tz.initializeTimeZones();

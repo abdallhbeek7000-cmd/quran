@@ -38,10 +38,8 @@ class NotificationService {
     required int minutesBefore,
   }) async {
     try {
-      // حساب الوقت قبل الصلاة بالدقائق المحددة
       DateTime scheduledTime = prayerTime.subtract(Duration(minutes: minutesBefore));
 
-      // إذا كان الوقت قد مضى لليوم، يجدول ليوم الغد بنفس التوقيت
       if (scheduledTime.isBefore(DateTime.now())) {
         scheduledTime = scheduledTime.add(const Duration(days: 1));
       }
@@ -73,12 +71,13 @@ class NotificationService {
 
   // 🚀 الدالة الجوكر: ترسل الإشعار للطالب أو المشرف بذكاء
   static Future<void> sendAndSaveNotification({
-    required String studentId, // يعمل كمعرف عام (يستقبل آي دي طالب أو مشرف أو مدير)
+    required String studentId, // آي دي المستلم (طالب / مشرف / مدير)
     required String title,
     required String body,
     required String type, 
-    String? chatStudentId, // 💬 معرف الطالب الخاص بالمحادثة لتجميع الإشعارات
-    String? requestId,     // 📝 معرف طلب الاستئذان للانتقال بتركيز للطلب المحدد
+    String? targetStudentId, // 🎯 معرف الطالب صاحب الطلب أو المحادثة
+    String? chatStudentId,   // 💬 معرف الطالب الخاص بالمحادثة
+    String? requestId,       // 📝 معرف طلب الاستئذان
     BuildContext? context, 
   }) async {
     try {
@@ -86,13 +85,11 @@ class NotificationService {
       String targetCollection = 'students';
       DocumentSnapshot targetDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
 
-      // إن لم يكن طالباً، ابحث في المشرفين
       if (!targetDoc.exists) {
         targetDoc = await FirebaseFirestore.instance.collection('supervisors').doc(studentId).get();
         if (targetDoc.exists) {
           targetCollection = 'supervisors';
         } else {
-          // إن لم يكن مشرفاً، ابحث في المدراء
           targetDoc = await FirebaseFirestore.instance.collection('users').doc(studentId).get();
           if (targetDoc.exists) {
             targetCollection = 'users';
@@ -105,7 +102,9 @@ class NotificationService {
         return;
       }
 
-      // 🎯 2. توثيق التنبيه في مجموعة المستلم الصحيحة (سجل الإشعارات الداخلي)
+      String actualStudentId = targetStudentId ?? chatStudentId ?? (type == 'leave_request' ? '' : studentId);
+
+      // 🎯 2. توثيق التنبيه في مجموعة المستلم الصحيحة
       await FirebaseFirestore.instance
           .collection(targetCollection)
           .doc(studentId)
@@ -114,7 +113,7 @@ class NotificationService {
         'title': title,
         'body': body,
         'type': type,
-        'studentId': studentId,
+        'studentId': actualStudentId,
         if (requestId != null) 'requestId': requestId,
         if (chatStudentId != null) 'chatStudentId': chatStudentId,
         'timestamp': FieldValue.serverTimestamp(),
@@ -141,13 +140,11 @@ class NotificationService {
           'Authorization': 'Bearer $accessToken',
         };
 
-        // 💬 تخصيص الـ Tag لتجميع إشعارات المحادثة
         String? notificationTag;
         if (type == 'chat') {
-          notificationTag = 'chat_${chatStudentId ?? studentId}';
+          notificationTag = 'chat_${chatStudentId ?? actualStudentId}';
         }
 
-        // 🎯 بناء الـ Payload المعتمد لـ FCM v1
         Map<String, dynamic> messagePayload = {
           'token': fcmToken,
           'notification': {
@@ -158,7 +155,7 @@ class NotificationService {
             'click_action': 'FLUTTER_NOTIFICATION_CLICK',
             'title': title,
             'body': body,
-            'studentId': studentId,
+            'studentId': actualStudentId,
             'type': type,
             if (requestId != null) 'requestId': requestId,
             if (chatStudentId != null) 'chatStudentId': chatStudentId,
@@ -182,7 +179,6 @@ class NotificationService {
         } else {
           print("FCM V1 Broadcast Status: ${response.statusCode} - ${response.body}");
 
-          // 🛠️ معالجة التوكن التالف ومسحه لتنظيف Firestore
           if (response.body.contains("UNREGISTERED") || 
               response.body.contains("NOT_FOUND") || 
               response.body.contains("INVALID_ARGUMENT")) {
@@ -194,7 +190,7 @@ class NotificationService {
           }
         }
       } else {
-        print("FCM Token is empty for this user ($targetCollection). لم يتم تسجيل الدخول لتلقي الإشعارات.");
+        print("FCM Token is empty for user ($targetCollection). لم يتم تسجيل الدخول لتلقي الإشعارات.");
       }
     } catch (e) {
       print("Error inside V1 Notification Service: $e");

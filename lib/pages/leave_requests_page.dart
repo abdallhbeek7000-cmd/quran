@@ -28,6 +28,8 @@ class LeaveRequestsPage extends StatefulWidget {
 class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
+  int _initialTabIndex = 0;
+  bool _hasCheckedInitialTab = false;
 
   static Future<void> notifyManagersOnly({
     required String studentName,
@@ -255,6 +257,25 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
     }
   }
 
+  void _checkTargetTab(List<QueryDocumentSnapshot> docs) {
+    if (_hasCheckedInitialTab || widget.requestId == null) return;
+    for (var doc in docs) {
+      if (doc.id == widget.requestId) {
+        var data = doc.data() as Map<String, dynamic>;
+        String status = data['status'] ?? 'pending';
+        if (status != 'pending') {
+          setState(() {
+            _initialTabIndex = 1;
+            _hasCheckedInitialTab = true;
+          });
+        } else {
+          _hasCheckedInitialTab = true;
+        }
+        break;
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
@@ -291,6 +312,7 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
 
           return DefaultTabController(
             length: 2,
+            initialIndex: _initialTabIndex,
             child: Scaffold(
               extendBodyBehindAppBar: true,
               backgroundColor: isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
@@ -466,6 +488,8 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
           return _buildEmptyState(isDarkMode, isHistory);
         }
 
+        _checkTargetTab(snapshot.data!.docs);
+
         var docs = snapshot.data!.docs.where((doc) {
           var data = doc.data() as Map<String, dynamic>;
           String currentStatus = data['status'] ?? 'pending';
@@ -475,11 +499,6 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
 
           if (widget.role == 'supervisor' && widget.supervisorId.isNotEmpty) {
             isMyStudent = data['supervisorId'] == widget.supervisorId;
-          }
-
-          if (widget.studentId != null && widget.studentId!.isNotEmpty) {
-            bool matchesStudent = data['studentId'] == widget.studentId;
-            return statusMatches && isMyStudent && matchesStudent;
           }
 
           return statusMatches && isMyStudent;
@@ -506,7 +525,8 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
             String currentStatus = data['status'] ?? 'pending';
             String requestTime = data['requestTime'] ?? 'غير محدد';
 
-            bool isHighlighted = widget.requestId != null && widget.requestId == doc.id;
+            bool isHighlighted = (widget.requestId != null && widget.requestId == doc.id) ||
+                (widget.studentId != null && widget.studentId == data['studentId']);
 
             return Container(
               margin: const EdgeInsets.only(bottom: 16),
@@ -517,9 +537,13 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
                   child: Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: isDarkMode
-                          ? Colors.white.withOpacity(0.05)
-                          : Colors.white.withOpacity(0.65),
+                      color: isHighlighted
+                          ? (isDarkMode
+                              ? accentGold.withOpacity(0.18)
+                              : primaryColor.withOpacity(0.12))
+                          : (isDarkMode
+                              ? Colors.white.withOpacity(0.05)
+                              : Colors.white.withOpacity(0.65)),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
                         color: isHighlighted
@@ -527,12 +551,14 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
                             : (isDarkMode
                                 ? Colors.white.withOpacity(0.12)
                                 : Colors.white.withOpacity(0.85)),
-                        width: isHighlighted ? 2.0 : 1.5,
+                        width: isHighlighted ? 2.2 : 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.05),
-                          blurRadius: 15,
+                          color: isHighlighted
+                              ? (isDarkMode ? accentGold : primaryColor).withOpacity(0.2)
+                              : Colors.black.withOpacity(isDarkMode ? 0.3 : 0.05),
+                          blurRadius: isHighlighted ? 18 : 15,
                           offset: const Offset(0, 6),
                         )
                       ],
