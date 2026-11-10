@@ -114,7 +114,7 @@ class _HomePageState extends State<HomePage> {
         await androidImplementation.requestExactAlarmsPermission();
       }
 
-      await _localNotifications.cancelAll();
+      // تم إزالة _localNotifications.cancelAll() لمنع مسح الإشعارات المجدولة عند كل فتح للتطبيق
 
       final times = PrayerService.getSyriaPrayerTimes();
       final now = DateTime.now();

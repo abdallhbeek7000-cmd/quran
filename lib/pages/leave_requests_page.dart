@@ -25,11 +25,24 @@ class LeaveRequestsPage extends StatefulWidget {
   State<LeaveRequestsPage> createState() => _LeaveRequestsPageState();
 }
 
-class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
+class _LeaveRequestsPageState extends State<LeaveRequestsPage> with SingleTickerProviderStateMixin {
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
-  int _initialTabIndex = 0;
+  
+  late TabController _tabController;
   bool _hasCheckedInitialTab = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   static Future<void> notifyManagersOnly({
     required String studentName,
@@ -257,19 +270,21 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
     }
   }
 
+  // 🛠️ الإصلاح الرئيسي: تم تأجيل التبديل للـ Frame القادم لتجنب الـ Crash وتغيير التبويب بسلاسة
   void _checkTargetTab(List<QueryDocumentSnapshot> docs) {
     if (_hasCheckedInitialTab || widget.requestId == null) return;
     for (var doc in docs) {
       if (doc.id == widget.requestId) {
         var data = doc.data() as Map<String, dynamic>;
         String status = data['status'] ?? 'pending';
+        _hasCheckedInitialTab = true;
+
         if (status != 'pending') {
-          setState(() {
-            _initialTabIndex = 1;
-            _hasCheckedInitialTab = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _tabController.animateTo(1);
+            }
           });
-        } else {
-          _hasCheckedInitialTab = true;
         }
         break;
       }
@@ -310,144 +325,142 @@ class _LeaveRequestsPageState extends State<LeaveRequestsPage> {
             }
           }
 
-          return DefaultTabController(
-            length: 2,
-            initialIndex: _initialTabIndex,
-            child: Scaffold(
-              extendBodyBehindAppBar: true,
-              backgroundColor: isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
-              appBar: AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
-                title: Text(
-                  "طلبات الاستئذان 📑",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isDarkMode ? Colors.white : primaryColor,
-                    fontFamily: 'Cairo',
-                    fontSize: 19,
+          return Scaffold(
+            extendBodyBehindAppBar: true,
+            backgroundColor: isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
+            appBar: AppBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              title: Text(
+                "طلبات الاستئذان 📑",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : primaryColor,
+                  fontFamily: 'Cairo',
+                  fontSize: 19,
+                ),
+              ),
+              centerTitle: true,
+              iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+            ),
+            body: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDarkMode
+                          ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
+                          : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
                 ),
-                centerTitle: true,
-                iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-              ),
-              body: Stack(
-                children: [
-                  Container(
+                Positioned(
+                  top: -60,
+                  right: -50,
+                  child: Container(
+                    width: 280,
+                    height: 280,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isDarkMode
-                            ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
-                            : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      shape: BoxShape.circle,
+                      color: isDarkMode ? primaryColor.withOpacity(0.18) : primaryColor.withOpacity(0.12),
                     ),
                   ),
-                  Positioned(
-                    top: -60,
-                    right: -50,
-                    child: Container(
-                      width: 280,
-                      height: 280,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isDarkMode ? primaryColor.withOpacity(0.18) : primaryColor.withOpacity(0.12),
-                      ),
+                ),
+                Positioned(
+                  bottom: 80,
+                  left: -60,
+                  child: Container(
+                    width: 250,
+                    height: 250,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15),
                     ),
                   ),
-                  Positioned(
-                    bottom: 80,
-                    left: -60,
-                    child: Container(
-                      width: 250,
-                      height: 250,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isDarkMode ? accentGold.withOpacity(0.1) : accentGold.withOpacity(0.15),
-                      ),
-                    ),
-                  ),
+                ),
 
-                  SafeArea(
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(22),
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
-                                  borderRadius: BorderRadius.circular(22),
-                                  border: Border.all(
-                                    color: isDarkMode ? Colors.white12 : Colors.white.withOpacity(0.8),
-                                    width: 1.2,
-                                  ),
+                SafeArea(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 10),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.55),
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(
+                                  color: isDarkMode ? Colors.white12 : Colors.white.withOpacity(0.8),
+                                  width: 1.2,
                                 ),
-                                child: TabBar(
-                                  indicator: BoxDecoration(
-                                    color: isDarkMode ? accentGold : primaryColor,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.35),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  labelColor: isDarkMode ? Colors.black87 : Colors.white,
-                                  unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
-                                  labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
-                                  tabs: const [
-                                    Tab(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.mark_email_unread_rounded, size: 18),
-                                          SizedBox(width: 8),
-                                          Text("طلبات معلقة 📥"),
-                                        ],
-                                      ),
-                                    ),
-                                    Tab(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.inventory_2_rounded, size: 18),
-                                          SizedBox(width: 8),
-                                          Text("السجل والأرشيف 📁"),
-                                        ],
-                                      ),
+                              ),
+                              child: TabBar(
+                                controller: _tabController,
+                                indicator: BoxDecoration(
+                                  color: isDarkMode ? accentGold : primaryColor,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.35),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
                                     ),
                                   ],
                                 ),
+                                labelColor: isDarkMode ? Colors.black87 : Colors.white,
+                                unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
+                                labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
+                                tabs: const [
+                                  Tab(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.mark_email_unread_rounded, size: 18),
+                                        SizedBox(width: 8),
+                                        Text("طلبات معلقة 📥"),
+                                      ],
+                                    ),
+                                  ),
+                                  Tab(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.inventory_2_rounded, size: 18),
+                                        SizedBox(width: 8),
+                                        Text("السجل والأرشيف 📁"),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
+                      ),
 
-                        const SizedBox(height: 15),
+                      const SizedBox(height: 15),
 
-                        Expanded(
-                          child: TabBarView(
-                            physics: const BouncingScrollPhysics(),
-                            children: [
-                              _buildRequestsList(context, isDarkMode, isHistory: false, activeCycle: activeCycle),
-                              _buildRequestsList(context, isDarkMode, isHistory: true, activeCycle: activeCycle),
-                            ],
-                          ),
+                      Expanded(
+                        child: TabBarView(
+                          controller: _tabController,
+                          physics: const BouncingScrollPhysics(),
+                          children: [
+                            _buildRequestsList(context, isDarkMode, isHistory: false, activeCycle: activeCycle),
+                            _buildRequestsList(context, isDarkMode, isHistory: true, activeCycle: activeCycle),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         },
