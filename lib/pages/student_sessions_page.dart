@@ -155,7 +155,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         pkg_excel.TextCellValue('مراجعة جديد'),
         pkg_excel.TextCellValue(isCompleted ? 'مراجعة الختمة الشاملة' : 'مراجعة قديم'),
         pkg_excel.TextCellValue('قراءة نظراً'),
-        pkg_excel.TextCellValue('الإجازة القرآنية 📜'), // 📜 عمود الإجازة في الإكسل
+        pkg_excel.TextCellValue('الإجازة القرآنية 📜'),
         pkg_excel.TextCellValue('واجب حفظ جديد'),
         pkg_excel.TextCellValue('واجب مراجعة جديد'),
         pkg_excel.TextCellValue('واجب مراجعة قديم'),
@@ -221,7 +221,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         String nRev = data['nearReview']?.toString().trim() ?? '';
         String fRev = data['farReview']?.toString().trim() ?? (isCompleted ? (data['review']?.toString().trim() ?? '') : '');
         String sight = data['readingBySight']?.toString().trim() ?? '';
-        String ijazahText = data['ijazah']?.toString().trim() ?? ''; // 📜 قراءة نص الإجازة
+        String ijazahText = data['ijazah']?.toString().trim() ?? '';
 
         String hwNew = data['newHomework'] ?? '';
         String hwNewRev = data['newReviewHomework'] ?? '';
@@ -249,7 +249,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isCompleted || isHoliday) ? '---' : nRev),
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isHoliday) ? '---' : fRev),
           pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isHoliday) ? '---' : sight),
-          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isHoliday) ? '---' : ijazahText), // 📜 قيمة الإجازة في Excel
+          pkg_excel.TextCellValue((isAbsent || isExam || didNotRecite || isHoliday) ? '---' : ijazahText),
           pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : hwNew),
           pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : hwNewRev),
           pkg_excel.TextCellValue((isAbsent || isExam || isHoliday) ? '---' : hwOldRev),
@@ -410,6 +410,8 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                             return dateComparison;
                           });
 
+                          // ✅ الحل: تثبيت رقم الجلسة لكل عنصر مسبقاً قبل الرسم في ListView.builder
+                          // لمنع تغير الأرقام أثناء التمرير صعوداً وهبوطاً
                           int normalSessionsTotal = sortedSessions
                               .where((doc) {
                                 final d = doc.data() as Map<String, dynamic>;
@@ -417,31 +419,37 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                               })
                               .length;
 
-                          int runningSessionCounter = normalSessionsTotal;
+                          int counter = normalSessionsTotal;
+                          final List<Map<String, dynamic>> preparedItems = sortedSessions.map((doc) {
+                            final d = doc.data() as Map<String, dynamic>;
+                            final bool isHoliday = d['isHoliday'] == true || d['sessionType'] == 'holiday';
+                            final int fixedNumber = isHoliday ? 0 : counter--;
+                            return {
+                              'id': doc.id,
+                              'data': d,
+                              'isHoliday': isHoliday,
+                              'sessionNumber': fixedNumber,
+                            };
+                          }).toList();
 
                           return ListView.builder(
                             physics: const BouncingScrollPhysics(),
                             padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 30),
-                            itemCount: sortedSessions.length,
+                            itemCount: preparedItems.length,
                             itemBuilder: (context, index) {
-                              final session = sortedSessions[index];
-                              final data = session.data() as Map<String, dynamic>;
+                              final item = preparedItems[index];
 
-                              bool isHoliday = data['isHoliday'] == true || data['sessionType'] == 'holiday';
-                              int currentNumber = runningSessionCounter;
-
-                              if (!isHoliday) {
-                                runningSessionCounter--;
-                              }
-
-                              return _buildSessionTimelineItem(
-                                context, 
-                                session.id, 
-                                data, 
-                                isDarkMode, 
-                                isCompletedStudent, 
-                                isHoliday ? 0 : currentNumber,
-                                isHoliday: isHoliday,
+                              return KeyedSubtree(
+                                key: ValueKey(item['id']),
+                                child: _buildSessionTimelineItem(
+                                  context, 
+                                  item['id'] as String, 
+                                  item['data'] as Map<String, dynamic>, 
+                                  isDarkMode, 
+                                  isCompletedStudent, 
+                                  item['sessionNumber'] as int,
+                                  isHoliday: item['isHoliday'] as bool,
+                                ),
                               );
                             },
                           );
@@ -604,7 +612,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
     String nRev = data['nearReview']?.toString().trim() ?? '';
     String fRev = data['farReview']?.toString().trim() ?? (isCompletedStudent ? (data['review']?.toString().trim() ?? '') : '');
     String sight = data['readingBySight']?.toString().trim() ?? '';
-    String ijazahText = data['ijazah']?.toString().trim() ?? ''; // 📜 قراءة حقل الإجازة
+    String ijazahText = data['ijazah']?.toString().trim() ?? '';
 
     String memRating = data['memorizationRating'] ?? data['rating'] ?? "";
     String newRevRating = data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
@@ -635,7 +643,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
         if (fRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.history_toggle_off_rounded, "مراجعة قديم", fRev, Colors.blueGrey, isDarkMode));
       }
       if (sight.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.chrome_reader_mode_rounded, "قراءة نظراً", sight, Colors.indigoAccent, isDarkMode));
-      if (ijazahText.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.workspace_premium_rounded, "الإجازة القرآنية 📜", ijazahText, Colors.deepOrangeAccent, isDarkMode)); // 📜 كارت عرض الإجازة
+      if (ijazahText.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.workspace_premium_rounded, "الإجازة القرآنية 📜", ijazahText, Colors.deepOrangeAccent, isDarkMode));
     }
 
     String juzChipTitle = selectedJuz > 0 ? _getJuzName(selectedJuz) : '';
@@ -683,7 +691,7 @@ class _StudentSessionsPageState extends State<StudentSessionsPage> with SingleTi
                             _buildBadge("نظام: جزء $juzChipTitle 📖", Colors.purple),
                             const SizedBox(width: 4),
                           ],
-                          if (ijazahText.isNotEmpty && !isAbsent && !isExam) ...[ // 📜 وسام إظهار وجود إجازة
+                          if (ijazahText.isNotEmpty && !isAbsent && !isExam) ...[
                             _buildBadge("إجازة 📜", Colors.deepOrange),
                             const SizedBox(width: 4),
                           ],
