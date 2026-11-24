@@ -114,8 +114,6 @@ class _HomePageState extends State<HomePage> {
         await androidImplementation.requestExactAlarmsPermission();
       }
 
-      // تم إزالة _localNotifications.cancelAll() لمنع مسح الإشعارات المجدولة عند كل فتح للتطبيق
-
       final times = PrayerService.getSyriaPrayerTimes();
       final now = DateTime.now();
 
@@ -132,7 +130,6 @@ class _HomePageState extends State<HomePage> {
         int baseId = item["baseId"] as int;
         String name = item["name"] as String;
 
-        // 1. إشعار قبل ساعة (60 دقيقة)
         DateTime hourBefore = prayerTime.subtract(const Duration(minutes: 60));
         if (hourBefore.isBefore(now)) {
           hourBefore = hourBefore.add(const Duration(days: 1));
@@ -144,7 +141,6 @@ class _HomePageState extends State<HomePage> {
           scheduledDate: hourBefore,
         );
 
-        // 2. إشعار قبل 10 دقائق
         DateTime tenMinBefore = prayerTime.subtract(const Duration(minutes: 10));
         if (tenMinBefore.isBefore(now)) {
           tenMinBefore = tenMinBefore.add(const Duration(days: 1));
@@ -231,7 +227,6 @@ class _HomePageState extends State<HomePage> {
         );
       }
 
-      // إبقاء الرمز متزامناً عند تغيره تلقائياً
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
         if (widget.uid.isNotEmpty) {
           String collection = widget.role == "manager" ? "users" : "supervisors";
@@ -274,13 +269,13 @@ class _HomePageState extends State<HomePage> {
                       child: Container(
                         padding: const EdgeInsets.all(22),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xff0f172a).withValues(alpha: 0.88) : Colors.white.withValues(alpha: 0.88),
+                          color: isDark ? const Color(0xff0f172a).withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.92),
                           borderRadius: BorderRadius.circular(32),
-                          border: Border.all(color: isDark ? accentGold.withValues(alpha: 0.4) : primaryNavy.withValues(alpha: 0.2), width: 1.5),
+                          border: Border.all(color: accentGold.withValues(alpha: isDark ? 0.45 : 0.35), width: 1.4),
                         ),
                         child: Column(
                           children: [
-                            Container(width: 50, height: 5, decoration: BoxDecoration(color: isDark ? accentGold.withValues(alpha: 0.6) : primaryNavy.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(10))),
+                            Container(width: 50, height: 5, decoration: BoxDecoration(color: accentGold.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(10))),
                             const SizedBox(height: 18),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -335,9 +330,9 @@ class _HomePageState extends State<HomePage> {
                                       return Container(
                                         margin: const EdgeInsets.only(bottom: 12),
                                         decoration: BoxDecoration(
-                                          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.6),
+                                          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.72),
                                           borderRadius: BorderRadius.circular(22),
-                                          border: Border.all(color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08)),
+                                          border: Border.all(color: accentGold.withValues(alpha: 0.22)),
                                         ),
                                         child: ListTile(
                                           leading: CircleAvatar(
@@ -426,11 +421,11 @@ class _HomePageState extends State<HomePage> {
             child: Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 25),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xff0f172a).withValues(alpha: 0.92) : Colors.white.withValues(alpha: 0.92),
+                color: isDark ? const Color(0xff0f172a).withValues(alpha: 0.94) : Colors.white.withValues(alpha: 0.95),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
                 border: Border.all(
-                  color: isDark ? Colors.white12 : Colors.white,
-                  width: 1.5,
+                  color: accentGold.withValues(alpha: isDark ? 0.35 : 0.4),
+                  width: 1.4,
                 ),
               ),
               child: Column(
@@ -440,7 +435,7 @@ class _HomePageState extends State<HomePage> {
                     width: 45,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white24 : Colors.black26,
+                      color: accentGold.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -560,9 +555,9 @@ class _HomePageState extends State<HomePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         decoration: BoxDecoration(
-          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
+          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05)),
+          border: Border.all(color: accentGold.withValues(alpha: isDark ? 0.16 : 0.25)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -653,9 +648,9 @@ class _HomePageState extends State<HomePage> {
               leading: Container(
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.65),
+                  color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.78),
                   shape: BoxShape.circle,
-                  border: Border.all(color: isDark ? Colors.white24 : Colors.white),
+                  border: Border.all(color: accentGold.withValues(alpha: 0.45)),
                 ),
                 child: IconButton(
                   icon: Icon(Icons.grid_view_rounded, color: isDark ? accentGold : primaryNavy, size: 22),
@@ -690,18 +685,18 @@ class _HomePageState extends State<HomePage> {
                     gradient: LinearGradient(
                       colors: isDark 
                           ? [const Color(0xff0b1120), const Color(0xff1e293b), const Color(0xff0f172a)] 
-                          : [const Color(0xfff1f5f9), const Color(0xffe2e8f0), const Color(0xffcbd5e1)], 
+                          : [const Color(0xfff8fafc), const Color(0xfff1f5f9), const Color(0xfff6f2e7)], 
                       begin: Alignment.topLeft, end: Alignment.bottomRight,
                     ),
                   ),
                 ),
                 Positioned(
                   top: -80, left: -80,
-                  child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, color: accentGold.withValues(alpha: isDark ? 0.08 : 0.15))),
+                  child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, color: accentGold.withValues(alpha: isDark ? 0.09 : 0.16))),
                 ),
                 Positioned(
                   top: 250, right: -100,
-                  child: Container(width: 320, height: 320, decoration: BoxDecoration(shape: BoxShape.circle, color: softBlue.withValues(alpha: isDark ? 0.08 : 0.12))),
+                  child: Container(width: 320, height: 320, decoration: BoxDecoration(shape: BoxShape.circle, color: softBlue.withValues(alpha: isDark ? 0.08 : 0.11))),
                 ),
 
                 SafeArea(
@@ -791,8 +786,9 @@ class _HomePageState extends State<HomePage> {
       }
 
       nextPrayer ??= list.first;
+      final Map<String, dynamic> currentPrayer = nextPrayer!;
 
-      DateTime nextTime = nextPrayer["time"] as DateTime;
+      DateTime nextTime = currentPrayer["time"] as DateTime;
       if (nextTime.isBefore(now)) {
         nextTime = nextTime.add(const Duration(days: 1));
       }
@@ -806,13 +802,13 @@ class _HomePageState extends State<HomePage> {
       return RepaintBoundary(
         child: Container(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xff1e293b).withValues(alpha: 0.45) : Colors.white.withValues(alpha: 0.45),
+            color: isDark ? const Color(0xff1e293b).withValues(alpha: 0.52) : Colors.white.withValues(alpha: 0.72),
             borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: isDark ? accentGold.withValues(alpha: 0.35) : primaryNavy.withValues(alpha: 0.2), width: 1.5),
+            border: Border.all(color: accentGold.withValues(alpha: isDark ? 0.38 : 0.42), width: 1.4),
             boxShadow: [
               BoxShadow(
-                color: isDark ? Colors.black.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.2),
-                blurRadius: 15,
+                color: isDark ? Colors.black.withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
                 spreadRadius: -2,
                 offset: const Offset(0, 8),
               )
@@ -823,7 +819,7 @@ class _HomePageState extends State<HomePage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                 decoration: BoxDecoration(
-                  color: isDark ? accentGold.withValues(alpha: 0.12) : primaryNavy.withValues(alpha: 0.06),
+                  color: isDark ? accentGold.withValues(alpha: 0.14) : primaryNavy.withValues(alpha: 0.06),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                 ),
                 child: Row(
@@ -833,7 +829,7 @@ class _HomePageState extends State<HomePage> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: isDark ? accentGold.withValues(alpha: 0.2) : primaryNavy.withValues(alpha: 0.12), shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: accentGold.withValues(alpha: 0.2), shape: BoxShape.circle),
                           child: Icon(nextPrayer["icon"], color: isDark ? accentGold : primaryNavy, size: 20),
                         ),
                         const SizedBox(width: 10),
@@ -841,7 +837,7 @@ class _HomePageState extends State<HomePage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text("الصلاة القادمة: ${nextPrayer['name']}", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : primaryNavy)),
-                            Text(_formatTime12(nextPrayer['time'] as DateTime), style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDark ? accentGold : primaryNavy.withValues(alpha: 0.8), fontWeight: FontWeight.bold)),
+                            Text(_formatTime12(nextPrayer['time'] as DateTime), style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isDark ? accentGold : primaryNavy.withValues(alpha: 0.85), fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ],
@@ -849,9 +845,9 @@ class _HomePageState extends State<HomePage> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.black45 : Colors.white.withValues(alpha: 0.85),
+                        color: isDark ? Colors.black45 : Colors.white.withValues(alpha: 0.92),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: isDark ? accentGold.withValues(alpha: 0.4) : primaryNavy.withValues(alpha: 0.25)),
+                        border: Border.all(color: accentGold.withValues(alpha: 0.5)),
                       ),
                       child: Text(countdownStr, style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.w800, color: isDark ? accentGold : primaryNavy)),
                     ),
@@ -887,7 +883,7 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         color: isNext ? (isDark ? accentGold.withValues(alpha: 0.22) : primaryNavy.withValues(alpha: 0.12)) : Colors.transparent,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isNext ? activeColor.withValues(alpha: 0.6) : Colors.transparent, width: 1.2),
+        border: Border.all(color: isNext ? activeColor.withValues(alpha: 0.65) : Colors.transparent, width: 1.2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -915,12 +911,12 @@ class _HomePageState extends State<HomePage> {
       child: Container(
         padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xff1e293b).withValues(alpha: 0.45) : Colors.white.withValues(alpha: 0.45),
+          color: isDark ? const Color(0xff1e293b).withValues(alpha: 0.52) : Colors.white.withValues(alpha: 0.72),
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.8), width: 1.5),
+          border: Border.all(color: accentGold.withValues(alpha: isDark ? 0.35 : 0.45), width: 1.4),
           boxShadow: [
             BoxShadow(
-              color: isDark ? Colors.black.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.3),
+              color: isDark ? Colors.black.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.05),
               blurRadius: 20,
               spreadRadius: -2,
               offset: const Offset(0, 10),
@@ -957,7 +953,21 @@ class _HomePageState extends State<HomePage> {
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          Container(width: 90, height: 90, decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [accentGold, softBlue]))),
+                          Container(
+                            width: 92,
+                            height: 92,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(colors: [accentGold, primaryNavy]),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: accentGold.withValues(alpha: 0.25),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                          ),
                           CircleAvatar(
                             radius: 42,
                             backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white,
@@ -966,12 +976,38 @@ class _HomePageState extends State<HomePage> {
                           ),
                           if (_isUploadingManagerImage) const Positioned.fill(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(color: Colors.white))),
                           if (!_isUploadingManagerImage && isManager)
-                            Positioned(bottom: 0, right: 0, child: CircleAvatar(radius: 14, backgroundColor: isDark ? const Color(0xff1e293b) : Colors.white, child: Icon(Icons.camera_alt, size: 15, color: primaryNavy))),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: CircleAvatar(
+                                radius: 14,
+                                backgroundColor: accentGold,
+                                child: Icon(Icons.camera_alt, size: 15, color: primaryNavy),
+                              ),
+                            ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 12),
                     buildGreetingText(),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: accentGold.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: accentGold.withValues(alpha: 0.4)),
+                      ),
+                      child: Text(
+                        isManager ? "صلاحية الإدارة العليا" : "إشراف الحلقات",
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? accentGold : primaryNavy,
+                        ),
+                      ),
+                    ),
                   ],
                 );
               },
@@ -980,15 +1016,26 @@ class _HomePageState extends State<HomePage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isDark ? Colors.black.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.6),
+                color: isDark ? Colors.black.withValues(alpha: 0.28) : Colors.white.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: isDark ? Colors.white12 : Colors.white, width: 1),
+                border: Border.all(
+                  color: activeCycle != null ? accentGold.withValues(alpha: 0.4) : Colors.redAccent.withValues(alpha: 0.35),
+                  width: 1.1,
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(
-                    activeCycle != null ? Icons.event_note_rounded : Icons.event_busy_rounded, 
-                    color: activeCycle != null ? (isDark ? accentGold : primaryNavy) : Colors.redAccent,
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (activeCycle != null ? accentGold : Colors.redAccent).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      activeCycle != null ? Icons.event_note_rounded : Icons.event_busy_rounded, 
+                      color: activeCycle != null ? (isDark ? accentGold : primaryNavy) : Colors.redAccent,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1008,6 +1055,23 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                   ),
+                  if (activeCycle != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xff10b981).withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        "نشطة",
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xff10b981),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1025,15 +1089,15 @@ class _HomePageState extends State<HomePage> {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xff1e293b).withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.45),
+            color: isDark ? const Color(0xff1e293b).withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.72),
             borderRadius: BorderRadius.circular(26),
             border: Border.all(
-              color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.85), 
-              width: 1.5,
+              color: accentGold.withValues(alpha: isDark ? 0.24 : 0.35), 
+              width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: isDark ? Colors.black.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.25),
+                color: isDark ? Colors.black.withValues(alpha: 0.22) : Colors.black.withValues(alpha: 0.04),
                 blurRadius: 12,
                 spreadRadius: -1,
                 offset: const Offset(0, 6),
@@ -1048,8 +1112,15 @@ class _HomePageState extends State<HomePage> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(colors: gradientColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+                  boxShadow: [
+                    BoxShadow(
+                      color: gradientColors.first.withValues(alpha: 0.28),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
-                child: Icon(icon, size: 26, color: Colors.white),
+                child: Icon(icon, size: 25, color: Colors.white),
               ),
               const SizedBox(height: 10),
               Text(

@@ -6,8 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../services/theme_provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import 'supervisor_chat_page.dart'; 
-import 'staff_chat_page.dart'; 
+import 'supervisor_chat_page.dart';
+import 'staff_chat_page.dart';
 import '../widgets/offline_wrapper.dart';
 
 class SupervisorInboxPage extends StatefulWidget {
@@ -23,76 +23,180 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
   final Color primaryColor = const Color(0xff0f172a);
   final Color goldColor = const Color(0xfffbbf24);
   final Color brandBlue = const Color(0xff2563eb);
-  
+
+  final ScrollController _inboxScrollController = ScrollController();
   final Map<String, Map<String, dynamic>> _peerCache = {};
-  
-  String? _effectiveSupervisorId;
-  bool _isLoadingEffectiveId = true;
+  final Map<String, String?> _studentImageCache = {};
+  final Map<String, String?> _studentImageByNameCache = {};
+  final Set<String> _locallyClearedIds = {};
+
+  late String _currentSupId;
+  bool _resolvedLinkedId = false;
+
+  late Stream<QuerySnapshot> _parentChatsStream;
+  late Stream<QuerySnapshot> _staffChatsStream;
 
   @override
   void initState() {
     super.initState();
     timeago.setLocaleMessages('ar', timeago.ArMessages());
+    _currentSupId = widget.supervisorId;
+    _initStreams();
     _resolveEffectiveSupervisorId();
   }
 
-  async.Future<void> _resolveEffectiveSupervisorId() async {
+  @override
+  void dispose() {
+    _inboxScrollController.dispose();
+    super.dispose();
+  }
+
+  void _initStreams() {
+    final ids = <String>{widget.supervisorId, _currentSupId}.toList();
+    _parentChatsStream = FirebaseFirestore.instance
+        .collection('chats')
+        .where('supervisorId', whereIn: ids)
+        .snapshots();
+
+    _staffChatsStream = FirebaseFirestore.instance
+        .collection('staff_chats')
+        .where('participants', arrayContainsAny: ids)
+        .snapshots();
+  }
+
+  Future<void> _resolveEffectiveSupervisorId() async {
     try {
-      var userDoc = await FirebaseFirestore.instance.collection('users').doc(widget.supervisorId).get();
-      if (userDoc.exists && userDoc.data()?['linkedSupervisorId'] != null) {
-        String linkedId = userDoc.data()!['linkedSupervisorId'];
-        if (linkedId.isNotEmpty) {
-          if (mounted) {
-            setState(() {
-              _effectiveSupervisorId = linkedId;
-              _isLoadingEffectiveId = false;
-            });
-          }
-          return;
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.supervisorId)
+          .get();
+      final linkedId = userDoc.data()?['linkedSupervisorId']?.toString() ?? '';
+      if (userDoc.exists && linkedId.isNotEmpty && linkedId != _currentSupId) {
+        _currentSupId = linkedId;
+        if (mounted) {
+          setState(() {
+            _resolvedLinkedId = true;
+            _initStreams();
+          });
         }
+        return;
       }
     } catch (e) {
       debugPrint("خطأ أثناء جلب حساب المشرف المربوط: $e");
     }
 
-    if (mounted) {
+    if (mounted && !_resolvedLinkedId) {
       setState(() {
-        _effectiveSupervisorId = widget.supervisorId;
-        _isLoadingEffectiveId = false;
+        _resolvedLinkedId = true;
       });
     }
   }
 
+  Future<void> _markChatAsReadImmediately({
+    required String docId,
+    required bool isStaff,
+  }) async {
+    if (mounted) {
+      setState(() {
+        _locallyClearedIds.add(docId);
+      });
+    }
+
+    try {
+      if (isStaff) {
+        final Map<String, dynamic> updates = {
+          'unread_${widget.supervisorId}': 0,
+          'unread_$_currentSupId': 0,
+        };
+        await FirebaseFirestore.instance
+            .collection('staff_chats')
+            .doc(docId)
+            .set(updates, SetOptions(merge: true));
+      } else {
+        await FirebaseFirestore.instance
+            .collection('chats')
+            .doc(docId)
+            .set({'unreadBySupervisor': 0}, SetOptions(merge: true));
+      }
+    } catch (_) {}
+  }
+
   String _generateStaffChatId(String uid1, String uid2) {
-    List<String> ids = [uid1, uid2];
-    ids.sort(); 
+    final ids = [uid1, uid2]..sort();
     return "staff_${ids[0]}_${ids[1]}";
   }
 
-  // 🛠️ دالة جلب بيانات الطرف الآخر مع دعم التخزين المؤقت وفحص المجموعات
+  async.Future<String?> _getStudentImage(String studentId, String studentName) async {
+    if (studentId.isNotEmpty && _studentImageCache.containsKey(studentId)) {
+      return _studentImageCache[studentId];
+    }
+    if (studentName.isNotEmpty && _studentImageByNameCache.containsKey(studentName)) {
+      return _studentImageByNameCache[studentName];
+    }
+
+    try {
+      if (studentId.isNotEmpty) {
+        final doc = await FirebaseFirestore.instance
+            .collection('students')
+            .doc(studentId)
+            .get();
+        if (doc.exists && doc.data() != null) {
+          final url = doc.data()!['imageUrl']?.toString().trim();
+          final validUrl = (url != null && url.isNotEmpty) ? url : null;
+          _studentImageCache[studentId] = validUrl;
+          if (studentName.isNotEmpty) {
+            _studentImageByNameCache[studentName] = validUrl;
+          }
+          return validUrl;
+        }
+      }
+
+      if (studentName.isNotEmpty) {
+        final snap = await FirebaseFirestore.instance
+            .collection('students')
+            .where('name', isEqualTo: studentName)
+            .limit(1)
+            .get();
+        if (snap.docs.isNotEmpty) {
+          final url = snap.docs.first.data()['imageUrl']?.toString().trim();
+          final validUrl = (url != null && url.isNotEmpty) ? url : null;
+          if (studentId.isNotEmpty) _studentImageCache[studentId] = validUrl;
+          _studentImageByNameCache[studentName] = validUrl;
+          return validUrl;
+        }
+      }
+    } catch (e) {
+      debugPrint("خطأ جلب صورة الطالب: $e");
+    }
+
+    if (studentId.isNotEmpty) _studentImageCache[studentId] = null;
+    if (studentName.isNotEmpty) _studentImageByNameCache[studentName] = null;
+    return null;
+  }
+
   Future<Map<String, dynamic>> _getPeerDataCached(String peerId) async {
-    if (peerId.isEmpty) return {'name': 'حساب إداري', 'role': 'manager', 'imageUrl': null};
+    if (peerId.isEmpty) {
+      return {'name': 'حساب إداري', 'role': 'manager', 'imageUrl': null};
+    }
     if (_peerCache.containsKey(peerId)) return _peerCache[peerId]!;
 
     try {
-      // 1. البحث في مجموعة المستخدمين / الإدارة
-      var manDoc = await FirebaseFirestore.instance.collection('users').doc(peerId).get();
+      final manDoc = await FirebaseFirestore.instance.collection('users').doc(peerId).get();
       if (manDoc.exists && manDoc.data() != null) {
         _peerCache[peerId] = {
-          'name': manDoc.data()?['name'] ?? 'عضو إدارة', 
-          'role': 'manager', 
-          'imageUrl': manDoc.data()?['imageUrl']
+          'name': manDoc.data()?['name'] ?? 'عضو إدارة',
+          'role': 'manager',
+          'imageUrl': manDoc.data()?['imageUrl'],
         };
         return _peerCache[peerId]!;
       }
 
-      // 2. البحث في مجموعة المشرفين
-      var supDoc = await FirebaseFirestore.instance.collection('supervisors').doc(peerId).get();
+      final supDoc = await FirebaseFirestore.instance.collection('supervisors').doc(peerId).get();
       if (supDoc.exists && supDoc.data() != null) {
         _peerCache[peerId] = {
-          'name': supDoc.data()?['name'] ?? 'زميل إشراف', 
-          'role': 'supervisor', 
-          'imageUrl': supDoc.data()?['imageUrl']
+          'name': supDoc.data()?['name'] ?? 'زميل إشراف',
+          'role': 'supervisor',
+          'imageUrl': supDoc.data()?['imageUrl'],
         };
         return _peerCache[peerId]!;
       }
@@ -105,14 +209,17 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
 
   Future<void> _deleteChat(String docId, bool isStaff) async {
     try {
-      String collectionName = isStaff ? 'staff_chats' : 'chats';
+      final collectionName = isStaff ? 'staff_chats' : 'chats';
       await FirebaseFirestore.instance.collection(collectionName).doc(docId).delete();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            backgroundColor: Colors.green, 
-            content: Text("تم حذف المحادثة بنجاح 🗑️", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))
+            backgroundColor: Colors.green,
+            content: Text(
+              "تم حذف المحادثة بنجاح 🗑️",
+              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+            ),
           ),
         );
       }
@@ -120,7 +227,10 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
       debugPrint("خطأ في حذف المحادثة: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: Colors.redAccent, content: Text("فشل الحذف، تأكد من الاتصال بالإنترنت", style: TextStyle(fontFamily: 'Cairo'))),
+          const SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text("فشل الحذف، تأكد من الاتصال بالإنترنت", style: TextStyle(fontFamily: 'Cairo')),
+          ),
         );
       }
     }
@@ -136,14 +246,36 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
           children: [
             const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
             const SizedBox(width: 10),
-            Text("حذف المحادثة", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(
+              "حذف المحادثة",
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                color: isDark ? Colors.white : primaryColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
           ],
         ),
-        content: Text("هل أنت متأكد أنك تريد إزالة هذه المحادثة من صندوق الوارد الخاص بك؟", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white70 : Colors.black87, fontSize: 13.5)),
+        content: Text(
+          "هل أنت متأكد أنك تريد إزالة هذه المحادثة من صندوق الوارد الخاص بك؟",
+          style: TextStyle(
+            fontFamily: 'Cairo',
+            color: isDark ? Colors.white70 : Colors.black87,
+            fontSize: 13.5,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("إلغاء", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54, fontWeight: FontWeight.bold)),
+            child: Text(
+              "إلغاء",
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                color: isDark ? Colors.white54 : Colors.black54,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -154,7 +286,10 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
               Navigator.pop(context);
               _deleteChat(docId, isStaff);
             },
-            child: const Text("حذف", style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text(
+              "حذف",
+              style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -176,7 +311,7 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                 child: Container(
-                  height: MediaQuery.of(context).size.height * 0.78, 
+                  height: MediaQuery.of(context).size.height * 0.78,
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xff1e293b).withOpacity(0.92) : Colors.white.withOpacity(0.95),
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
@@ -185,9 +320,12 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                   child: Column(
                     children: [
                       const SizedBox(height: 12),
-                      Container(width: 45, height: 5, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.4), borderRadius: BorderRadius.circular(10))),
+                      Container(
+                        width: 45,
+                        height: 5,
+                        decoration: BoxDecoration(color: Colors.grey.withOpacity(0.4), borderRadius: BorderRadius.circular(10)),
+                      ),
                       const SizedBox(height: 12),
-                      
                       TabBar(
                         indicatorColor: goldColor,
                         indicatorWeight: 3,
@@ -199,12 +337,11 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                           Tab(text: "طاقم العمل"),
                         ],
                       ),
-                      
                       Expanded(
                         child: TabBarView(
                           children: [
-                            _buildStudentsTab(isDark), 
-                            _buildStaffTab(isDark),    
+                            _buildStudentsTab(isDark),
+                            _buildStaffTab(isDark),
                           ],
                         ),
                       ),
@@ -220,13 +357,23 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
   }
 
   Widget _buildStudentsTab(bool isDark) {
-    String currentSupId = _effectiveSupervisorId ?? widget.supervisorId;
-
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('students').where('supervisorId', isEqualTo: currentSupId).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('students')
+          .where('supervisorId', isEqualTo: _currentSupId)
+          .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: goldColor));
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return Center(child: Text("لا يوجد طلاب مسجلين باسمك حالياً", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54)));
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: goldColor));
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(
+            child: Text(
+              "لا يوجد طلاب مسجلين باسمك حالياً",
+              style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54),
+            ),
+          );
+        }
 
         final students = snapshot.data!.docs;
         return ListView.builder(
@@ -237,38 +384,84 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
             final studentDoc = students[index];
             final studentData = studentDoc.data() as Map<String, dynamic>;
             final studentName = studentData['name'] ?? 'غير معروف';
+            final String? studentImageUrl =
+                studentData['imageUrl']?.toString().trim().isNotEmpty == true
+                    ? studentData['imageUrl'].toString().trim()
+                    : null;
+            _studentImageCache[studentDoc.id] = studentImageUrl;
+            if (studentName.toString().isNotEmpty) {
+              _studentImageByNameCache[studentName.toString()] = studentImageUrl;
+            }
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03), 
-                borderRadius: BorderRadius.circular(18), 
-                border: Border.all(color: isDark ? Colors.white12 : Colors.black12)
+                color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
               ),
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 leading: CircleAvatar(
                   radius: 22,
-                  backgroundColor: goldColor.withOpacity(0.2), 
-                  child: Icon(Icons.person_rounded, color: goldColor, size: 22),
+                  backgroundColor: goldColor.withOpacity(0.2),
+                  backgroundImage: studentImageUrl != null
+                      ? NetworkImage(studentImageUrl)
+                      : null,
+                  child: studentImageUrl == null
+                      ? Icon(Icons.person_rounded, color: goldColor, size: 22)
+                      : null,
                 ),
-                title: Text(studentName, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87, fontSize: 14)),
-                subtitle: Text("ولي الأمر", style: TextStyle(fontFamily: 'Cairo', fontSize: 11.5, color: isDark ? Colors.white54 : Colors.black54)),
+                title: Text(
+                  studentName,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: Text(
+                  "ولي الأمر",
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11.5,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                ),
                 trailing: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(color: brandBlue.withOpacity(0.12), shape: BoxShape.circle),
                   child: Icon(Icons.chat_bubble_outline_rounded, color: brandBlue, size: 18),
                 ),
-                onTap: () {
-                  Navigator.pop(context); 
+                onTap: () async {
+                  Navigator.pop(context);
+                  String targetChatId = studentDoc.id;
+                  try {
+                    final existingSnap = await FirebaseFirestore.instance
+                        .collection('chats')
+                        .where('studentId', isEqualTo: studentDoc.id)
+                        .get();
+                    if (existingSnap.docs.isNotEmpty) {
+                      existingSnap.docs.sort((a, b) {
+                        final tA = (a.data() as Map<String, dynamic>)['lastMessageTime'] as Timestamp?;
+                        final tB = (b.data() as Map<String, dynamic>)['lastMessageTime'] as Timestamp?;
+                        return (tB ?? Timestamp(0, 0)).compareTo(tA ?? Timestamp(0, 0));
+                      });
+                      targetChatId = existingSnap.docs.first.id;
+                    }
+                  } catch (_) {}
+
+                  _markChatAsReadImmediately(docId: targetChatId, isStaff: false);
+                  if (!context.mounted) return;
                   Navigator.push(
-                    context, 
+                    context,
                     MaterialPageRoute(
                       builder: (_) => SupervisorChatPage(
-                        chatId: studentDoc.id,
-                        studentId: studentDoc.id, 
-                        studentName: studentName, 
-                        supervisorId: currentSupId,
+                        chatId: targetChatId,
+                        studentId: studentDoc.id,
+                        studentName: studentName,
+                        supervisorId: _currentSupId,
                       ),
                     ),
                   );
@@ -282,23 +475,45 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
   }
 
   Widget _buildStaffTab(bool isDark) {
-    String currentSupId = _effectiveSupervisorId ?? widget.supervisorId;
-
     return FutureBuilder<List<QuerySnapshot>>(
-      future: Future.wait([FirebaseFirestore.instance.collection('users').get(), FirebaseFirestore.instance.collection('supervisors').get()]),
+      future: Future.wait([
+        FirebaseFirestore.instance.collection('users').get(),
+        FirebaseFirestore.instance.collection('supervisors').get(),
+      ]),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        if (!snapshot.hasData) return const Center(child: Text("خطأ في جلب البيانات"));
-
-        List<Map<String, dynamic>> allStaff = [];
-        for (var doc in snapshot.data![0].docs) { 
-          if (doc.id != widget.supervisorId && doc.id != currentSupId) { var data = doc.data() as Map<String, dynamic>; data['id'] = doc.id; data['staffRole'] = 'manager'; allStaff.add(data); }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
         }
-        for (var doc in snapshot.data![1].docs) { 
-          if (doc.id != widget.supervisorId && doc.id != currentSupId) { var data = doc.data() as Map<String, dynamic>; data['id'] = doc.id; data['staffRole'] = 'supervisor'; allStaff.add(data); }
+        if (!snapshot.hasData) {
+          return const Center(child: Text("خطأ في جلب البيانات"));
         }
 
-        if (allStaff.isEmpty) return Center(child: Text("لا يوجد أعضاء آخرين في الطاقم.", style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54)));
+        final List<Map<String, dynamic>> allStaff = [];
+        for (var doc in snapshot.data![0].docs) {
+          if (doc.id != widget.supervisorId && doc.id != _currentSupId) {
+            final data = doc.data() as Map<String, dynamic>;
+            data['id'] = doc.id;
+            data['staffRole'] = 'manager';
+            allStaff.add(data);
+          }
+        }
+        for (var doc in snapshot.data![1].docs) {
+          if (doc.id != widget.supervisorId && doc.id != _currentSupId) {
+            final data = doc.data() as Map<String, dynamic>;
+            data['id'] = doc.id;
+            data['staffRole'] = 'supervisor';
+            allStaff.add(data);
+          }
+        }
+
+        if (allStaff.isEmpty) {
+          return Center(
+            child: Text(
+              "لا يوجد أعضاء آخرين في الطاقم.",
+              style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54),
+            ),
+          );
+        }
 
         return ListView.builder(
           physics: const BouncingScrollPhysics(),
@@ -314,29 +529,66 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.6), 
-                borderRadius: BorderRadius.circular(18), 
-                border: Border.all(color: staffRole == 'manager' ? goldColor.withOpacity(0.4) : (isDark ? Colors.white12 : Colors.white), width: 1.2)
+                color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: staffRole == 'manager' ? goldColor.withOpacity(0.4) : (isDark ? Colors.white12 : Colors.white),
+                  width: 1.2,
+                ),
               ),
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 leading: CircleAvatar(
                   radius: 22,
-                  backgroundColor: staffRole == 'manager' ? goldColor.withOpacity(0.2) : brandBlue.withOpacity(0.12), 
-                  backgroundImage: imageUrl != null && imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null, 
-                  child: (imageUrl == null || imageUrl.isEmpty) ? Icon(staffRole == 'manager' ? Icons.admin_panel_settings_rounded : Icons.person_rounded, color: staffRole == 'manager' ? goldColor : brandBlue, size: 20) : null
+                  backgroundColor: staffRole == 'manager' ? goldColor.withOpacity(0.2) : brandBlue.withOpacity(0.12),
+                  backgroundImage: imageUrl != null && imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+                  child: (imageUrl == null || imageUrl.isEmpty)
+                      ? Icon(
+                          staffRole == 'manager' ? Icons.admin_panel_settings_rounded : Icons.person_rounded,
+                          color: staffRole == 'manager' ? goldColor : brandBlue,
+                          size: 20,
+                        )
+                      : null,
                 ),
-                title: Text(staffName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87, fontFamily: 'Cairo')),
-                subtitle: Text(staffRole == 'manager' ? 'إدارة المعهد 🌟' : 'كادر الإشراف 🛡️', style: TextStyle(fontSize: 11.5, color: staffRole == 'manager' ? goldColor : (isDark ? Colors.white54 : Colors.black54), fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                title: Text(
+                  staffName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                subtitle: Text(
+                  staffRole == 'manager' ? 'إدارة المعهد 🌟' : 'كادر الإشراف 🛡️',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: staffRole == 'manager' ? goldColor : (isDark ? Colors.white54 : Colors.black54),
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 trailing: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(color: brandBlue.withOpacity(0.12), shape: BoxShape.circle),
                   child: Icon(Icons.chat_rounded, color: brandBlue, size: 18),
                 ),
                 onTap: () {
-                  String chatRoomId = _generateStaffChatId(currentSupId, staffId);
+                  final chatRoomId = _generateStaffChatId(_currentSupId, staffId);
+                  _markChatAsReadImmediately(docId: chatRoomId, isStaff: true);
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => StaffChatPage(chatId: chatRoomId, currentUserId: currentSupId, peerId: staffId, peerName: staffName, peerRole: staffRole)));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => StaffChatPage(
+                        chatId: chatRoomId,
+                        currentUserId: _currentSupId,
+                        peerId: staffId,
+                        peerName: staffName,
+                        peerRole: staffRole,
+                      ),
+                    ),
+                  );
                 },
               ),
             );
@@ -346,18 +598,34 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
     );
   }
 
+  int _resolveStaffUnreadCount(Map<String, dynamic> chatData, String docId) {
+    if (_locallyClearedIds.contains(docId)) return 0;
+
+    final candidates = [
+      chatData['unread_${widget.supervisorId}'],
+      chatData['unread_$_currentSupId'],
+      chatData['unreadBySupervisor'],
+    ];
+
+    int maxCount = 0;
+    for (final val in candidates) {
+      if (val is int && val > maxCount) maxCount = val;
+      if (val is num && val.toInt() > maxCount) maxCount = val.toInt();
+    }
+    return maxCount;
+  }
+
+  int _resolveParentUnreadCount(Map<String, dynamic> chatData, String docId) {
+    if (_locallyClearedIds.contains(docId)) return 0;
+    final val = chatData['unreadBySupervisor'];
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    return 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
-
-    if (_isLoadingEffectiveId) {
-      return Scaffold(
-        backgroundColor: isDark ? const Color(0xff090d16) : const Color(0xfff8fafc),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    final String currentSupId = _effectiveSupervisorId ?? widget.supervisorId;
 
     return OfflineWrapper(
       child: Scaffold(
@@ -373,18 +641,25 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                 filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                 child: AppBar(
                   elevation: 0,
-                  backgroundColor: isDark 
-                      ? const Color(0xff1e293b).withOpacity(0.75) 
+                  backgroundColor: isDark
+                      ? const Color(0xff1e293b).withOpacity(0.75)
                       : Colors.white.withOpacity(0.8),
                   centerTitle: true,
                   iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
-                  title: Text("صندوق الوارد 📥", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                  title: Text(
+                    "صندوق الوارد 📥",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                      color: isDark ? Colors.white : primaryColor,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
         ),
-        
         floatingActionButton: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(30),
@@ -393,7 +668,7 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                 color: goldColor.withOpacity(0.4),
                 blurRadius: 15,
                 offset: const Offset(0, 6),
-              )
+              ),
             ],
           ),
           child: FloatingActionButton.extended(
@@ -401,13 +676,19 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
             backgroundColor: goldColor,
             elevation: 0,
             icon: const Icon(Icons.add_comment_rounded, color: Colors.black87),
-            label: const Text("مراسلة جديدة", style: TextStyle(color: Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
+            label: const Text(
+              "مراسلة جديدة",
+              style: TextStyle(
+                color: Colors.black87,
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
           ),
         ),
-
         body: Stack(
           children: [
-            // 🌌 خلفية زجاجية متدرجة مع أشكال مضيئة
             Container(
               width: double.infinity,
               height: double.infinity,
@@ -447,38 +728,65 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                 ),
               ),
             ),
-
             SafeArea(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('chats').where('supervisorId', whereIn: [widget.supervisorId, currentSupId]).snapshots(),
+                stream: _parentChatsStream,
                 builder: (context, parentSnap) {
                   return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection('staff_chats').where('participants', arrayContainsAny: [widget.supervisorId, currentSupId]).snapshots(),
+                    stream: _staffChatsStream,
                     builder: (context, staffSnap) {
-                      if (parentSnap.connectionState == ConnectionState.waiting && staffSnap.connectionState == ConnectionState.waiting) {
+                      if (parentSnap.connectionState == ConnectionState.waiting &&
+                          staffSnap.connectionState == ConnectionState.waiting &&
+                          !parentSnap.hasData &&
+                          !staffSnap.hasData) {
                         return const Center(child: CircularProgressIndicator());
                       }
 
-                      List<Map<String, dynamic>> allChats = [];
+                      final List<Map<String, dynamic>> allChats = [];
 
                       if (parentSnap.hasData) {
+                        final Map<String, Map<String, dynamic>> groupedByStudent = {};
+
                         for (var doc in parentSnap.data!.docs) {
-                          var data = doc.data() as Map<String, dynamic>;
+                          final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
                           if (data.containsKey('studentId') && data['studentId'].toString().isNotEmpty) {
                             data['docId'] = doc.id;
                             data['isStaff'] = false;
                             data['sortTime'] = data['lastMessageTime'] ?? Timestamp.now();
-                            allChats.add(data);
+
+                            final String sId = data['studentId'].toString();
+                            final int docUnread = _resolveParentUnreadCount(data, doc.id);
+                            data['_resolvedUnread'] = docUnread;
+
+                            if (!groupedByStudent.containsKey(sId)) {
+                              groupedByStudent[sId] = data;
+                            } else {
+                              final existing = groupedByStudent[sId]!;
+                              final Timestamp tNew = data['sortTime'] as Timestamp;
+                              final Timestamp tOld = existing['sortTime'] as Timestamp;
+                              final int unreadNew = (data['_resolvedUnread'] ?? 0) as int;
+                              final int unreadOld = (existing['_resolvedUnread'] ?? 0) as int;
+
+                              if (tNew.compareTo(tOld) >= 0) {
+                                data['_resolvedUnread'] = unreadNew + unreadOld;
+                                groupedByStudent[sId] = data;
+                              } else {
+                                existing['_resolvedUnread'] = unreadNew + unreadOld;
+                              }
+                            }
                           }
                         }
+
+                        allChats.addAll(groupedByStudent.values);
                       }
 
                       if (staffSnap.hasData) {
                         for (var doc in staffSnap.data!.docs) {
-                          var data = doc.data() as Map<String, dynamic>;
+                          final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
                           data['docId'] = doc.id;
                           data['isStaff'] = true;
                           data['sortTime'] = data['lastMessageTime'] ?? Timestamp.now();
+                          data['_resolvedUnread'] = _resolveStaffUnreadCount(data, doc.id);
                           allChats.add(data);
                         }
                       }
@@ -500,17 +808,34 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                                 child: Icon(Icons.mark_chat_read_rounded, size: 60, color: goldColor),
                               ),
                               const SizedBox(height: 16),
-                              Text("صندوق الوارد فارغ حالياً", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo')),
+                              Text(
+                                "صندوق الوارد فارغ حالياً",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : primaryColor,
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
                               const SizedBox(height: 6),
-                              Text("اضغط على مراسلة جديدة للبدء بالتواصل", style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white54 : Colors.black45, fontFamily: 'Cairo')),
+                              Text(
+                                "اضغط على مراسلة جديدة للبدء بالتواصل",
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: isDark ? Colors.white54 : Colors.black45,
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
                             ],
                           ),
                         );
                       }
 
                       return ListView.builder(
+                        key: const PageStorageKey<String>('supervisor_inbox_list'),
+                        controller: _inboxScrollController,
                         physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 90), 
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
                         itemCount: allChats.length,
                         itemBuilder: (context, index) {
                           final chatData = allChats[index];
@@ -518,52 +843,60 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                           final String docId = chatData['docId'];
                           final lastMessage = chatData['lastMessage'] ?? '';
                           final lastTime = (chatData['sortTime'] as Timestamp).toDate();
+                          final int unreadCount = (chatData['_resolvedUnread'] ?? 0) as int;
 
                           if (!isStaff) {
                             final studentName = chatData['studentName'] ?? 'طالب غير معروف';
-                            final unreadCount = chatData['unreadBySupervisor'] ?? 0;
                             final studentId = chatData['studentId'] ?? docId;
-                            
-                            return _buildChatTile(
-                              context: context, isDark: isDark, isStaff: false,
-                              title: "ولي أمر الطالب: $studentName",
-                              subtitle: lastMessage,
-                              time: lastTime,
-                              unreadCount: unreadCount,
-                              icon: Icons.person_rounded, iconColor: brandBlue,
-                              onTap: () => Navigator.push(
-                                context, 
-                                MaterialPageRoute(
-                                  builder: (_) => SupervisorChatPage(
-                                    chatId: studentId, 
-                                    studentId: studentId, 
-                                    studentName: studentName, 
-                                    supervisorId: currentSupId,
-                                  ),
-                                ),
-                              ),
-                              onLongPress: () => _showDeleteConfirmDialog(docId, false, isDark),
+
+                            return FutureBuilder<String?>(
+                              future: _getStudentImage(studentId, studentName),
+                              builder: (context, imgSnap) {
+                                return _buildChatTile(
+                                  key: ValueKey('parent_$docId'),
+                                  context: context,
+                                  isDark: isDark,
+                                  isStaff: false,
+                                  title: "ولي أمر الطالب: $studentName",
+                                  subtitle: lastMessage,
+                                  time: lastTime,
+                                  unreadCount: unreadCount,
+                                  icon: Icons.person_rounded,
+                                  iconColor: brandBlue,
+                                  imageUrl: imgSnap.data,
+                                  onTap: () {
+                                    _markChatAsReadImmediately(docId: docId, isStaff: false);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => SupervisorChatPage(
+                                          chatId: docId,
+                                          studentId: studentId,
+                                          studentName: studentName,
+                                          supervisorId: _currentSupId,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  onLongPress: () => _showDeleteConfirmDialog(docId, false, isDark),
+                                );
+                              },
                             );
-                          } 
-                          else {
-                            final unreadCount = chatData['unread_${widget.supervisorId}'] ?? chatData['unread_$currentSupId'] ?? 0;
-                            
-                            // 🔑 المنطق المحسّن لاستخراج peerId ومنع ظهور "غير معروف"
-                            List parts = chatData['participants'] ?? [];
+                          } else {
+                            final List parts = chatData['participants'] ?? [];
                             String peerId = '';
 
                             for (var id in parts) {
-                              if (id.toString() != widget.supervisorId && id.toString() != currentSupId) {
+                              if (id.toString() != widget.supervisorId && id.toString() != _currentSupId) {
                                 peerId = id.toString();
                                 break;
                               }
                             }
 
-                            // فحص احتياطي عبر docId إذا كان مبنياً بالشكل staff_UID1_UID2
                             if (peerId.isEmpty && docId.startsWith('staff_')) {
-                              List<String> rawIds = docId.replaceFirst('staff_', '').split('_');
+                              final List<String> rawIds = docId.replaceFirst('staff_', '').split('_');
                               for (var id in rawIds) {
-                                if (id != widget.supervisorId && id != currentSupId) {
+                                if (id != widget.supervisorId && id != _currentSupId) {
                                   peerId = id;
                                   break;
                                 }
@@ -573,19 +906,36 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                             return FutureBuilder<Map<String, dynamic>>(
                               future: _getPeerDataCached(peerId),
                               builder: (context, peerSnap) {
-                                String peerName = peerSnap.data?['name'] ?? '...';
-                                String peerRole = peerSnap.data?['role'] ?? '';
-                                bool isManager = peerRole == 'manager';
+                                final String peerName = peerSnap.data?['name'] ?? '...';
+                                final String peerRole = peerSnap.data?['role'] ?? '';
+                                final bool isManager = peerRole == 'manager';
 
                                 return _buildChatTile(
-                                  context: context, isDark: isDark, isStaff: true,
+                                  key: ValueKey('staff_$docId'),
+                                  context: context,
+                                  isDark: isDark,
+                                  isStaff: true,
                                   title: peerName,
                                   subtitle: lastMessage,
                                   time: lastTime,
                                   unreadCount: unreadCount,
-                                  icon: isManager ? Icons.admin_panel_settings_rounded : Icons.shield_rounded, 
+                                  icon: isManager ? Icons.admin_panel_settings_rounded : Icons.shield_rounded,
                                   iconColor: isManager ? goldColor : brandBlue,
-                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StaffChatPage(chatId: docId, currentUserId: currentSupId, peerId: peerId, peerName: peerName, peerRole: peerRole))),
+                                  onTap: () {
+                                    _markChatAsReadImmediately(docId: docId, isStaff: true);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => StaffChatPage(
+                                          chatId: docId,
+                                          currentUserId: _currentSupId,
+                                          peerId: peerId,
+                                          peerName: peerName,
+                                          peerRole: peerRole,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                   onLongPress: () => _showDeleteConfirmDialog(docId, true, isDark),
                                 );
                               },
@@ -605,11 +955,22 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
   }
 
   Widget _buildChatTile({
-    required BuildContext context, required bool isDark, required bool isStaff,
-    required String title, required String subtitle, required DateTime time, required int unreadCount,
-    required IconData icon, required Color iconColor, required VoidCallback onTap, required VoidCallback onLongPress
+    Key? key,
+    required BuildContext context,
+    required bool isDark,
+    required bool isStaff,
+    required String title,
+    required String subtitle,
+    required DateTime time,
+    required int unreadCount,
+    required IconData icon,
+    required Color iconColor,
+    String? imageUrl,
+    required VoidCallback onTap,
+    required VoidCallback onLongPress,
   }) {
     return Container(
+      key: key,
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
@@ -618,7 +979,7 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
             color: Colors.black.withOpacity(isDark ? 0.25 : 0.04),
             blurRadius: 15,
             offset: const Offset(0, 5),
-          )
+          ),
         ],
       ),
       child: ClipRRect(
@@ -634,8 +995,8 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                 color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
-                  color: isStaff ? goldColor.withOpacity(0.35) : (isDark ? Colors.white.withOpacity(0.12) : Colors.white), 
-                  width: 1.2
+                  color: isStaff ? goldColor.withOpacity(0.35) : (isDark ? Colors.white.withOpacity(0.12) : Colors.white),
+                  width: 1.2,
                 ),
               ),
               child: Row(
@@ -643,7 +1004,12 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                   CircleAvatar(
                     radius: 24,
                     backgroundColor: iconColor.withOpacity(0.18),
-                    child: Icon(icon, color: iconColor, size: 24),
+                    backgroundImage: (imageUrl != null && imageUrl.isNotEmpty)
+                        ? NetworkImage(imageUrl)
+                        : null,
+                    child: (imageUrl == null || imageUrl.isEmpty)
+                        ? Icon(icon, color: iconColor, size: 24)
+                        : null,
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -652,41 +1018,52 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                       children: [
                         Row(
                           children: [
-                            if (isStaff) 
+                            if (isStaff)
                               Container(
-                                margin: const EdgeInsets.only(left: 6), 
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2), 
-                                decoration: BoxDecoration(color: goldColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), 
-                                child: Text("طاقم العمل", style: TextStyle(fontSize: 9.5, color: goldColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: goldColor.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  "طاقم العمل",
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    color: goldColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
                               ),
                             Expanded(
                               child: Text(
-                                title, 
+                                title,
                                 style: TextStyle(
-                                  fontWeight: FontWeight.bold, 
-                                  fontSize: 14, 
-                                  color: isDark ? Colors.white : primaryColor, 
-                                  fontFamily: 'Cairo'
-                                ), 
-                                maxLines: 1, 
-                                overflow: TextOverflow.ellipsis
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: isDark ? Colors.white : primaryColor,
+                                  fontFamily: 'Cairo',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          subtitle.isEmpty ? 'انقر لبدء المحادثة...' : subtitle, 
+                          subtitle.isEmpty ? 'انقر لبدء المحادثة...' : subtitle,
                           style: TextStyle(
-                            fontSize: 12, 
-                            color: unreadCount > 0 
-                                ? (isDark ? Colors.white : Colors.black87) 
-                                : (isDark ? Colors.white54 : Colors.grey.shade600), 
+                            fontSize: 12,
+                            color: unreadCount > 0
+                                ? (isDark ? Colors.white : Colors.black87)
+                                : (isDark ? Colors.white54 : Colors.grey.shade600),
                             fontFamily: 'Cairo',
                             fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
-                          ), 
-                          maxLines: 1, 
-                          overflow: TextOverflow.ellipsis
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -696,23 +1073,37 @@ class _SupervisorInboxPageState extends State<SupervisorInboxPage> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        timeago.format(time, locale: 'ar'), 
-                        style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.grey.shade500, fontFamily: 'Cairo', fontWeight: FontWeight.w500)
+                        timeago.format(time, locale: 'ar'),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isDark ? Colors.white38 : Colors.grey.shade500,
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       if (unreadCount > 0)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4), 
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.redAccent, 
+                            color: Colors.redAccent,
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
-                              BoxShadow(color: Colors.redAccent.withOpacity(0.4), blurRadius: 6, offset: const Offset(0, 2))
-                            ]
-                          ), 
+                              BoxShadow(
+                                color: Colors.redAccent.withOpacity(0.4),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
                           child: Text(
-                            unreadCount.toString(), 
-                            style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold, fontFamily: 'Cairo')
+                            unreadCount.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Cairo',
+                            ),
                           ),
                         ),
                     ],

@@ -21,16 +21,16 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
   final Color accentGold = const Color(0xffd4af37);
 
   Map<String, Map<String, dynamic>> attendanceData = {};
+  Map<String, String> approvedLeaveMap = {};
+  List<Map<String, dynamic>> _allActiveStudents = [];
+
   bool isLoading = true;
   bool isSaving = false;
 
   final TextEditingController _searchController = TextEditingController();
   String searchQuery = '';
 
-  DateTime now = DateTime.now();
-  String get todayDate => DateFormat('yyyy-MM-dd').format(now);
-
-  // 🎯 معرف مستند الحضور المفرّد بالدورة واليوم الحالي
+  late final String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
   String get dailyDocId => "${widget.cycle.id}_$todayDate";
 
   final List<String> excuseReasons = [
@@ -68,7 +68,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
   @override
   void initState() {
     super.initState();
-    _loadExistingAttendance();
+    _loadInitialDataFast();
   }
 
   @override
@@ -77,25 +77,40 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
     super.dispose();
   }
 
-  // 🎯 دالة محصنة لتحميل التفقد الخاص بالدورة المحددة حصراً وتفريغ البيانات القديمة
-  Future<void> _loadExistingAttendance() async {
+  // ⚡ تحميل متوازٍ فوري للتفقد والطلاب والاستئذانات دفعة واحدة
+  Future<void> _loadInitialDataFast() async {
     setState(() {
       isLoading = true;
-      attendanceData.clear(); // 🚀 تفريغ الذاكرة المحلية لمنع ظهور بيانات الدورة السابقة
+      attendanceData.clear();
+      approvedLeaveMap.clear();
     });
 
     try {
-      var snap = await FirebaseFirestore.instance
-          .collection('daily_attendance')
-          .doc(dailyDocId)
-          .get();
+      final results = await Future.wait([
+        FirebaseFirestore.instance
+            .collection('daily_attendance')
+            .doc(dailyDocId)
+            .get(),
+        FirebaseFirestore.instance
+            .collection('leave_requests')
+            .where('cycleId', isEqualTo: widget.cycle.id)
+            .where('status', isEqualTo: 'approved')
+            .get(),
+        FirebaseFirestore.instance
+            .collection('students')
+            .where('cycleId', isEqualTo: widget.cycle.id)
+            .get(),
+      ]);
 
-      if (snap.exists && snap.data() != null) {
-        var data = snap.data()!;
-        
-        // التحقق من أن المستند ينتمي بالفعل لنفس الدورة الحالية
+      final attendanceSnap = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final leaveSnap = results[1] as QuerySnapshot<Map<String, dynamic>>;
+      final studentsSnap = results[2] as QuerySnapshot<Map<String, dynamic>>;
+
+      // 1. تفقد اليوم
+      if (attendanceSnap.exists && attendanceSnap.data() != null) {
+        final data = attendanceSnap.data()!;
         if (data['cycleId'] == widget.cycle.id && data.containsKey('records')) {
-          var records = data['records'] as Map<String, dynamic>? ?? {};
+          final records = data['records'] as Map<String, dynamic>? ?? {};
           records.forEach((studentId, record) {
             if (record is Map) {
               attendanceData[studentId] = Map<String, dynamic>.from(record);
@@ -105,15 +120,65 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
           });
         }
       }
+
+      // 2. الاستئذانات المقبولة لليوم
+      final normToday = _normalizeDate(todayDate);
+      for (final doc in leaveSnap.docs) {
+        final lData = doc.data();
+        final sId = lData['studentId']?.toString() ?? '';
+        final rawDate = lData['date']?.toString() ?? '';
+        if (sId.isNotEmpty && _normalizeDate(rawDate) == normToday) {
+          approvedLeaveMap[sId] = lData['reason']?.toString() ?? 'طلب استئذان مقبول';
+        }
+      }
+
+      // 3. فلترة وترتيب الطلاب النشطين مرة واحدة فقط
+      final List<Map<String, dynamic>> activeList = [];
+      for (final doc in studentsSnap.docs) {
+        final data = doc.data();
+        final bool isArchived = data['archived'] == true || data['isArchived'] == true;
+        final bool isStopped = data['isStopped'] == true;
+        final String status = data['status']?.toString().toLowerCase() ?? '';
+        if (isArchived || isStopped || status == 'stopped' || status == 'archived') {
+          continue;
+        }
+
+        final studentId = doc.id;
+        if (approvedLeaveMap.containsKey(studentId) && !attendanceData.containsKey(studentId)) {
+          attendanceData[studentId] = {
+            'status': 'absent',
+            'absenceType': 'بعذر',
+            'reason': approvedLeaveMap[studentId] ?? 'طلب استئذان مقبول',
+            'isPreApproved': true,
+          };
+        }
+
+        activeList.add({
+          'id': studentId,
+          ...data,
+          '_nameLower': (data['name'] ?? '').toString().toLowerCase(),
+          '_serialLower': (data['serial'] ?? '').toString().toLowerCase(),
+          '_serialInt': int.tryParse(data['serial']?.toString() ?? '') ?? 99999999,
+        });
+      }
+
+      activeList.sort((a, b) => (a['_serialInt'] as int).compareTo(b['_serialInt'] as int));
+
+      if (mounted) {
+        setState(() {
+          _allActiveStudents = activeList;
+          isLoading = false;
+        });
+      }
     } catch (e) {
       debugPrint("خطأ في تحميل تفقد اليوم للدورة الحالية: $e");
-    } finally {
       if (mounted) setState(() => isLoading = false);
     }
   }
 
   void _showTopGlassNotification(String title, String message, bool isDark) {
-    OverlayState? overlayState = Overlay.of(context);
+    final overlayState = Overlay.maybeOf(context);
+    if (overlayState == null) return;
     late OverlayEntry overlayEntry;
 
     overlayEntry = OverlayEntry(
@@ -125,7 +190,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
           child: Material(
             color: Colors.transparent,
             child: TweenAnimationBuilder<double>(
-              duration: const Duration(milliseconds: 400),
+              duration: const Duration(milliseconds: 350),
               curve: Curves.easeOutBack,
               tween: Tween(begin: -100.0, end: 0.0),
               builder: (context, value, child) {
@@ -134,11 +199,11 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(22),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xff1e293b).withOpacity(0.85) : Colors.white.withOpacity(0.88),
+                          color: isDark ? const Color(0xff1e293b).withOpacity(0.88) : Colors.white.withOpacity(0.92),
                           borderRadius: BorderRadius.circular(22),
                           border: Border.all(
                             color: Colors.greenAccent.withOpacity(0.6),
@@ -224,14 +289,14 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(28),
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                   child: Container(
                     padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xff1e293b).withOpacity(0.85) : Colors.white.withOpacity(0.88),
+                      color: isDark ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.92),
                       borderRadius: BorderRadius.circular(28),
                       border: Border.all(
-                        color: isDark ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.8),
+                        color: isDark ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.85),
                         width: 1.5,
                       ),
                       boxShadow: [
@@ -295,11 +360,11 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                               child: GestureDetector(
                                 onTap: () => setDialogState(() => selectedType = 'بدون عذر'),
                                 child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
+                                  duration: const Duration(milliseconds: 180),
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: selectedType == 'بدون عذر' ? Colors.redAccent : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.4)),
+                                    color: selectedType == 'بدون عذر' ? Colors.redAccent : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.5)),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
                                       color: selectedType == 'بدون عذر' ? Colors.redAccent : (isDark ? Colors.white12 : Colors.black12),
@@ -321,11 +386,11 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                               child: GestureDetector(
                                 onTap: () => setDialogState(() => selectedType = 'بعذر'),
                                 child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
+                                  duration: const Duration(milliseconds: 180),
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: selectedType == 'بعذر' ? Colors.orange : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.4)),
+                                    color: selectedType == 'بعذر' ? Colors.orange : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.5)),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
                                       color: selectedType == 'بعذر' ? Colors.orange : (isDark ? Colors.white12 : Colors.black12),
@@ -354,7 +419,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.black.withOpacity(0.25) : Colors.white.withOpacity(0.6),
+                              color: isDark ? Colors.black.withOpacity(0.25) : Colors.white.withOpacity(0.75),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(color: isDark ? Colors.white12 : Colors.white),
                             ),
@@ -419,17 +484,17 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
     );
   }
 
-  // 🚀 دالة الحفظ الذكية المحصنة والربط بـ cycleId للدورة الحالية
+  // ⚡ حفظ سريع بدفعة واحدة (WriteBatch) دون انتظار تسلسلي بطيء
   Future<void> _saveAttendance(bool isDark) async {
     setState(() => isSaving = true);
     try {
-      WriteBatch batch = FirebaseFirestore.instance.batch();
+      final firestore = FirebaseFirestore.instance;
+      final WriteBatch batch = firestore.batch();
 
-      DocumentReference attendanceDoc = FirebaseFirestore.instance
+      final DocumentReference attendanceDoc = firestore
           .collection('daily_attendance')
           .doc(dailyDocId);
 
-      // 1️⃣ حفظ سجل التفقد المبدئي اليومي المربوط بـ cycleId
       batch.set(attendanceDoc, {
         'date': todayDate,
         'cycleId': widget.cycle.id,
@@ -437,43 +502,39 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
         'lastUpdated': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      await batch.commit();
+      final Map<String, Map<String, dynamic>> studentById = {
+        for (final s in _allActiveStudents) s['id'] as String: s,
+      };
 
       int absentCount = 0;
       int presentCount = 0;
 
-      for (var entry in attendanceData.entries) {
-        String studentId = entry.key;
-        var record = entry.value;
-        String status = record['status'] ?? 'none';
-        String customSessionId = "${studentId}_$todayDate";
+      final List<String> presentIdsToCheck = [];
+      final List<Map<String, dynamic>> absentNotifications = [];
+
+      for (final entry in attendanceData.entries) {
+        final String studentId = entry.key;
+        final record = entry.value;
+        final String status = record['status'] ?? 'none';
+        final String customSessionId = "${studentId}_$todayDate";
 
         if (status == 'present') {
           presentCount++;
-
-          var existingDoc = await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).get();
-          if (existingDoc.exists) {
-            var exData = existingDoc.data() ?? {};
-            if (exData['absent'] == true) {
-              await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).delete().catchError((_) {});
-            }
-          }
-
+          presentIdsToCheck.add(customSessionId);
         } else if (status == 'absent') {
           absentCount++;
-          String absenceType = record['absenceType'] ?? 'بدون عذر';
-          String reason = record['reason'] ?? 'غياب عن الدوام المبدئي';
+          final String absenceType = record['absenceType'] ?? 'بدون عذر';
+          final String reason = record['reason'] ?? 'غياب عن الدوام المبدئي';
+          final sData = studentById[studentId];
 
-          var studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
-          if (studentDoc.exists) {
-            var sData = studentDoc.data()!;
-
-            await FirebaseFirestore.instance.collection('sessions').doc(customSessionId).set({
+          if (sData != null) {
+            final sessionRef = firestore.collection('sessions').doc(customSessionId);
+            batch.set(sessionRef, {
               'studentId': studentId,
               'studentName': sData['name'] ?? 'طالب',
               'supervisorId': sData['supervisorId'] ?? '',
               'supervisorName': sData['supervisorName'] ?? 'المشرف',
-              'cycleId': widget.cycle.id, // 🎯 ربط الجلسة بـ cycleId الدورة الفعالة
+              'cycleId': widget.cycle.id,
               'date': todayDate,
               'absent': true,
               'absenceType': absenceType,
@@ -488,15 +549,39 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
               'timestamp': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
 
-            NotificationService.sendAndSaveNotification(
-              studentId: studentId,
-              title: "تنبيه غياب 🔴",
-              body: "تم تسجيل غياب ولدكم (${sData['name']}) اليوم ($todayDate) - الحالة: $absenceType ($reason).",
-              type: "absence_alert",
-              context: context,
-            ).catchError((e) => debugPrint("فشل إرسال إشعار الغياب لأهل الطالب $studentId: $e"));
+            absentNotifications.add({
+              'studentId': studentId,
+              'name': (sData['name'] ?? 'طالب').toString(),
+              'absenceType': absenceType,
+              'reason': reason,
+            });
           }
         }
+      }
+
+      // فحص جلسات الغياب السابقة للطلاب الحاضرين بالتوازي دفعة واحدة
+      if (presentIdsToCheck.isNotEmpty) {
+        final existingSnaps = await Future.wait(
+          presentIdsToCheck.map((id) => firestore.collection('sessions').doc(id).get()),
+        );
+        for (final docSnap in existingSnaps) {
+          if (docSnap.exists && (docSnap.data()?['absent'] == true)) {
+            batch.delete(docSnap.reference);
+          }
+        }
+      }
+
+      await batch.commit();
+
+      // إرسال الإشعارات بالتوازي في الخلفية دون تأخير التنقل
+      for (final item in absentNotifications) {
+        NotificationService.sendAndSaveNotification(
+          studentId: item['studentId']!,
+          title: "تنبيه غياب 🔴",
+          body: "تم تسجيل غياب ولدكم (${item['name']}) اليوم ($todayDate) - الحالة: ${item['absenceType']} (${item['reason']}).",
+          type: "absence_alert",
+          context: context,
+        ).catchError((e) => debugPrint("فشل إرسال إشعار الغياب: $e"));
       }
 
       if (!mounted) return;
@@ -522,6 +607,13 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
+
+    final filteredStudents = searchQuery.isEmpty
+        ? _allActiveStudents
+        : _allActiveStudents.where((s) {
+            return (s['_nameLower'] as String).contains(searchQuery) ||
+                (s['_serialLower'] as String).contains(searchQuery);
+          }).toList();
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -554,7 +646,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
           SafeArea(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(child: CircularProgressIndicator(color: isDark ? accentGold : primaryColor))
                 : Column(
                     children: [
                       Padding(
@@ -568,9 +660,9 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                 child: Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.4),
+                                    color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.45),
                                     borderRadius: BorderRadius.circular(22),
-                                    border: Border.all(color: isDark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.7), width: 1.5),
+                                    border: Border.all(color: isDark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.75), width: 1.5),
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -597,46 +689,40 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
                             const SizedBox(height: 12),
 
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(20),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                child: TextField(
-                                  controller: _searchController,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      searchQuery = val.trim().toLowerCase();
-                                    });
-                                  },
-                                  style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87),
-                                  decoration: InputDecoration(
-                                    hintText: "ابحث باسم الطالب أو رقمه التسلسلي...",
-                                    hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDark ? Colors.white54 : Colors.black45),
-                                    prefixIcon: Icon(Icons.search_rounded, color: isDark ? accentGold : primaryColor),
-                                    suffixIcon: searchQuery.isNotEmpty
-                                        ? IconButton(
-                                            icon: Icon(Icons.clear, color: isDark ? Colors.white54 : Colors.black54),
-                                            onPressed: () {
-                                              _searchController.clear();
-                                              setState(() => searchQuery = '');
-                                            },
-                                          )
-                                        : null,
-                                    filled: true,
-                                    fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.5),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                      borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.white),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                      borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.white.withOpacity(0.7)),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                      borderSide: BorderSide(color: isDark ? accentGold : primaryColor, width: 1.5),
-                                    ),
-                                  ),
+                            TextField(
+                              controller: _searchController,
+                              onChanged: (val) {
+                                setState(() {
+                                  searchQuery = val.trim().toLowerCase();
+                                });
+                              },
+                              style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87),
+                              decoration: InputDecoration(
+                                hintText: "ابحث باسم الطالب أو رقمه التسلسلي...",
+                                hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDark ? Colors.white54 : Colors.black45),
+                                prefixIcon: Icon(Icons.search_rounded, color: isDark ? accentGold : primaryColor),
+                                suffixIcon: searchQuery.isNotEmpty
+                                    ? IconButton(
+                                        icon: Icon(Icons.clear, color: isDark ? Colors.white54 : Colors.black54),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() => searchQuery = '');
+                                        },
+                                      )
+                                    : null,
+                                filled: true,
+                                fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.65),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.white),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.white.withOpacity(0.75)),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide(color: isDark ? accentGold : primaryColor, width: 1.5),
                                 ),
                               ),
                             ),
@@ -645,273 +731,185 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                       ),
 
                       Expanded(
-                        child: StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance
-                              .collection('leave_requests')
-                              .where('cycleId', isEqualTo: widget.cycle.id)
-                              .where('status', isEqualTo: 'approved')
-                              .snapshots(),
-                          builder: (context, leaveSnap) {
-                            Map<String, String> approvedLeaveMap = {};
-
-                            if (leaveSnap.hasData) {
-                              for (var doc in leaveSnap.data!.docs) {
-                                var lData = doc.data() as Map<String, dynamic>;
-                                String sId = lData['studentId'] ?? '';
-                                String rawDate = lData['date'] ?? '';
-                                if (sId.isNotEmpty && _normalizeDate(rawDate) == _normalizeDate(todayDate)) {
-                                  approvedLeaveMap[sId] = lData['reason'] ?? 'طلب استئذان مقبول';
-                                }
-                              }
-                            }
-
-                            return StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('students')
-                                  .where('cycleId', isEqualTo: widget.cycle.id)
-                                  .snapshots(),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasError) {
-                                  return Center(child: Text("خطأ: ${snapshot.error}", style: const TextStyle(fontFamily: 'Cairo')));
-                                }
-                                if (!snapshot.hasData) {
-                                  return const Center(child: CircularProgressIndicator());
-                                }
-
-                                var docs = snapshot.data!.docs;
-
-                                List<DocumentSnapshot> activeDocs = docs.where((doc) {
-                                  var data = doc.data() as Map<String, dynamic>;
-                                  bool isArchived = data['archived'] == true || data['isArchived'] == true;
-                                  bool isStopped = data['isStopped'] == true;
-                                  String status = data['status']?.toString().toLowerCase() ?? '';
-                                  return !isArchived && !isStopped && status != 'stopped' && status != 'archived';
-                                }).toList();
-
-                                if (activeDocs.isEmpty) {
-                                  return const Center(
-                                    child: Text("لا يوجد طلاب نشطون مسجلون بالدورة الحالية.", style: TextStyle(fontFamily: 'Cairo')),
-                                  );
-                                }
-
-                                activeDocs.sort((a, b) {
-                                  var dataA = a.data() as Map<String, dynamic>;
-                                  var dataB = b.data() as Map<String, dynamic>;
-
-                                  int serialA = int.tryParse(dataA['serial']?.toString() ?? '') ?? 99999999;
-                                  int serialB = int.tryParse(dataB['serial']?.toString() ?? '') ?? 99999999;
-
-                                  return serialA.compareTo(serialB);
-                                });
-
-                                if (searchQuery.isNotEmpty) {
-                                  activeDocs = activeDocs.where((doc) {
-                                    var data = doc.data() as Map<String, dynamic>;
-                                    String name = (data['name'] ?? '').toString().toLowerCase();
-                                    String serial = (data['serial'] ?? '').toString().toLowerCase();
-                                    return name.contains(searchQuery) || serial.contains(searchQuery);
-                                  }).toList();
-                                }
-
-                                if (activeDocs.isEmpty) {
-                                  return const Center(
+                        child: _allActiveStudents.isEmpty
+                            ? const Center(
+                                child: Text("لا يوجد طلاب نشطون مسجلون بالدورة الحالية.", style: TextStyle(fontFamily: 'Cairo')),
+                              )
+                            : filteredStudents.isEmpty
+                                ? const Center(
                                     child: Text("لا يطابق بحثك أي طالب مسجل 🔍", style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
-                                  );
-                                }
+                                  )
+                                : ListView.builder(
+                                    physics: const BouncingScrollPhysics(),
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                    itemCount: filteredStudents.length,
+                                    itemBuilder: (context, index) {
+                                      final student = filteredStudents[index];
+                                      final String studentId = student['id'] as String;
 
-                                return ListView.builder(
-                                  physics: const BouncingScrollPhysics(),
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                  itemCount: activeDocs.length,
-                                  itemBuilder: (context, index) {
-                                    var studentDoc = activeDocs[index];
-                                    var student = studentDoc.data() as Map<String, dynamic>;
-                                    String studentId = studentDoc.id;
+                                      final bool isPreApproved = approvedLeaveMap.containsKey(studentId);
+                                      final String leaveReason = approvedLeaveMap[studentId] ?? 'طلب استئذان مقبول';
 
-                                    bool isPreApproved = approvedLeaveMap.containsKey(studentId);
-                                    String leaveReason = approvedLeaveMap[studentId] ?? 'طلب استئذان مقبول';
+                                      final currentRecord = attendanceData[studentId] ?? {};
+                                      final String currentStatus = currentRecord['status'] ?? 'none';
+                                      final String absenceType = currentRecord['absenceType'] ?? '';
+                                      final String reason = currentRecord['reason'] ?? '';
 
-                                    if (isPreApproved && !attendanceData.containsKey(studentId)) {
-                                      attendanceData[studentId] = {
-                                        'status': 'absent',
-                                        'absenceType': 'بعذر',
-                                        'reason': leaveReason,
-                                        'isPreApproved': true,
-                                      };
-                                    }
-
-                                    var currentRecord = attendanceData[studentId] ?? {};
-                                    String currentStatus = currentRecord['status'] ?? 'none';
-                                    String absenceType = currentRecord['absenceType'] ?? '';
-                                    String reason = currentRecord['reason'] ?? '';
-
-                                    return Container(
-                                      margin: const EdgeInsets.only(bottom: 12),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(20),
-                                        child: BackdropFilter(
-                                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                                            decoration: BoxDecoration(
+                                      return RepaintBoundary(
+                                        child: Container(
+                                          margin: const EdgeInsets.only(bottom: 12),
+                                          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: isPreApproved
+                                                ? Colors.orange.withOpacity(0.15)
+                                                : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.68)),
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(
                                               color: isPreApproved
-                                                  ? Colors.orange.withOpacity(0.14)
-                                                  : (isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.5)),
-                                              borderRadius: BorderRadius.circular(20),
-                                              border: Border.all(
-                                                color: isPreApproved
-                                                    ? Colors.orange.withOpacity(0.6)
-                                                    : (isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6)),
-                                                width: isPreApproved ? 1.5 : 1.2,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                if (student['serial'] != null)
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                    margin: const EdgeInsets.only(left: 8),
-                                                    decoration: BoxDecoration(
-                                                      color: primaryColor.withOpacity(0.15),
-                                                      borderRadius: BorderRadius.circular(8),
-                                                    ),
-                                                    child: Text(
-                                                      "#${student['serial']}",
-                                                      style: TextStyle(
-                                                        fontFamily: 'Cairo',
-                                                        fontSize: 11,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: isDark ? accentGold : primaryColor,
-                                                      ),
-                                                    ),
-                                                  ),
-
-                                                CircleAvatar(
-                                                  radius: 20,
-                                                  backgroundColor: primaryColor.withOpacity(0.15),
-                                                  backgroundImage: student['imageUrl'] != null && student['imageUrl'].toString().isNotEmpty
-                                                      ? NetworkImage(student['imageUrl'])
-                                                      : null,
-                                                  child: (student['imageUrl'] == null || student['imageUrl'].toString().isEmpty)
-                                                      ? Icon(Icons.person, color: isDark ? Colors.white : primaryColor)
-                                                      : null,
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Row(
-                                                        children: [
-                                                          Expanded(
-                                                            child: Text(
-                                                              student['name'] ?? 'طالب',
-                                                              style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : primaryColor),
-                                                              overflow: TextOverflow.ellipsis,
-                                                            ),
-                                                          ),
-                                                          if (isPreApproved) ...[
-                                                            const SizedBox(width: 4),
-                                                            const Icon(Icons.verified_user_rounded, color: Colors.orange, size: 14),
-                                                          ]
-                                                        ],
-                                                      ),
-                                                      if (isPreApproved)
-                                                        Text(
-                                                          "مستأذن مسبقاً 📄: $leaveReason",
-                                                          style: const TextStyle(
-                                                            fontSize: 11,
-                                                            fontFamily: 'Cairo',
-                                                            color: Colors.orange,
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                        )
-                                                      else if (currentStatus == 'absent' && absenceType.isNotEmpty)
-                                                        Text(
-                                                          "$absenceType: $reason",
-                                                          style: TextStyle(
-                                                            fontSize: 11,
-                                                            fontFamily: 'Cairo',
-                                                            color: absenceType == 'بعذر' ? Colors.orange : Colors.redAccent,
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                        )
-                                                      else
-                                                        Text(
-                                                          "المشرف: ${student['supervisorName'] ?? 'غير محدد'}",
-                                                          style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54),
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-
-                                                Row(
-                                                  children: [
-                                                    // زر الحضور
-                                                    InkWell(
-                                                      onTap: () {
-                                                        setState(() {
-                                                          if (currentStatus == 'present') {
-                                                            attendanceData.remove(studentId);
-                                                          } else {
-                                                            attendanceData[studentId] = {
-                                                              'status': 'present',
-                                                              'isManual': true,
-                                                            };
-                                                          }
-                                                        });
-                                                      },
-                                                      borderRadius: BorderRadius.circular(12),
-                                                      child: Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                                        decoration: BoxDecoration(
-                                                          color: currentStatus == 'present' ? Colors.green : Colors.transparent,
-                                                          borderRadius: BorderRadius.circular(12),
-                                                          border: Border.all(color: currentStatus == 'present' ? Colors.green : (isDark ? Colors.white24 : Colors.black26)),
-                                                        ),
-                                                        child: Icon(Icons.check_circle_rounded, size: 18, color: currentStatus == 'present' ? Colors.white : Colors.green),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-
-                                                    // زر الغياب
-                                                    InkWell(
-                                                      onTap: () {
-                                                        if (currentStatus == 'absent') {
-                                                          setState(() => attendanceData.remove(studentId));
-                                                        } else {
-                                                          _showAbsenceDialog(studentId, student['name'] ?? 'طالب', isDark);
-                                                        }
-                                                      },
-                                                      borderRadius: BorderRadius.circular(12),
-                                                      child: Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                                        decoration: BoxDecoration(
-                                                          color: currentStatus == 'absent' ? (absenceType == 'بعذر' ? Colors.orange : Colors.redAccent) : Colors.transparent,
-                                                          borderRadius: BorderRadius.circular(12),
-                                                          border: Border.all(color: currentStatus == 'absent' ? (absenceType == 'بعذر' ? Colors.orange : Colors.redAccent) : (isDark ? Colors.white24 : Colors.black26)),
-                                                        ),
-                                                        child: Icon(Icons.cancel_rounded, size: 18, color: currentStatus == 'absent' ? Colors.white : Colors.redAccent),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
+                                                  ? Colors.orange.withOpacity(0.6)
+                                                  : (isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.8)),
+                                              width: isPreApproved ? 1.5 : 1.2,
                                             ),
                                           ),
+                                          child: Row(
+                                            children: [
+                                              if (student['serial'] != null)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  margin: const EdgeInsets.only(left: 8),
+                                                  decoration: BoxDecoration(
+                                                    color: primaryColor.withOpacity(0.15),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: Text(
+                                                    "#${student['serial']}",
+                                                    style: TextStyle(
+                                                      fontFamily: 'Cairo',
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isDark ? accentGold : primaryColor,
+                                                    ),
+                                                  ),
+                                                ),
+
+                                              CircleAvatar(
+                                                radius: 20,
+                                                backgroundColor: primaryColor.withOpacity(0.15),
+                                                backgroundImage: student['imageUrl'] != null && student['imageUrl'].toString().isNotEmpty
+                                                    ? NetworkImage(student['imageUrl'])
+                                                    : null,
+                                                child: (student['imageUrl'] == null || student['imageUrl'].toString().isEmpty)
+                                                    ? Icon(Icons.person, color: isDark ? Colors.white : primaryColor)
+                                                    : null,
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: Text(
+                                                            student['name'] ?? 'طالب',
+                                                            style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : primaryColor),
+                                                            overflow: TextOverflow.ellipsis,
+                                                          ),
+                                                        ),
+                                                        if (isPreApproved) ...[
+                                                          const SizedBox(width: 4),
+                                                          const Icon(Icons.verified_user_rounded, color: Colors.orange, size: 14),
+                                                        ]
+                                                      ],
+                                                    ),
+                                                    if (isPreApproved)
+                                                      Text(
+                                                        "مستأذن مسبقاً 📄: $leaveReason",
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                          fontFamily: 'Cairo',
+                                                          color: Colors.orange,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      )
+                                                    else if (currentStatus == 'absent' && absenceType.isNotEmpty)
+                                                      Text(
+                                                        "$absenceType: $reason",
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontFamily: 'Cairo',
+                                                          color: absenceType == 'بعذر' ? Colors.orange : Colors.redAccent,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      )
+                                                    else
+                                                      Text(
+                                                        "المشرف: ${student['supervisorName'] ?? 'غير محدد'}",
+                                                        style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+
+                                              Row(
+                                                children: [
+                                                  InkWell(
+                                                    onTap: () {
+                                                      setState(() {
+                                                        if (currentStatus == 'present') {
+                                                          attendanceData.remove(studentId);
+                                                        } else {
+                                                          attendanceData[studentId] = {
+                                                            'status': 'present',
+                                                            'isManual': true,
+                                                          };
+                                                        }
+                                                      });
+                                                    },
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                      decoration: BoxDecoration(
+                                                        color: currentStatus == 'present' ? Colors.green : Colors.transparent,
+                                                        borderRadius: BorderRadius.circular(12),
+                                                        border: Border.all(color: currentStatus == 'present' ? Colors.green : (isDark ? Colors.white24 : Colors.black26)),
+                                                      ),
+                                                      child: Icon(Icons.check_circle_rounded, size: 18, color: currentStatus == 'present' ? Colors.white : Colors.green),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+
+                                                  InkWell(
+                                                    onTap: () {
+                                                      if (currentStatus == 'absent') {
+                                                        setState(() => attendanceData.remove(studentId));
+                                                      } else {
+                                                        _showAbsenceDialog(studentId, student['name'] ?? 'طالب', isDark);
+                                                      }
+                                                    },
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                      decoration: BoxDecoration(
+                                                        color: currentStatus == 'absent' ? (absenceType == 'بعذر' ? Colors.orange : Colors.redAccent) : Colors.transparent,
+                                                        borderRadius: BorderRadius.circular(12),
+                                                        border: Border.all(color: currentStatus == 'absent' ? (absenceType == 'بعذر' ? Colors.orange : Colors.redAccent) : (isDark ? Colors.white24 : Colors.black26)),
+                                                      ),
+                                                      child: Icon(Icons.cancel_rounded, size: 18, color: currentStatus == 'absent' ? Colors.white : Colors.redAccent),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
-                            );
-                          },
-                        ),
+                                      );
+                                    },
+                                  ),
                       ),
 
                       Padding(
