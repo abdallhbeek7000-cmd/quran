@@ -30,8 +30,15 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
   String get formattedDate =>
       "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}";
 
+  bool get _isToday {
+    final now = DateTime.now();
+    return selectedDate.year == now.year &&
+        selectedDate.month == now.month &&
+        selectedDate.day == now.day;
+  }
+
   String get arabicDayName {
-    List<String> arabicDays = [
+    const List<String> arabicDays = [
       'الإثنين',
       'الثلاثاء',
       'الأربعاء',
@@ -47,12 +54,14 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     if (val == null) return false;
     if (val is bool) return val;
     if (val is String) {
-      String s = val.trim().toLowerCase();
+      final s = val.trim().toLowerCase();
       return s == 'present' || s == 'حاضر' || s == 'true';
     }
     if (val is Map) {
-      var status = val['status']?.toString().trim().toLowerCase();
-      if (status == 'present' || status == 'حاضر' || status == 'true') return true;
+      final status = val['status']?.toString().trim().toLowerCase();
+      if (status == 'present' || status == 'حاضر' || status == 'true') {
+        return true;
+      }
       if (val['isPresent'] == true || val['attended'] == true) return true;
     }
     return false;
@@ -93,21 +102,31 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+    final dateStr = formattedDate;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor:
-          isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
+          isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
-        title: Text(
-          "الإحصائيات اليومية 📊",
-          style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : primaryColor,
-              fontFamily: 'Cairo',
-              fontSize: 18),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "الإحصائيات اليومية",
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: isDarkMode ? Colors.white : primaryColor,
+                fontFamily: 'Cairo',
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(Icons.insights_rounded,
+                color: isDarkMode ? accentGold : primaryColor, size: 20),
+          ],
         ),
         iconTheme:
             IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
@@ -115,236 +134,262 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
       ),
       body: Stack(
         children: [
+          // خلفية متدرجة ناعمة بدون فلاتر ثقيلة
           Container(
             width: double.infinity,
             height: double.infinity,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isDarkMode
-                    ? [
-                        const Color(0xff0f172a),
-                        const Color(0xff1e293b),
-                        const Color(0xff0f172a)
+                    ? const [
+                        Color(0xff0b1120),
+                        Color(0xff131c31),
+                        Color(0xff0b1120),
                       ]
-                    : [
-                        const Color(0xffe2e8f0),
-                        const Color(0xffcfdef3),
-                        const Color(0xffe0eafc)
+                    : const [
+                        Color(0xfff8fafc),
+                        Color(0xffe2e8f0),
+                        Color(0xffdbeafe),
                       ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
               ),
             ),
           ),
           Positioned(
-            top: -30,
-            left: -50,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
+            top: -50,
+            right: -50,
+            child: IgnorePointer(
+              child: Container(
+                width: 240,
+                height: 240,
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isDarkMode
-                      ? accentGold.withOpacity(0.08)
-                      : accentGold.withOpacity(0.12)),
+                  color: accentGold.withOpacity(isDarkMode ? 0.08 : 0.14),
+                ),
+              ),
             ),
           ),
           Positioned(
-            bottom: 100,
-            right: -60,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
+            bottom: 60,
+            left: -60,
+            child: IgnorePointer(
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isDarkMode
-                      ? primaryColor.withOpacity(0.15)
-                      : primaryColor.withOpacity(0.2)),
+                  color: primaryColor.withOpacity(isDarkMode ? 0.16 : 0.12),
+                ),
+              ),
             ),
           ),
           SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildGlassContainer(
-                    isDarkMode: isDarkMode,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.arrow_back_ios_rounded,
-                              size: 18,
-                              color: isDarkMode ? accentGold : primaryColor),
-                          tooltip: "اليوم السابق",
-                          onPressed: () {
-                            setState(() {
-                              selectedDate =
-                                  selectedDate.subtract(const Duration(days: 1));
-                            });
-                          },
-                        ),
-                        Expanded(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: () => _pickDate(context, isDarkMode),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.calendar_month_rounded,
-                                          color: accentGold, size: 18),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        "يوم $arabicDayName",
-                                        style: TextStyle(
-                                          color: isDarkMode
-                                              ? Colors.white
-                                              : primaryColor,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          fontFamily: 'Cairo',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    formattedDate,
-                                    style: TextStyle(
-                                      color: isDarkMode
-                                          ? accentGold
-                                          : primaryColor.withOpacity(0.8),
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                      fontFamily: 'Cairo',
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('daily_attendance')
+                    .where('date', isEqualTo: dateStr)
+                    .snapshots(),
+                builder: (context, attendanceSnap) {
+                  int expectedCount = 0;
+                  if (attendanceSnap.hasData) {
+                    for (final doc in attendanceSnap.data!.docs) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final records =
+                          data['records'] as Map<String, dynamic>? ?? {};
+                      records.forEach((_, val) {
+                        if (_isStudentPresent(val)) {
+                          expectedCount++;
+                        }
+                      });
+                    }
+                  }
+
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('sessions')
+                        .where('date', isEqualTo: dateStr)
+                        .snapshots(),
+                    builder: (context, sessionSnap) {
+                      final isLoading = attendanceSnap.connectionState ==
+                              ConnectionState.waiting &&
+                          sessionSnap.connectionState ==
+                              ConnectionState.waiting;
+
+                      int recordedSessionsCount = 0;
+                      int didNotReciteCount = 0;
+                      int absentCount = 0;
+                      int nonAbsentSessionsCount = 0;
+
+                      if (sessionSnap.hasData) {
+                        for (final doc in sessionSnap.data!.docs) {
+                          final d = doc.data() as Map<String, dynamic>;
+                          final isAbsent = d['absent'] == true;
+                          final didNotRecite = d['didNotRecite'] == true;
+
+                          if (isAbsent) {
+                            absentCount++;
+                          } else {
+                            nonAbsentSessionsCount++;
+                            if (didNotRecite) {
+                              didNotReciteCount++;
+                            } else {
+                              recordedSessionsCount++;
+                            }
+                          }
+                        }
+                      }
+
+                      final totalRecords = sessionSnap.hasData
+                          ? sessionSnap.data!.docs.length
+                          : 0;
+                      final percentageText = totalRecords > 0
+                          ? "${((recordedSessionsCount / totalRecords) * 100).round()}%"
+                          : "0%";
+
+                      final diff = expectedCount - nonAbsentSessionsCount;
+                      final isComplete = expectedCount > 0 && diff <= 0;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 🗓️ شريط اختيار التاريخ العصري
+                          _buildDateSelectorCard(isDarkMode),
+
+                          const SizedBox(height: 16),
+
+                          // ⚖️ بطاقة متابعة إنجاز المشرفين (البارزة)
+                          _buildComparisonBannerCard(
+                            isDarkMode: isDarkMode,
+                            expectedCount: expectedCount,
+                            diff: diff,
+                            isComplete: isComplete,
+                            isLoading: isLoading,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      PendingSessionsPage(targetDate: dateStr),
+                                ),
+                              );
+                            },
                           ),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.arrow_forward_ios_rounded,
-                              size: 18,
-                              color: isDarkMode ? accentGold : primaryColor),
-                          tooltip: "اليوم التالي",
-                          onPressed: () {
-                            setState(() {
-                              selectedDate =
-                                  selectedDate.add(const Duration(days: 1));
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  _buildExpectedSessionsCard(formattedDate, isDarkMode),
-                  const SizedBox(height: 14),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(25),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DailyRecitationsPage(
-                              targetDate: formattedDate, role: widget.role),
-                        ),
+
+                          const SizedBox(height: 16),
+
+                          // 📊 شبكة الإحصائيات اليومية (بطاقتان في كل صف)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildStatTile(
+                                  title: "المستهدفون",
+                                  subtitle: "الحضور المبدئي",
+                                  value: expectedCount.toString(),
+                                  icon: Icons.fact_check_rounded,
+                                  accent: isDarkMode
+                                      ? Colors.lightBlueAccent
+                                      : const Color(0xff0284c7),
+                                  isLoading: isLoading,
+                                  isDarkMode: isDarkMode,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildStatTile(
+                                  title: "نسبة التسميع",
+                                  subtitle: "من إجمالي السجلات",
+                                  value: percentageText,
+                                  icon: Icons.pie_chart_rounded,
+                                  accent: isDarkMode
+                                      ? accentGold
+                                      : const Color(0xffb45309),
+                                  isLoading: isLoading,
+                                  isDarkMode: isDarkMode,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          // 📝 الجلسات المسجلة فعلياً
+                          _buildActionStatCard(
+                            title: "الجلسات المسجلة فعلياً اليوم",
+                            subtitle: "اضغط لاستعراض كافة تسميعات اليوم بالتفصيل",
+                            value: recordedSessionsCount.toString(),
+                            icon: Icons.auto_stories_rounded,
+                            accent: const Color(0xff16a34a),
+                            isLoading: isLoading,
+                            isDarkMode: isDarkMode,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DailyRecitationsPage(
+                                    targetDate: dateStr,
+                                    role: widget.role,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // ⚠️ حضر ولم يسمّع
+                          _buildActionStatCard(
+                            title: "حضر ولم يسمّع اليوم",
+                            subtitle: "عرض القائمة وتصدير كرت للأهالي",
+                            value: didNotReciteCount.toString(),
+                            icon: Icons.speaker_notes_off_rounded,
+                            accent: isDarkMode
+                                ? Colors.amberAccent
+                                : const Color(0xffd97706),
+                            isLoading: isLoading,
+                            isDarkMode: isDarkMode,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DailyDidNotReciteStudentsPage(
+                                      targetDate: dateStr),
+                                ),
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // 🔴 الغائبون
+                          _buildActionStatCard(
+                            title: "عدد الغائبين اليوم",
+                            subtitle: "عرض القائمة وتصدير كرت الغياب",
+                            value: absentCount.toString(),
+                            icon: Icons.person_off_rounded,
+                            accent: const Color(0xffef4444),
+                            isLoading: isLoading,
+                            isDarkMode: isDarkMode,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DailyAbsentStudentsPage(
+                                      targetDate: dateStr),
+                                ),
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 24),
+                        ],
                       );
                     },
-                    child: _buildStreamCard(
-                      title: "الجلسات المسجلة فعلياً اليوم 📝",
-                      subtitle: "اضغط لعرض كافة تسميعات اليوم بالتفصيل",
-                      icon: Icons.auto_stories_rounded,
-                      color: Colors.greenAccent.shade700,
-                      stream: FirebaseFirestore.instance
-                          .collection('sessions')
-                          .where('date', isEqualTo: formattedDate)
-                          .where('absent', isEqualTo: false)
-                          .where('didNotRecite', isEqualTo: false)
-                          .snapshots(),
-                      isDarkMode: isDarkMode,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(25),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              PendingSessionsPage(targetDate: formattedDate),
-                        ),
-                      );
-                    },
-                    child: _buildAttendanceComparisonCard(
-                        formattedDate, isDarkMode),
-                  ),
-                  const SizedBox(height: 14),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(25),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DailyDidNotReciteStudentsPage(
-                              targetDate: formattedDate),
-                        ),
-                      );
-                    },
-                    child: _buildStreamCard(
-                      title: "حضر ولم يسمّع اليوم ⚠️",
-                      subtitle: "عرض القائمة وتصدير الكرت لواتساب الأهالي",
-                      icon: Icons.speaker_notes_off_outlined,
-                      color: Colors.blueGrey,
-                      stream: FirebaseFirestore.instance
-                          .collection('sessions')
-                          .where('date', isEqualTo: formattedDate)
-                          .where('didNotRecite', isEqualTo: true)
-                          .snapshots(),
-                      isDarkMode: isDarkMode,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(25),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DailyAbsentStudentsPage(
-                              targetDate: formattedDate),
-                        ),
-                      );
-                    },
-                    child: _buildStreamCard(
-                      title: "عدد الغائبين اليوم 🔴",
-                      subtitle: "عرض القائمة وتصدير كرت الغياب لواتساب",
-                      icon: Icons.person_off_rounded,
-                      color: Colors.redAccent.shade200,
-                      stream: FirebaseFirestore.instance
-                          .collection('sessions')
-                          .where('date', isEqualTo: formattedDate)
-                          .where('absent', isEqualTo: true)
-                          .snapshots(),
-                      isDarkMode: isDarkMode,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _buildPercentageCard(formattedDate, isDarkMode),
-                  const SizedBox(height: 25),
-                ],
+                  );
+                },
               ),
             ),
           ),
@@ -353,344 +398,480 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
     );
   }
 
-  Widget _buildExpectedSessionsCard(String targetDate, bool isDarkMode) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('daily_attendance')
-          .where('date', isEqualTo: targetDate)
-          .snapshots(),
-      builder: (context, snapshot) {
-        int expectedCount = 0;
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          for (var doc in snapshot.data!.docs) {
-            var data = doc.data() as Map<String, dynamic>;
-            var records = data['records'] as Map<String, dynamic>? ?? {};
-            records.forEach((studentId, val) {
-              if (_isStudentPresent(val)) {
-                expectedCount++;
-              }
-            });
-          }
-        }
-        return _statsUI(
-          "المستهدفون للتسميع اليوم 🟢",
-          "الحضور المبدئي الموثق بالصفحة",
-          expectedCount.toString(),
-          Icons.fact_check_rounded,
-          isDarkMode ? Colors.lightBlueAccent : Colors.blue.shade600,
-          snapshot.connectionState == ConnectionState.waiting,
-          isDarkMode,
-        );
-      },
-    );
-  }
-
-  Widget _buildAttendanceComparisonCard(String targetDate, bool isDarkMode) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('daily_attendance')
-          .where('date', isEqualTo: targetDate)
-          .snapshots(),
-      builder: (context, attendanceSnap) {
-        int expectedCount = 0;
-        if (attendanceSnap.hasData && attendanceSnap.data!.docs.isNotEmpty) {
-          for (var doc in attendanceSnap.data!.docs) {
-            var data = doc.data() as Map<String, dynamic>;
-            var records = data['records'] as Map<String, dynamic>? ?? {};
-            records.forEach((studentId, val) {
-              if (_isStudentPresent(val)) {
-                expectedCount++;
-              }
-            });
-          }
-        }
-
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('sessions')
-              .where('date', isEqualTo: targetDate)
-              .where('absent', isEqualTo: false)
-              .snapshots(),
-          builder: (context, sessionSnap) {
-            int actualCount =
-                sessionSnap.hasData ? sessionSnap.data!.docs.length : 0;
-            int diff = expectedCount - actualCount;
-            bool isComplete = expectedCount > 0 && diff <= 0;
-
-            final cardColor = isComplete ? Colors.green : Colors.orange;
-
-            return _buildGlassContainer(
-              isDarkMode: isDarkMode,
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          cardColor.withOpacity(0.3),
-                          cardColor.withOpacity(0.1)
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: cardColor.withOpacity(0.5), width: 1.5),
-                    ),
-                    child: Icon(
-                      isComplete
-                          ? Icons.verified_rounded
-                          : Icons.warning_amber_rounded,
-                      color: cardColor,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildDateSelectorCard(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDarkMode
+              ? [
+                  Colors.white.withOpacity(0.08),
+                  Colors.white.withOpacity(0.03),
+                ]
+              : [
+                  Colors.white.withOpacity(0.92),
+                  Colors.white.withOpacity(0.75),
+                ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDarkMode
+              ? accentGold.withOpacity(0.28)
+              : Colors.white,
+          width: 1.4,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDarkMode ? 0.25 : 0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            style: IconButton.styleFrom(
+              backgroundColor:
+                  (isDarkMode ? accentGold : primaryColor).withOpacity(0.1),
+            ),
+            icon: Icon(
+              Icons.chevron_right_rounded,
+              size: 22,
+              color: isDarkMode ? accentGold : primaryColor,
+            ),
+            tooltip: "اليوم السابق",
+            onPressed: () {
+              setState(() {
+                selectedDate = selectedDate.subtract(const Duration(days: 1));
+              });
+            },
+          ),
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => _pickDate(context, isDarkMode),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              "متابعة إنجاز المشرفين اليوم ⚖️",
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: isDarkMode ? Colors.white : primaryColor,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: (isDarkMode ? Colors.white : primaryColor)
-                                    .withOpacity(0.08),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(Icons.arrow_forward_ios_rounded,
-                                  size: 12,
-                                  color:
-                                      isDarkMode ? accentGold : primaryColor),
-                            ),
-                          ],
+                        Icon(
+                          Icons.calendar_month_rounded,
+                          color: isDarkMode ? accentGold : primaryColor,
+                          size: 18,
                         ),
-                        const SizedBox(height: 6),
-                        if (expectedCount == 0)
+                        const SizedBox(width: 6),
+                        Text(
+                          "يوم $arabicDayName",
+                          style: TextStyle(
+                            color: isDarkMode ? Colors.white : primaryColor,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15.5,
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        if (_isToday) ...[
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
+                                horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.grey.withOpacity(0.15),
+                              color: accentGold.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: accentGold.withOpacity(0.5)),
                             ),
                             child: Text(
-                              "لم يتم تسجيل تفقد مبدئي لهذا اليوم بعد.",
+                              "اليوم",
                               style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDarkMode
-                                      ? Colors.white70
-                                      : Colors.grey[700]),
-                            ),
-                          )
-                        else if (isComplete)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.celebration_rounded,
-                                    size: 14, color: Colors.green),
-                                SizedBox(width: 6),
-                                Text(
-                                  "تم إنجاز وتسميع جميع جلسات الطلاب بنجاح! 🎉",
-                                  style: TextStyle(
-                                      fontFamily: 'Cairo',
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.timer_rounded,
-                                    size: 14, color: Colors.orange),
-                                const SizedBox(width: 6),
-                                Text(
-                                  "باقي ($diff) طلاب لم تُسجّل جلساتهم بعد! اضغط للمتابعة ⚠",
-                                  style: const TextStyle(
-                                      fontFamily: 'Cairo',
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.orange),
-                                ),
-                              ],
+                                fontFamily: 'Cairo',
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isDarkMode
+                                    ? const Color(0xfffde68a)
+                                    : const Color(0xff92400e),
+                              ),
                             ),
                           ),
+                        ],
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      formattedDate,
+                      style: TextStyle(
+                        color: isDarkMode
+                            ? accentGold
+                            : primaryColor.withOpacity(0.75),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                        fontFamily: 'Cairo',
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildStreamCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required Stream<QuerySnapshot> stream,
-    required bool isDarkMode,
-  }) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: stream,
-      builder: (context, snapshot) {
-        String value =
-            snapshot.hasData ? snapshot.data!.docs.length.toString() : "0";
-        return _statsUI(title, subtitle, value, icon, color,
-            snapshot.connectionState == ConnectionState.waiting, isDarkMode);
-      },
-    );
-  }
-
-  Widget _buildPercentageCard(String targetDate, bool isDarkMode) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('sessions')
-          .where('date', isEqualTo: targetDate)
-          .snapshots(),
-      builder: (context, snapshot) {
-        String percentage = "0%";
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          final docs = snapshot.data!.docs;
-          int presentCount = docs.where((doc) {
-            var d = doc.data() as Map<String, dynamic>;
-            return (d['absent'] == false) && (d['didNotRecite'] != true);
-          }).length;
-          percentage = "${((presentCount / docs.length) * 100).round()}%";
-        }
-        return _statsUI(
-          "نسبة الحضور اليوم 📈",
-          "نسبة التسميع بالنسبة لإجمالي السجلات اليومية",
-          percentage,
-          Icons.pie_chart_rounded,
-          isDarkMode ? accentGold : Colors.blue.shade700,
-          snapshot.connectionState == ConnectionState.waiting,
-          isDarkMode,
-        );
-      },
-    );
-  }
-
-  Widget _statsUI(String title, String subtitle, String value, IconData icon,
-      Color color, bool isLoading, bool isDarkMode) {
-    return _buildGlassContainer(
-      isDarkMode: isDarkMode,
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: TextStyle(
-                        color: isDarkMode ? Colors.white : primaryColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Cairo')),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style: TextStyle(
-                        color: isDarkMode ? Colors.white38 : Colors.grey[600],
-                        fontSize: 10,
-                        fontFamily: 'Cairo')),
-                const SizedBox(height: 8),
-                isLoading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2.5))
-                    : Text(value,
-                        style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: color,
-                            letterSpacing: 0.5,
-                            fontFamily: 'Cairo')),
-              ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              shape: BoxShape.circle,
+          IconButton(
+            style: IconButton.styleFrom(
+              backgroundColor:
+                  (isDarkMode ? accentGold : primaryColor).withOpacity(0.1),
             ),
-            child: Icon(icon, color: color, size: 28),
+            icon: Icon(
+              Icons.chevron_left_rounded,
+              size: 22,
+              color: isDarkMode ? accentGold : primaryColor,
+            ),
+            tooltip: "اليوم التالي",
+            onPressed: () {
+              setState(() {
+                selectedDate = selectedDate.add(const Duration(days: 1));
+              });
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildGlassContainer(
-      {required Widget child,
-      required bool isDarkMode,
-      EdgeInsetsGeometry padding = EdgeInsets.zero}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(25),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+  Widget _buildComparisonBannerCard({
+    required bool isDarkMode,
+    required int expectedCount,
+    required int diff,
+    required bool isComplete,
+    required bool isLoading,
+    required VoidCallback onTap,
+  }) {
+    final statusColor = expectedCount == 0
+        ? Colors.blueGrey
+        : (isComplete ? const Color(0xff16a34a) : const Color(0xfff59e0b));
+
+    String titleText = "متابعة إنجاز المشرفين";
+    String badgeText = isLoading
+        ? "..."
+        : (expectedCount == 0
+            ? "لا يوجد تفقد"
+            : (isComplete ? "مكتمل" : "متبقٍ $diff"));
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
         child: Container(
-          padding: padding,
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.05)
-                : Colors.white.withOpacity(0.45),
-            borderRadius: BorderRadius.circular(25),
+            gradient: LinearGradient(
+              colors: [
+                statusColor.withOpacity(isDarkMode ? 0.2 : 0.14),
+                isDarkMode
+                    ? Colors.white.withOpacity(0.04)
+                    : Colors.white.withOpacity(0.88),
+              ],
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+            ),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.6),
-              width: 1.5,
+              color: statusColor.withOpacity(0.45),
+              width: 1.4,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.03),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
+                color: statusColor.withOpacity(0.12),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
-          child: child,
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  expectedCount == 0
+                      ? Icons.hourglass_empty_rounded
+                      : (isComplete
+                          ? Icons.verified_rounded
+                          : Icons.pending_actions_rounded),
+                  color: statusColor,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            titleText,
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: isDarkMode ? Colors.white : primaryColor,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            badgeText,
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                              color: isDarkMode && statusColor == const Color(0xfff59e0b)
+                                  ? Colors.amberAccent
+                                  : statusColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      expectedCount == 0
+                          ? "لم يتم تسجيل تفقد مبدئي لهذا اليوم بعد."
+                          : (isComplete
+                              ? "تم تسجيل جلسات جميع الطلاب الحاضرين بنجاح!"
+                              : "يوجد ($diff) طلاب حاضرون بانتظار تسجيل التسميع — اضغط للعرض."),
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11.5,
+                        color: isDarkMode ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: isDarkMode ? Colors.white54 : Colors.black45,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatTile({
+    required String title,
+    required String subtitle,
+    required String value,
+    required IconData icon,
+    required Color accent,
+    required bool isLoading,
+    required bool isDarkMode,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? Colors.white.withOpacity(0.05)
+            : Colors.white.withOpacity(0.88),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white,
+          width: 1.3,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  color: isDarkMode ? Colors.white : primaryColor,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: accent, size: 18),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          isLoading
+              ? const SizedBox(
+                  height: 34,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
+                  ),
+                )
+              : Text(
+                  value,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w900,
+                    fontSize: 28,
+                    color: accent,
+                    height: 1.15,
+                  ),
+                ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 10.5,
+              color: isDarkMode ? Colors.white54 : Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionStatCard({
+    required String title,
+    required String subtitle,
+    required String value,
+    required IconData icon,
+    required Color accent,
+    required bool isLoading,
+    required bool isDarkMode,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white.withOpacity(0.88),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white,
+              width: 1.3,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.04),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(icon, color: accent, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13.5,
+                        color: isDarkMode ? Colors.white : primaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 10.5,
+                        color: isDarkMode ? Colors.white54 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              isLoading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: isDarkMode ? Colors.white38 : Colors.black38,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -720,14 +901,16 @@ Future<void> _previewAndShareImage({
         builder: (context, setStateDialog) {
           return AlertDialog(
             backgroundColor: const Color(0xff0f172a),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             contentPadding: const EdgeInsets.all(16),
             title: const Row(
               children: [
-                Icon(Icons.remove_red_eye_rounded, color: Color(0xffd4af37), size: 22),
+                Icon(Icons.remove_red_eye_rounded,
+                    color: Color(0xffd4af37), size: 22),
                 SizedBox(width: 8),
                 Text(
-                  "معاينة واختيار الثيم 🎨",
+                  "معاينة واختيار الثيم",
                   style: TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 15,
@@ -739,7 +922,6 @@ Future<void> _previewAndShareImage({
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 🔘 خيار اختيار ألوان الثيم قبل الالتقاط
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
@@ -760,7 +942,9 @@ Future<void> _previewAndShareImage({
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
-                              color: !isPosterDark ? const Color(0xffd4af37) : Colors.transparent,
+                              color: !isPosterDark
+                                  ? const Color(0xffd4af37)
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
@@ -768,7 +952,9 @@ Future<void> _previewAndShareImage({
                               children: [
                                 Icon(Icons.wb_sunny_rounded,
                                     size: 16,
-                                    color: !isPosterDark ? Colors.black : Colors.white70),
+                                    color: !isPosterDark
+                                        ? Colors.black
+                                        : Colors.white70),
                                 const SizedBox(width: 6),
                                 Text(
                                   "ألوان فاتحة",
@@ -776,7 +962,9 @@ Future<void> _previewAndShareImage({
                                     fontFamily: 'Cairo',
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: !isPosterDark ? Colors.black : Colors.white70,
+                                    color: !isPosterDark
+                                        ? Colors.black
+                                        : Colors.white70,
                                   ),
                                 ),
                               ],
@@ -795,7 +983,9 @@ Future<void> _previewAndShareImage({
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
-                              color: isPosterDark ? const Color(0xffd4af37) : Colors.transparent,
+                              color: isPosterDark
+                                  ? const Color(0xffd4af37)
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
@@ -803,7 +993,9 @@ Future<void> _previewAndShareImage({
                               children: [
                                 Icon(Icons.nightlight_round,
                                     size: 16,
-                                    color: isPosterDark ? Colors.black : Colors.white70),
+                                    color: isPosterDark
+                                        ? Colors.black
+                                        : Colors.white70),
                                 const SizedBox(width: 6),
                                 Text(
                                   "ألوان غامقة",
@@ -811,7 +1003,9 @@ Future<void> _previewAndShareImage({
                                     fontFamily: 'Cairo',
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: isPosterDark ? Colors.black : Colors.white70,
+                                    color: isPosterDark
+                                        ? Colors.black
+                                        : Colors.white70,
                                   ),
                                 ),
                               ],
@@ -823,16 +1017,17 @@ Future<void> _previewAndShareImage({
                   ),
                 ),
                 const SizedBox(height: 14),
-
-                // 📸 التقاط ومعاينة الصورة الحالية
                 FutureBuilder<Uint8List?>(
-                  future: Future.delayed(const Duration(milliseconds: 150), () => controller.capture()),
+                  key: ValueKey(isPosterDark),
+                  future: Future.delayed(
+                      const Duration(milliseconds: 80), () => controller.capture()),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Container(
                         height: 220,
                         alignment: Alignment.center,
-                        child: const CircularProgressIndicator(color: Color(0xffd4af37)),
+                        child: const CircularProgressIndicator(
+                            color: Color(0xffd4af37)),
                       );
                     }
 
@@ -841,7 +1036,8 @@ Future<void> _previewAndShareImage({
                         height: 150,
                         alignment: Alignment.center,
                         child: const Text("حدث خطأ أثناء التقاط المعاينة",
-                            style: TextStyle(color: Colors.white70, fontFamily: 'Cairo')),
+                            style: TextStyle(
+                                color: Colors.white70, fontFamily: 'Cairo')),
                       );
                     }
 
@@ -863,7 +1059,6 @@ Future<void> _previewAndShareImage({
                     );
                   },
                 ),
-
                 const SizedBox(height: 12),
                 const Text(
                   "اختر النمط المناسب ثم اضغط تأكيد للمشاركة على الواتساب",
@@ -903,9 +1098,10 @@ Future<void> _previewAndShareImage({
                     text: shareText,
                   );
                 },
-                icon: const Icon(Icons.share_rounded, size: 18, color: Colors.white),
+                icon: const Icon(Icons.share_rounded,
+                    size: 18, color: Colors.white),
                 label: const Text(
-                  "تأكيد والمشاركة 🚀",
+                  "تأكيد والمشاركة",
                   style: TextStyle(
                       fontFamily: 'Cairo',
                       fontWeight: FontWeight.bold,
@@ -944,26 +1140,27 @@ class PendingSessionsPage extends StatefulWidget {
 class _PendingSessionsPageState extends State<PendingSessionsPage> {
   final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
-  bool isExporting = false;
-  bool isPosterDark = true; // التحكم بثيم الصورة
+  bool isPosterDark = true;
 
   bool _isStudentPresent(dynamic val) {
     if (val == null) return false;
     if (val is bool) return val;
     if (val is String) {
-      String s = val.trim().toLowerCase();
+      final s = val.trim().toLowerCase();
       return s == 'present' || s == 'حاضر' || s == 'true';
     }
     if (val is Map) {
-      var status = val['status']?.toString().trim().toLowerCase();
-      if (status == 'present' || status == 'حاضر' || status == 'true') return true;
+      final status = val['status']?.toString().trim().toLowerCase();
+      if (status == 'present' || status == 'حاضر' || status == 'true') {
+        return true;
+      }
       if (val['isPresent'] == true || val['attended'] == true) return true;
     }
     return false;
   }
 
   Future<void> _handleShareProcess(
-      List<Map<String, dynamic>> pendingStudentsList) async {
+      List<dynamic> pendingStudentsList) async {
     if (pendingStudentsList.isEmpty) return;
 
     await _previewAndShareImage(
@@ -978,7 +1175,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
         });
       },
       shareText:
-          '⏳ تذكير بالطلاب المتبقين للتسميع اليوم (${widget.targetDate})\nنرجو من الإخوة المشرفين تسجيل التسميعات 🌸\nمعهد الشيخ سعيد العبدالله 🕌',
+          'تذكير بالطلاب المتبقين للتسميع اليوم (${widget.targetDate})\nنرجو من الإخوة المشرفين تسجيل التسميعات\nمعهد الشيخ سعيد العبدالله',
     );
   }
 
@@ -990,17 +1187,17 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
       child: Scaffold(
         extendBodyBehindAppBar: true,
         backgroundColor:
-            isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
+            isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.transparent,
           title: Text(
-            "المتبقين للتسميع (${widget.targetDate}) ⏳",
+            "المتبقين للتسميع (${widget.targetDate})",
             style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w800,
                 color: isDarkMode ? Colors.white : primaryColor,
                 fontFamily: 'Cairo',
-                fontSize: 16),
+                fontSize: 15.5),
           ),
           iconTheme:
               IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
@@ -1014,18 +1211,18 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isDarkMode
-                      ? [
-                          const Color(0xff0f172a),
-                          const Color(0xff1e293b),
-                          const Color(0xff0f172a)
+                      ? const [
+                          Color(0xff0b1120),
+                          Color(0xff131c31),
+                          Color(0xff0b1120),
                         ]
-                      : [
-                          const Color(0xffe2e8f0),
-                          const Color(0xffcfdef3),
-                          const Color(0xffe0eafc)
+                      : const [
+                          Color(0xfff8fafc),
+                          Color(0xffe2e8f0),
+                          Color(0xffdbeafe),
                         ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
               ),
             ),
@@ -1054,10 +1251,10 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                     );
                   }
 
-                  List<String> presentStudentIds = [];
-                  for (var doc in attendanceSnap.data!.docs) {
-                    var attData = doc.data() as Map<String, dynamic>;
-                    var records =
+                  final List<String> presentStudentIds = [];
+                  for (final doc in attendanceSnap.data!.docs) {
+                    final attData = doc.data() as Map<String, dynamic>;
+                    final records =
                         attData['records'] as Map<String, dynamic>? ?? {};
                     records.forEach((studentId, val) {
                       if (_isStudentPresent(val)) {
@@ -1069,7 +1266,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                   if (presentStudentIds.isEmpty) {
                     return Center(
                       child: Text(
-                          "لا يوجد طلاب حاضرون مبدئياً بانتظار التسميع 🎉",
+                          "لا يوجد طلاب حاضرون مبدئياً بانتظار التسميع",
                           style: TextStyle(
                               fontFamily: 'Cairo',
                               fontWeight: FontWeight.bold,
@@ -1089,13 +1286,13 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                         return const Center(child: CircularProgressIndicator());
                       }
 
-                      Set<String> recordedStudentIds = sessionsSnap.hasData
+                      final Set<String> recordedStudentIds = sessionsSnap.hasData
                           ? sessionsSnap.data!.docs
                               .map((doc) => doc['studentId'].toString())
                               .toSet()
                           : {};
 
-                      List<String> pendingStudentIds = presentStudentIds
+                      final List<String> pendingStudentIds = presentStudentIds
                           .where((id) => !recordedStudentIds.contains(id))
                           .toList();
 
@@ -1107,7 +1304,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                               const Icon(Icons.verified_rounded,
                                   color: Colors.green, size: 65),
                               const SizedBox(height: 14),
-                              Text("اكتمل الإنجاز! 🎉",
+                              Text("اكتمل الإنجاز!",
                                   style: TextStyle(
                                       fontFamily: 'Cairo',
                                       fontWeight: FontWeight.bold,
@@ -1148,13 +1345,14 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                     style: TextStyle(fontFamily: 'Cairo')));
                           }
 
-                          List<Map<String, dynamic>> pendingStudentsList = [];
+                            final List<Map<String, dynamic>>
+                              pendingStudentsList = [];
 
-                          for (var doc in studentsSnap.data!.docs) {
+                          for (final doc in studentsSnap.data!.docs) {
                             if (pendingStudentIds.contains(doc.id)) {
-                              var data = doc.data() as Map<String, dynamic>;
-                              dynamic rawSerial = data['serial'];
-                              int serialNum = rawSerial is int
+                              final data = doc.data() as Map<String, dynamic>;
+                              final rawSerial = data['serial'];
+                              final int serialNum = rawSerial is int
                                   ? rawSerial
                                   : (int.tryParse(
                                           rawSerial?.toString() ?? '0') ??
@@ -1202,7 +1400,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                       child: ElevatedButton.icon(
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor:
-                                              Colors.orange.shade800,
+                                              const Color(0xffea580c),
                                           shape: RoundedRectangleBorder(
                                               borderRadius:
                                                   BorderRadius.circular(16)),
@@ -1213,11 +1411,11 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                         icon: const Icon(Icons.share_rounded,
                                             color: Colors.white, size: 20),
                                         label: const Text(
-                                          "معاينة ومشاركة التذكير 📸",
+                                          "معاينة ومشاركة التذكير",
                                           style: TextStyle(
                                               fontFamily: 'Cairo',
                                               fontWeight: FontWeight.bold,
-                                              fontSize: 13,
+                                              fontSize: 13.5,
                                               color: Colors.white),
                                         ),
                                       ),
@@ -1227,114 +1425,95 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
                                     child: ListView.builder(
                                       physics: const BouncingScrollPhysics(),
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 18, vertical: 15),
+                                          horizontal: 18, vertical: 14),
                                       itemCount: pendingStudentsList.length,
                                       itemBuilder: (context, index) {
-                                        var student =
+                                        final student =
                                             pendingStudentsList[index];
-                                        String studentName = student['name'];
-                                        String supervisorName =
+                                        final String studentName =
+                                            student['name'];
+                                        final String supervisorName =
                                             student['supervisorName'];
 
                                         return Container(
                                           margin:
-                                              const EdgeInsets.only(bottom: 12),
-                                          child: ClipRRect(
+                                              const EdgeInsets.only(bottom: 10),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 16, vertical: 14),
+                                          decoration: BoxDecoration(
+                                            color: isDarkMode
+                                                ? Colors.white.withOpacity(0.06)
+                                                : Colors.white
+                                                    .withOpacity(0.9),
                                             borderRadius:
-                                                BorderRadius.circular(22),
-                                            child: BackdropFilter(
-                                              filter: ImageFilter.blur(
-                                                  sigmaX: 12, sigmaY: 12),
-                                              child: Container(
+                                                BorderRadius.circular(20),
+                                            border: Border.all(
+                                              color: const Color(0xfff59e0b)
+                                                  .withOpacity(isDarkMode
+                                                      ? 0.35
+                                                      : 0.45),
+                                              width: 1.2,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                        horizontal: 16,
-                                                        vertical: 14),
+                                                        horizontal: 10,
+                                                        vertical: 5),
                                                 decoration: BoxDecoration(
-                                                  color: isDarkMode
-                                                      ? Colors.white
-                                                          .withOpacity(0.06)
-                                                      : Colors.white
-                                                          .withOpacity(0.55),
+                                                  color: const Color(0xfff59e0b)
+                                                      .withOpacity(0.15),
                                                   borderRadius:
-                                                      BorderRadius.circular(22),
-                                                  border: Border.all(
-                                                    color: Colors.orange
-                                                        .withOpacity(isDarkMode
-                                                            ? 0.35
-                                                            : 0.5),
-                                                    width: 1.2,
+                                                      BorderRadius.circular(
+                                                          12),
+                                                ),
+                                                child: const Text(
+                                                  "بانتظار التسميع",
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontFamily: 'Cairo',
+                                                    color: Color(0xffd97706),
                                                   ),
                                                 ),
-                                                child: Row(
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.end,
                                                   children: [
-                                                    Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                          horizontal: 10,
-                                                          vertical: 5),
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.orange
-                                                            .withOpacity(0.15),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                                12),
+                                                    Text(
+                                                      studentName,
+                                                      textAlign: TextAlign.right,
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontFamily: 'Cairo',
+                                                        fontSize: 14,
+                                                        color: isDarkMode
+                                                            ? Colors.white
+                                                            : primaryColor,
                                                       ),
-                                                      child: const Text(
-                                                          "بانتظار التسميع ⏳",
-                                                          style: TextStyle(
-                                                              fontSize: 11,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                              fontFamily:
-                                                                  'Cairo',
-                                                              color: Colors
-                                                                  .orange)),
                                                     ),
-                                                    const SizedBox(width: 12),
-                                                    Expanded(
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .end,
-                                                        children: [
-                                                          Text(studentName,
-                                                              textAlign:
-                                                                  TextAlign.right,
-                                                              style: TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  fontFamily:
-                                                                      'Cairo',
-                                                                  fontSize: 14,
-                                                                  color: isDarkMode
-                                                                      ? Colors
-                                                                          .white
-                                                                      : primaryColor)),
-                                                          const SizedBox(
-                                                              height: 2),
-                                                          Text(
-                                                              "المشرف: $supervisorName",
-                                                              textAlign:
-                                                                  TextAlign.right,
-                                                              style: TextStyle(
-                                                                  fontSize: 11,
-                                                                  fontFamily:
-                                                                      'Cairo',
-                                                                  color: isDarkMode
-                                                                      ? Colors
-                                                                          .white60
-                                                                      : Colors
-                                                                          .black54)),
-                                                        ],
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      "المشرف: $supervisorName",
+                                                      textAlign: TextAlign.right,
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontFamily: 'Cairo',
+                                                        color: isDarkMode
+                                                            ? Colors.white60
+                                                            : Colors.black54,
                                                       ),
                                                     ),
                                                   ],
                                                 ),
                                               ),
-                                            ),
+                                            ],
                                           ),
                                         );
                                       },
@@ -1357,13 +1536,16 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
     );
   }
 
-  // 🖼️ دالة بناء البوستر تدعم نمطي الفاتح والغامق
-  Widget _buildExportablePoster(List<Map<String, dynamic>> students, bool isDark) {
+    Widget _buildExportablePoster(
+      List<Map<String, dynamic>> students, bool isDark) {
     final bgColor = isDark ? const Color(0xff0f172a) : const Color(0xffffffff);
-    final borderColor = isDark ? const Color(0xff334155) : const Color(0xffe2e8f0);
+    final borderColor =
+        isDark ? const Color(0xff334155) : const Color(0xffe2e8f0);
     final textColor = isDark ? Colors.white : const Color(0xff1e293b);
-    final headerBg = isDark ? const Color(0xff1e293b) : const Color(0xfff1f5f9);
-    final subTextColor = isDark ? const Color(0xff94a3b8) : const Color(0xff64748b);
+    final headerBg =
+        isDark ? const Color(0xff1e293b) : const Color(0xfff1f5f9);
+    final subTextColor =
+        isDark ? const Color(0xff94a3b8) : const Color(0xff64748b);
 
     return Container(
       padding: const EdgeInsets.all(26),
@@ -1411,13 +1593,15 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
             decoration: BoxDecoration(
               color: const Color(0xfff59e0b).withOpacity(0.15),
               borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: const Color(0xfff59e0b).withOpacity(0.5)),
+              border:
+                  Border.all(color: const Color(0xfff59e0b).withOpacity(0.5)),
             ),
             child: Text(
-              "⏳ قائمة الطلاب المتبقين للتسميع - ${widget.targetDate}",
+              "قائمة الطلاب المتبقين للتسميع - ${widget.targetDate}",
               style: TextStyle(
                   fontSize: 13,
-                  color: isDark ? const Color(0xfffde68a) : const Color(0xffb45309),
+                  color:
+                      isDark ? const Color(0xfffde68a) : const Color(0xffb45309),
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Cairo'),
             ),
@@ -1479,7 +1663,7 @@ class _PendingSessionsPageState extends State<PendingSessionsPage> {
           ),
           const SizedBox(height: 18),
           Text(
-            "نرجو من الإخوة المشرفين الكرام المتابعة وتسجيل التسميعات 📖",
+            "نرجو من الإخوة المشرفين الكرام المتابعة وتسجيل التسميعات",
             textAlign: TextAlign.center,
             style: TextStyle(
                 color: subTextColor, fontSize: 11, fontFamily: 'Cairo'),
@@ -1514,15 +1698,15 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
   String _getJuzName(int juzNum) {
     switch (juzNum) {
       case 30:
-        return "جزء عمَّ 👶";
+        return "جزء عمَّ";
       case 29:
-        return "جزء تبارك 📖";
+        return "جزء تبارك";
       case 28:
-        return "قد سمع 📜";
+        return "قد سمع";
       case 27:
-        return "الذاريات 🌟";
+        return "الذاريات";
       case 26:
-        return "الأحقاف ✨";
+        return "الأحقاف";
       default:
         return "";
     }
@@ -1553,17 +1737,17 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
       child: Scaffold(
         extendBodyBehindAppBar: true,
         backgroundColor:
-            isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
+            isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.transparent,
           title: Text(
-            "جلسات التسميع (${widget.targetDate}) 📝",
+            "جلسات التسميع (${widget.targetDate})",
             style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w800,
                 color: isDarkMode ? Colors.white : primaryColor,
                 fontFamily: 'Cairo',
-                fontSize: 16),
+                fontSize: 15.5),
           ),
           iconTheme:
               IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
@@ -1577,18 +1761,18 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isDarkMode
-                      ? [
-                          const Color(0xff0f172a),
-                          const Color(0xff1e293b),
-                          const Color(0xff0f172a)
+                      ? const [
+                          Color(0xff0b1120),
+                          Color(0xff131c31),
+                          Color(0xff0b1120),
                         ]
-                      : [
-                          const Color(0xffe2e8f0),
-                          const Color(0xffcfdef3),
-                          const Color(0xffe0eafc)
+                      : const [
+                          Color(0xfff8fafc),
+                          Color(0xffe2e8f0),
+                          Color(0xffdbeafe),
                         ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
               ),
             ),
@@ -1607,7 +1791,7 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
 
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return Center(
-                      child: Text("لا توجد جلسات تسميع مسجلة في هذا اليوم 🍃",
+                      child: Text("لا توجد جلسات تسميع مسجلة في هذا اليوم",
                           style: TextStyle(
                               fontFamily: 'Cairo',
                               fontWeight: FontWeight.bold,
@@ -1621,7 +1805,7 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
                   return ListView.builder(
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.only(
-                        left: 20, right: 20, top: 10, bottom: 30),
+                        left: 18, right: 18, top: 10, bottom: 30),
                     itemCount: sessions.length,
                     itemBuilder: (context, index) {
                       final sessionDoc = sessions[index];
@@ -1642,343 +1826,333 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
 
   Widget _buildSessionCardItem(BuildContext context, String sessionId,
       Map<String, dynamic> data, bool isDarkMode) {
-    String studentName = data['studentName'] ?? 'طالب';
-    bool isAbsent = data['absent'] ?? false;
-    bool isExam = data['isExam'] ?? false;
-    bool didNotRecite = data['didNotRecite'] ?? false;
-    int selectedJuz =
+    final String studentName = data['studentName'] ?? 'طالب';
+    final bool isAbsent = data['absent'] ?? false;
+    final bool isExam = data['isExam'] ?? false;
+    final bool didNotRecite = data['didNotRecite'] ?? false;
+    final int selectedJuz =
         data['selectedJuz'] ?? (data['isJuzAmma'] == true ? 30 : 0);
 
-    String actualCreatedAt = data['actualCreatedAt']?.toString() ?? '';
-    String actualEditedAt = data['actualEditedAt']?.toString() ?? '';
+    final String actualCreatedAt = data['actualCreatedAt']?.toString() ?? '';
+    final String actualEditedAt = data['actualEditedAt']?.toString() ?? '';
 
-    String nMemo = data['newMemorization']?.toString().trim() ?? '';
-    String nRev = data['nearReview']?.toString().trim() ?? '';
-    String fRev = data['farReview']?.toString().trim() ??
+    final String nMemo = data['newMemorization']?.toString().trim() ?? '';
+    final String nRev = data['nearReview']?.toString().trim() ?? '';
+    final String fRev = data['farReview']?.toString().trim() ??
         (data['review']?.toString().trim() ?? '');
-    String sight = data['readingBySight']?.toString().trim() ?? '';
+    final String sight = data['readingBySight']?.toString().trim() ?? '';
 
-    String memRating = data['memorizationRating'] ?? data['rating'] ?? "";
-    String newRevRating =
-        data['newReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
-    String oldRevRating =
-        data['oldReviewRating'] ?? data['reviewRating'] ?? data['rating'] ?? "";
+    final String memRating = data['memorizationRating'] ?? data['rating'] ?? "";
+    final String newRevRating = data['newReviewRating'] ??
+        data['reviewRating'] ??
+        data['rating'] ??
+        "";
+    final String oldRevRating = data['oldReviewRating'] ??
+        data['reviewRating'] ??
+        data['rating'] ??
+        "";
 
-    String nHw = data['newHomework']?.toString().trim() ?? '';
-    String nRevHw = data['newReviewHomework']?.toString().trim() ?? '';
-    String oRevHw = data['oldReviewHomework']?.toString().trim() ?? '';
-    String oldHw = data['homework']?.toString().trim() ?? '';
+    final String nHw = data['newHomework']?.toString().trim() ?? '';
+    final String nRevHw = data['newReviewHomework']?.toString().trim() ?? '';
+    final String oRevHw = data['oldReviewHomework']?.toString().trim() ?? '';
+    final String oldHw = data['homework']?.toString().trim() ?? '';
 
-    List<dynamic>? memoSupList =
+    final List<dynamic>? memoSupList =
         data['newMemoSupervisorNames'] ?? data['supervisorNames'];
-    String memoSupervisors = (memoSupList != null && memoSupList.isNotEmpty)
+    final String memoSupervisors = (memoSupList != null && memoSupList.isNotEmpty)
         ? memoSupList.join(' ، ')
         : (data['supervisorName'] ?? 'غير محدد');
 
-    List<dynamic>? revSupList =
+    final List<dynamic>? revSupList =
         data['reviewSupervisorNames'] ?? data['supervisorNames'];
-    String revSupervisors = (revSupList != null && revSupList.isNotEmpty)
+    final String revSupervisors = (revSupList != null && revSupList.isNotEmpty)
         ? revSupList.join(' ، ')
         : (data['supervisorName'] ?? 'غير محدد');
 
-    List<Widget> activeBoxes = [];
+    final List<Widget> activeBoxes = [];
     if (!didNotRecite && !isAbsent && !isExam) {
-      if (nMemo.isNotEmpty)
-        activeBoxes.add(_buildGridInfoBox(
-            Icons.star_rounded, "الحفظ الجديد", nMemo, Colors.amber, isDarkMode));
-      if (nRev.isNotEmpty)
+      if (nMemo.isNotEmpty) {
+        activeBoxes.add(_buildGridInfoBox(Icons.star_rounded, "الحفظ الجديد",
+            nMemo, Colors.amber, isDarkMode));
+      }
+      if (nRev.isNotEmpty) {
         activeBoxes.add(_buildGridInfoBox(
             Icons.menu_book_rounded,
             "مراجعة جديد",
             nRev,
             isDarkMode ? Colors.tealAccent : Colors.teal,
             isDarkMode));
-      if (fRev.isNotEmpty)
+      }
+      if (fRev.isNotEmpty) {
         activeBoxes.add(_buildGridInfoBox(
             Icons.history_toggle_off_rounded,
             "مراجعة قديم",
             fRev,
             Colors.blueGrey,
             isDarkMode));
-      if (sight.isNotEmpty)
+      }
+      if (sight.isNotEmpty) {
         activeBoxes.add(_buildGridInfoBox(
             Icons.chrome_reader_mode_rounded,
             "قراءة نظراً",
             sight,
             Colors.indigoAccent,
             isDarkMode));
+      }
     }
 
-    String juzChipTitle = _getJuzName(selectedJuz);
+    final String juzChipTitle = _getJuzName(selectedJuz);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      child: _buildGlassContainer(
-        isDarkMode: isDarkMode,
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-              decoration: BoxDecoration(
-                color: isDarkMode
-                    ? Colors.white.withOpacity(0.05)
-                    : primaryColor.withOpacity(0.05),
-                borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24)),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? Colors.white.withOpacity(0.05)
+            : Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white,
+          width: 1.3,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDarkMode ? 0.22 : 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.05)
+                  : primaryColor.withOpacity(0.05),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 14,
-                            backgroundColor: accentGold.withOpacity(0.2),
-                            child: Icon(Icons.person_rounded,
-                                color: accentGold, size: 16),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            studentName,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: isDarkMode ? Colors.white : primaryColor,
-                              fontFamily: 'Cairo',
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (juzChipTitle.isNotEmpty)
-                        _buildBadge(juzChipTitle, Colors.purple),
-                    ],
-                  ),
-                  if (!isAbsent && !isExam && !didNotRecite) ...[
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
                       children: [
-                        if (nMemo.isNotEmpty && memRating.isNotEmpty)
-                          _buildBadge(
-                              "حفظ: $memRating", _getRatingColor(memRating)),
-                        if (nRev.isNotEmpty && newRevRating.isNotEmpty)
-                          _buildBadge("م.جديد: $newRevRating",
-                              _getRatingColor(newRevRating)),
-                        if (fRev.isNotEmpty && oldRevRating.isNotEmpty)
-                          _buildBadge("م.قديم: $oldRevRating",
-                              _getRatingColor(oldRevRating)),
+                        CircleAvatar(
+                          radius: 15,
+                          backgroundColor: accentGold.withOpacity(0.2),
+                          child: Icon(Icons.person_rounded,
+                              color: accentGold, size: 17),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          studentName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isDarkMode ? Colors.white : primaryColor,
+                            fontFamily: 'Cairo',
+                            fontSize: 14,
+                          ),
+                        ),
                       ],
                     ),
+                    if (juzChipTitle.isNotEmpty)
+                      _buildBadge(juzChipTitle, Colors.purple),
+                  ],
+                ),
+                if (!isAbsent && !isExam && !didNotRecite) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (nMemo.isNotEmpty && memRating.isNotEmpty)
+                        _buildBadge(
+                            "حفظ: $memRating", _getRatingColor(memRating)),
+                      if (nRev.isNotEmpty && newRevRating.isNotEmpty)
+                        _buildBadge("م.جديد: $newRevRating",
+                            _getRatingColor(newRevRating)),
+                      if (fRev.isNotEmpty && oldRevRating.isNotEmpty)
+                        _buildBadge("م.قديم: $oldRevRating",
+                            _getRatingColor(oldRevRating)),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.role == 'manager' &&
+                    (actualCreatedAt.isNotEmpty ||
+                        actualEditedAt.isNotEmpty)) ...[
+                  Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(isDarkMode ? 0.12 : 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Colors.amber.withOpacity(0.4), width: 1),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (actualCreatedAt.isNotEmpty)
+                          Text(
+                            "تاريخ ووقت الإدخال الفعلي: $actualCreatedAt",
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Cairo',
+                                color: isDarkMode
+                                    ? Colors.amberAccent
+                                    : Colors.orange.shade900),
+                          ),
+                        if (actualEditedAt.isNotEmpty)
+                          Text(
+                            "تاريخ آخر تعديل: $actualEditedAt",
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Cairo',
+                                color: isDarkMode
+                                    ? Colors.orangeAccent
+                                    : Colors.deepOrange.shade800),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (nMemo.isNotEmpty && memoSupervisors == revSupervisors) ...[
+                  _buildMinimalistDetailRow(Icons.person_outline,
+                      "المشرف المسجِّل", memoSupervisors, isDarkMode,
+                      isBold: true),
+                ] else ...[
+                  if (nMemo.isNotEmpty)
+                    _buildMinimalistDetailRow(Icons.person_pin_rounded,
+                        "مشرف الحفظ الجديد", memoSupervisors, isDarkMode,
+                        isBold: true),
+                  if (fRev.isNotEmpty || nRev.isNotEmpty) ...[
+                    if (nMemo.isNotEmpty) const SizedBox(height: 6),
+                    _buildMinimalistDetailRow(
+                        Icons.supervisor_account_rounded,
+                        "مشرف المراجعة",
+                        revSupervisors,
+                        isDarkMode,
+                        isBold: true),
                   ],
                 ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (widget.role == 'manager' &&
-                      (actualCreatedAt.isNotEmpty ||
-                          actualEditedAt.isNotEmpty)) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.amber
-                            .withOpacity(isDarkMode ? 0.12 : 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: Colors.amber.withOpacity(0.4), width: 1),
-                      ),
+                Divider(
+                    color: isDarkMode ? Colors.white12 : Colors.black12,
+                    height: 18),
+                if (activeBoxes.isNotEmpty) ...[
+                  for (int i = 0; i < activeBoxes.length; i += 2)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
                       child: Row(
                         children: [
-                          const Icon(Icons.access_time_filled_rounded,
-                              color: Colors.amber, size: 16),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (actualCreatedAt.isNotEmpty)
-                                  Text(
-                                    "تاريخ ووقت الإدخال الفعلي: $actualCreatedAt",
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        fontFamily: 'Cairo',
-                                        color: isDarkMode
-                                            ? Colors.amberAccent
-                                            : Colors.orange.shade900),
-                                  ),
-                                if (actualEditedAt.isNotEmpty)
-                                  Text(
-                                    "تاريخ آخر تعديل: $actualEditedAt",
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        fontFamily: 'Cairo',
-                                        color: isDarkMode
-                                            ? Colors.orangeAccent
-                                            : Colors.deepOrange.shade800),
-                                  ),
-                              ],
-                            ),
-                          ),
+                          Expanded(child: activeBoxes[i]),
+                          const SizedBox(width: 10),
+                          if (i + 1 < activeBoxes.length)
+                            Expanded(child: activeBoxes[i + 1])
+                          else
+                            const Expanded(child: SizedBox()),
                         ],
                       ),
                     ),
-                  ],
-
-                  if (nMemo.isNotEmpty && memoSupervisors == revSupervisors) ...[
-                    _buildMinimalistDetailRow(Icons.person_outline,
-                        "المشرف المسجِّل", memoSupervisors, isDarkMode,
-                        isBold: true),
-                  ] else ...[
-                    if (nMemo.isNotEmpty)
-                      _buildMinimalistDetailRow(Icons.person_pin_rounded,
-                          "مشرف الحفظ الجديد", memoSupervisors, isDarkMode,
-                          isBold: true),
-                    if (fRev.isNotEmpty || nRev.isNotEmpty) ...[
-                      if (nMemo.isNotEmpty) const SizedBox(height: 6),
-                      _buildMinimalistDetailRow(
-                          Icons.supervisor_account_rounded,
-                          "مشرف المراجعة",
-                          revSupervisors,
-                          isDarkMode,
-                          isBold: true),
-                    ],
-                  ],
-
-                  Divider(
-                      color: isDarkMode ? Colors.white24 : Colors.black12,
-                      height: 20),
-
-                  if (activeBoxes.isNotEmpty) ...[
-                    for (int i = 0; i < activeBoxes.length; i += 2)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(
+                ],
+                if (nHw.isNotEmpty ||
+                    nRevHw.isNotEmpty ||
+                    oRevHw.isNotEmpty ||
+                    oldHw.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: accentGold.withOpacity(isDarkMode ? 0.08 : 0.06),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: accentGold.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Expanded(child: activeBoxes[i]),
-                            const SizedBox(width: 10),
-                            if (i + 1 < activeBoxes.length)
-                              Expanded(child: activeBoxes[i + 1])
-                            else
-                              Expanded(child: const SizedBox()),
+                            Icon(Icons.assignment_outlined,
+                                size: 16, color: accentGold),
+                            const SizedBox(width: 6),
+                            Text("الواجب القادم:",
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDarkMode
+                                        ? Colors.white70
+                                        : Colors.black87,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo')),
                           ],
                         ),
-                      ),
-                    Divider(
-                        color: isDarkMode ? Colors.white24 : Colors.black12,
-                        height: 20),
-                  ],
-
-                  if (nHw.isNotEmpty ||
-                      nRevHw.isNotEmpty ||
-                      oRevHw.isNotEmpty ||
-                      oldHw.isNotEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: accentGold
-                            .withOpacity(isDarkMode ? 0.08 : 0.05),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(
-                            color: accentGold.withOpacity(0.3)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.assignment_outlined,
-                                  size: 16, color: accentGold),
-                              const SizedBox(width: 6),
-                              Text("الواجب القادم:",
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: isDarkMode
-                                          ? Colors.white70
-                                          : Colors.black87,
-                                      fontWeight: FontWeight.bold,
-                                      fontFamily: 'Cairo')),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          if (nHw.isNotEmpty)
-                            _buildHomeworkRow("حفظ جديد", nHw, isDarkMode),
-                          if (nRevHw.isNotEmpty)
-                            _buildHomeworkRow("مراجعة جديد", nRevHw, isDarkMode),
-                          if (oRevHw.isNotEmpty)
-                            _buildHomeworkRow("مراجعة قديم", oRevHw, isDarkMode),
-                          if (oldHw.isNotEmpty &&
-                              nHw.isEmpty &&
-                              nRevHw.isEmpty &&
-                              oRevHw.isEmpty)
-                            _buildHomeworkRow("الواجب", oldHw, isDarkMode),
-                        ],
-                      ),
+                        const SizedBox(height: 6),
+                        if (nHw.isNotEmpty)
+                          _buildHomeworkRow("حفظ جديد", nHw, isDarkMode),
+                        if (nRevHw.isNotEmpty)
+                          _buildHomeworkRow("مراجعة جديد", nRevHw, isDarkMode),
+                        if (oRevHw.isNotEmpty)
+                          _buildHomeworkRow("مراجعة قديم", oRevHw, isDarkMode),
+                        if (oldHw.isNotEmpty &&
+                            nHw.isEmpty &&
+                            nRevHw.isEmpty &&
+                            oRevHw.isEmpty)
+                          _buildHomeworkRow("الواجب", oldHw, isDarkMode),
+                      ],
                     ),
-                    Divider(
-                        color: isDarkMode ? Colors.white24 : Colors.black12,
-                        height: 20),
-                  ],
-
-                  if (data['religiousActivities'] != null &&
-                      data['religiousActivities']
-                          .toString()
-                          .trim()
-                          .isNotEmpty) ...[
-                    _buildMinimalistDetailRow(Icons.mosque_outlined,
-                        "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
-                    Divider(
-                        color: isDarkMode ? Colors.white24 : Colors.black12,
-                        height: 20),
-                  ],
-
-                  if (selectedJuz == 0) ...[
-                    _buildMinimalistDetailRow(
-                        Icons.analytics_outlined,
-                        "إجمالي الحفظ للختمة",
-                        data['total_memorized_pages'] != null
-                            ? "${data['total_memorized_pages']} صفحة"
-                            : "---",
-                        isDarkMode),
-                    Divider(
-                        color: isDarkMode ? Colors.white24 : Colors.black12,
-                        height: 20),
-                  ],
-
-                  if (data['studentStatus'] != null &&
-                      data['studentStatus'].toString().trim().isNotEmpty) ...[
-                    _buildMinimalistDetailRow(Icons.mood, "حالة الطالب",
-                        data['studentStatus'], isDarkMode),
-                    Divider(
-                        color: isDarkMode ? Colors.white24 : Colors.black12,
-                        height: 20),
-                  ],
-
-                  if (data['notes'] != null &&
-                      data['notes'].toString().trim().isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    _buildNotesBox(data['notes'], isDarkMode),
-                  ],
-
-                  const SizedBox(height: 12),
-                  _buildActionButtons(context, sessionId, data, isDarkMode),
+                  ),
                 ],
-              ),
+                if (data['religiousActivities'] != null &&
+                    data['religiousActivities']
+                        .toString()
+                        .trim()
+                        .isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _buildMinimalistDetailRow(Icons.mosque_outlined,
+                      "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
+                ],
+                if (selectedJuz == 0) ...[
+                  const SizedBox(height: 10),
+                  _buildMinimalistDetailRow(
+                      Icons.analytics_outlined,
+                      "إجمالي الحفظ للختمة",
+                      data['total_memorized_pages'] != null
+                          ? "${data['total_memorized_pages']} صفحة"
+                          : "---",
+                      isDarkMode),
+                ],
+                if (data['studentStatus'] != null &&
+                    data['studentStatus'].toString().trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _buildMinimalistDetailRow(Icons.mood, "حالة الطالب",
+                      data['studentStatus'], isDarkMode),
+                ],
+                if (data['notes'] != null &&
+                    data['notes'].toString().trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _buildNotesBox(data['notes'], isDarkMode),
+                ],
+                const SizedBox(height: 10),
+                _buildActionButtons(context, sessionId, data, isDarkMode),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -2015,11 +2189,11 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
       decoration: BoxDecoration(
         color: isDarkMode
             ? Colors.black.withOpacity(0.2)
-            : const Color(0xfff8fafc).withOpacity(0.6),
+            : const Color(0xfff8fafc),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
             color: isDarkMode ? Colors.white12 : const Color(0xffe2e8f0),
-            width: 0.8),
+            width: 0.9),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2063,7 +2237,7 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
           padding: const EdgeInsets.only(top: 2),
           child: Icon(icon,
               size: 17,
-              color: isDarkMode ? accentGold : primaryColor.withOpacity(0.6)),
+              color: isDarkMode ? accentGold : primaryColor.withOpacity(0.7)),
         ),
         const SizedBox(width: 8),
         Text("$label: ",
@@ -2095,10 +2269,10 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
       decoration: BoxDecoration(
         color: isDarkMode
             ? Colors.black.withOpacity(0.2)
-            : Colors.white.withOpacity(0.5),
+            : const Color(0xfff8fafc),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-            color: isDarkMode ? Colors.white12 : Colors.black12),
+            color: isDarkMode ? Colors.white12 : const Color(0xffe2e8f0)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2160,7 +2334,7 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12))),
             onPressed: () async {
-              bool? confirm = await showDialog<bool>(
+              final bool? confirm = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
                         backgroundColor: isDarkMode
@@ -2174,7 +2348,7 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
                                     ? Colors.white
                                     : Colors.black)),
                         content: Text(
-                            "هل أنت تأكد من رغبتك في حذف هذه الجلسة بشكل نهائي؟",
+                            "هل أنت متأكد من رغبتك في حذف هذه الجلسة بشكل نهائي؟",
                             style: TextStyle(
                                 fontFamily: 'Cairo',
                                 color: isDarkMode
@@ -2222,58 +2396,17 @@ class _DailyRecitationsPageState extends State<DailyRecitationsPage> {
 
   Widget _buildBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-          color: color.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(color: color.withOpacity(0.3), blurRadius: 4)
-          ]),
+        color: color.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Text(text,
           style: const TextStyle(
               color: Colors.white,
               fontSize: 10,
               fontWeight: FontWeight.bold,
               fontFamily: 'Cairo')),
-    );
-  }
-
-  Widget _buildGlassContainer(
-      {required Widget child,
-      required bool isDarkMode,
-      EdgeInsetsGeometry padding = EdgeInsets.zero,
-      Color? customColor,
-      Color? customBorderColor}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(25),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: customColor ??
-                (isDarkMode
-                    ? Colors.white.withOpacity(0.06)
-                    : Colors.white.withOpacity(0.4)),
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: customBorderColor ??
-                  (isDarkMode
-                      ? Colors.white.withOpacity(0.1)
-                      : Colors.white.withOpacity(0.6)),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.02),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: child,
-        ),
-      ),
     );
   }
 }
@@ -2293,7 +2426,6 @@ class DailyAbsentStudentsPage extends StatefulWidget {
 class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
   final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
-  bool isExporting = false;
   bool isPosterDark = true;
 
   Future<void> _handleShareProcess(List<QueryDocumentSnapshot> docs) async {
@@ -2311,7 +2443,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
         });
       },
       shareText:
-          '🚨 كرت الغياب اليومي (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
+          'كرت الغياب اليومي (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله',
     );
   }
 
@@ -2323,16 +2455,16 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
       child: Scaffold(
         extendBodyBehindAppBar: true,
         backgroundColor:
-            isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
+            isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.transparent,
-          title: Text("سجل الغائبين (${widget.targetDate}) 🔴",
+          title: Text("سجل الغائبين (${widget.targetDate})",
               style: TextStyle(
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
                   color: isDarkMode ? Colors.white : primaryColor,
                   fontFamily: 'Cairo',
-                  fontSize: 16)),
+                  fontSize: 15.5)),
           iconTheme:
               IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
           centerTitle: true,
@@ -2345,18 +2477,18 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isDarkMode
-                      ? [
-                          const Color(0xff0f172a),
-                          const Color(0xff1e293b),
-                          const Color(0xff0f172a)
+                      ? const [
+                          Color(0xff0b1120),
+                          Color(0xff131c31),
+                          Color(0xff0b1120),
                         ]
-                      : [
-                          const Color(0xffe2e8f0),
-                          const Color(0xffcfdef3),
-                          const Color(0xffe0eafc)
+                      : const [
+                          Color(0xfff8fafc),
+                          Color(0xffe2e8f0),
+                          Color(0xffdbeafe),
                         ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
               ),
             ),
@@ -2376,7 +2508,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
 
                   if (absentDocs.isEmpty) {
                     return Center(
-                      child: Text("لا يوجد غياب مسجل في هذا اليوم 🎉",
+                      child: Text("لا يوجد غياب مسجل في هذا اليوم",
                           style: TextStyle(
                               fontFamily: 'Cairo',
                               fontWeight: FontWeight.bold,
@@ -2395,7 +2527,8 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                             color: Colors.transparent,
                             child: SizedBox(
                               width: 600,
-                              child: _buildExportablePoster(absentDocs, isPosterDark),
+                              child: _buildExportablePoster(
+                                  absentDocs, isPosterDark),
                             ),
                           ),
                         ),
@@ -2410,7 +2543,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                               height: 48,
                               child: ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.redAccent.shade700,
+                                  backgroundColor: const Color(0xffdc2626),
                                   shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16)),
                                   elevation: 3,
@@ -2419,11 +2552,11 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                                 icon: const Icon(Icons.share_rounded,
                                     color: Colors.white, size: 20),
                                 label: const Text(
-                                  "معاينة ومشاركة كرت الغياب 📸",
+                                  "معاينة ومشاركة كرت الغياب",
                                   style: TextStyle(
                                       fontFamily: 'Cairo',
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 13,
+                                      fontSize: 13.5,
                                       color: Colors.white),
                                 ),
                               ),
@@ -2437,75 +2570,65 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                               itemBuilder: (context, index) {
                                 final data = absentDocs[index].data()
                                     as Map<String, dynamic>;
-                                String studentName =
+                                final String studentName =
                                     data['studentName'] ?? 'طالب';
-                                String reason =
-                                    data['absenceReason'] ?? 'بدون سبَب مُسجّل';
+                                final String reason =
+                                    data['absenceReason'] ?? 'بدون سبب مُسجّل';
 
                                 return Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  child: ClipRRect(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.all(15),
+                                  decoration: BoxDecoration(
+                                    color: isDarkMode
+                                        ? Colors.white.withOpacity(0.06)
+                                        : Colors.white.withOpacity(0.9),
                                     borderRadius: BorderRadius.circular(20),
-                                    child: BackdropFilter(
-                                      filter: ImageFilter.blur(
-                                          sigmaX: 12, sigmaY: 12),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(16),
+                                    border: Border.all(
+                                        color: Colors.redAccent
+                                            .withOpacity(0.35),
+                                        width: 1.2),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
                                         decoration: BoxDecoration(
-                                          color: isDarkMode
-                                              ? Colors.white.withOpacity(0.06)
-                                              : Colors.white.withOpacity(0.55),
+                                          color: Colors.redAccent
+                                              .withOpacity(0.15),
                                           borderRadius:
-                                              BorderRadius.circular(20),
-                                          border: Border.all(
-                                              color: Colors.redAccent
-                                                  .withOpacity(0.3),
-                                              width: 1.2),
+                                              BorderRadius.circular(14),
                                         ),
-                                        child: Row(
+                                        child: const Icon(
+                                            Icons.person_off_rounded,
+                                            color: Colors.redAccent,
+                                            size: 22),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Container(
-                                              padding: const EdgeInsets.all(10),
-                                              decoration: BoxDecoration(
-                                                color: Colors.redAccent
-                                                    .withOpacity(0.15),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Icon(
-                                                  Icons.person_off_rounded,
-                                                  color: Colors.redAccent,
-                                                  size: 22),
-                                            ),
-                                            const SizedBox(width: 14),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(studentName,
-                                                      style: TextStyle(
-                                                          fontFamily: 'Cairo',
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 15,
-                                                          color: isDarkMode
-                                                              ? Colors.white
-                                                              : primaryColor)),
-                                                  const SizedBox(height: 2),
-                                                  Text("سبب الغياب: $reason",
-                                                      style: TextStyle(
-                                                          fontFamily: 'Cairo',
-                                                          fontSize: 11,
-                                                          color: isDarkMode
-                                                              ? Colors.white60
-                                                              : Colors.black54)),
-                                                ],
-                                              ),
-                                            ),
+                                            Text(studentName,
+                                                style: TextStyle(
+                                                    fontFamily: 'Cairo',
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14.5,
+                                                    color: isDarkMode
+                                                        ? Colors.white
+                                                        : primaryColor)),
+                                            const SizedBox(height: 2),
+                                            Text("سبب الغياب: $reason",
+                                                style: TextStyle(
+                                                    fontFamily: 'Cairo',
+                                                    fontSize: 11.5,
+                                                    color: isDarkMode
+                                                        ? Colors.white60
+                                                        : Colors.black54)),
                                           ],
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ),
                                 );
                               },
@@ -2524,13 +2647,15 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
     );
   }
 
-  // 🖼️ دالة بناء البوستر تدعم الثيم الفاتح والغامق
   Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs, bool isDark) {
     final bgColor = isDark ? const Color(0xff0f172a) : const Color(0xffffffff);
-    final borderColor = isDark ? const Color(0xff334155) : const Color(0xffe2e8f0);
+    final borderColor =
+        isDark ? const Color(0xff334155) : const Color(0xffe2e8f0);
     final textColor = isDark ? Colors.white : const Color(0xff1e293b);
-    final headerBg = isDark ? const Color(0xff1e293b) : const Color(0xfff1f5f9);
-    final subTextColor = isDark ? const Color(0xff94a3b8) : const Color(0xff64748b);
+    final headerBg =
+        isDark ? const Color(0xff1e293b) : const Color(0xfff1f5f9);
+    final subTextColor =
+        isDark ? const Color(0xff94a3b8) : const Color(0xff64748b);
 
     return Container(
       padding: const EdgeInsets.all(26),
@@ -2578,13 +2703,15 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
             decoration: BoxDecoration(
               color: const Color(0xffef4444).withOpacity(0.15),
               borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: const Color(0xffef4444).withOpacity(0.5)),
+              border:
+                  Border.all(color: const Color(0xffef4444).withOpacity(0.5)),
             ),
             child: Text(
-              "🔴 جدول الطلاب الغائبين - ${widget.targetDate}",
+              "جدول الطلاب الغائبين - ${widget.targetDate}",
               style: TextStyle(
                   fontSize: 13,
-                  color: isDark ? const Color(0xfffca5a5) : const Color(0xff991b1b),
+                  color:
+                      isDark ? const Color(0xfffca5a5) : const Color(0xff991b1b),
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Cairo'),
             ),
@@ -2622,9 +2749,9 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                 ],
               ),
               ...docs.map((doc) {
-                var s = doc.data() as Map<String, dynamic>;
-                String reason = s['absenceReason'] ?? 'بدون عذر';
-                bool hasExcused = reason.contains("بعذر") ||
+                final s = doc.data() as Map<String, dynamic>;
+                final String reason = s['absenceReason'] ?? 'بدون عذر';
+                final bool hasExcused = reason.contains("بعذر") ||
                     reason.contains("استئذان") ||
                     reason.contains("مريض");
 
@@ -2642,7 +2769,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
                   Padding(
                     padding: const EdgeInsets.all(10),
                     child: Text(
-                      hasExcused ? "$reason 📝" : "$reason ❌",
+                      reason,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           color: hasExcused
@@ -2659,7 +2786,7 @@ class _DailyAbsentStudentsPageState extends State<DailyAbsentStudentsPage> {
           ),
           const SizedBox(height: 18),
           Text(
-            "يرجى من أولياء الأمور الكرام الحرص والمتابعة لعدم التكرار 🌺",
+            "يرجى من أولياء الأمور الكرام الحرص والمتابعة لعدم التكرار",
             textAlign: TextAlign.center,
             style: TextStyle(
                 color: subTextColor, fontSize: 11, fontFamily: 'Cairo'),
@@ -2686,7 +2813,6 @@ class _DailyDidNotReciteStudentsPageState
     extends State<DailyDidNotReciteStudentsPage> {
   final WidgetsToImageController controller = WidgetsToImageController();
   final Color primaryColor = const Color(0xff425c75);
-  bool isExporting = false;
   bool isPosterDark = true;
 
   Future<void> _handleShareProcess(List<QueryDocumentSnapshot> docs) async {
@@ -2704,7 +2830,7 @@ class _DailyDidNotReciteStudentsPageState
         });
       },
       shareText:
-          '⚠ إشعار الطلاب (حضر ولم يسمّع) اليوم (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله 🕌',
+          'إشعار الطلاب (حضر ولم يسمّع) اليوم (${widget.targetDate})\nمعهد الشيخ سعيد العبدالله',
     );
   }
 
@@ -2715,16 +2841,16 @@ class _DailyDidNotReciteStudentsPageState
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor:
-          isDarkMode ? const Color(0xff0f172a) : const Color(0xfff1f5f9),
+          isDarkMode ? const Color(0xff0b1120) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
-        title: Text("حضر ولم يسمّع (${widget.targetDate}) ⚠️",
+        title: Text("حضر ولم يسمّع (${widget.targetDate})",
             style: TextStyle(
                 fontFamily: 'Cairo',
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w800,
                 color: isDarkMode ? Colors.white : primaryColor,
-                fontSize: 16)),
+                fontSize: 15.5)),
         iconTheme:
             IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
@@ -2737,18 +2863,18 @@ class _DailyDidNotReciteStudentsPageState
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isDarkMode
-                    ? [
-                        const Color(0xff0f172a),
-                        const Color(0xff1e293b),
-                        const Color(0xff0f172a)
+                    ? const [
+                        Color(0xff0b1120),
+                        Color(0xff131c31),
+                        Color(0xff0b1120),
                       ]
-                    : [
-                        const Color(0xffe2e8f0),
-                        const Color(0xffcfdef3),
-                        const Color(0xffe0eafc)
+                    : const [
+                        Color(0xfff8fafc),
+                        Color(0xffe2e8f0),
+                        Color(0xffdbeafe),
                       ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
               ),
             ),
           ),
@@ -2768,7 +2894,7 @@ class _DailyDidNotReciteStudentsPageState
 
                 if (docs.isEmpty) {
                   return Center(
-                    child: Text("لا يوجد طلاب بحالة حضر ولم يسمّع اليوم 🎉",
+                    child: Text("لا يوجد طلاب بحالة حضر ولم يسمّع اليوم",
                         style: TextStyle(
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.bold,
@@ -2802,7 +2928,7 @@ class _DailyDidNotReciteStudentsPageState
                             height: 48,
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blueGrey.shade800,
+                                backgroundColor: const Color(0xff334155),
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16)),
                                 elevation: 3,
@@ -2811,11 +2937,11 @@ class _DailyDidNotReciteStudentsPageState
                               icon: const Icon(Icons.share_rounded,
                                   color: Colors.white, size: 20),
                               label: const Text(
-                                "معاينة ومشاركة القائمة للأهالي 📸",
+                                "معاينة ومشاركة القائمة للأهالي",
                                 style: TextStyle(
                                     fontFamily: 'Cairo',
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 13,
+                                    fontSize: 13.5,
                                     color: Colors.white),
                               ),
                             ),
@@ -2829,74 +2955,62 @@ class _DailyDidNotReciteStudentsPageState
                             itemBuilder: (context, index) {
                               final data =
                                   docs[index].data() as Map<String, dynamic>;
-                              String studentName =
+                              final String studentName =
                                   data['studentName'] ?? 'طالب';
-                              String supervisorName =
+                              final String supervisorName =
                                   data['supervisorName'] ?? 'غير محدد';
 
                               return Container(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                child: ClipRRect(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(15),
+                                decoration: BoxDecoration(
+                                  color: isDarkMode
+                                      ? Colors.white.withOpacity(0.06)
+                                      : Colors.white.withOpacity(0.9),
                                   borderRadius: BorderRadius.circular(20),
-                                  child: BackdropFilter(
-                                    filter: ImageFilter.blur(
-                                        sigmaX: 12, sigmaY: 12),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(16),
+                                  border: Border.all(
+                                      color: Colors.blueGrey.withOpacity(0.4),
+                                      width: 1.2),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: isDarkMode
-                                            ? Colors.white.withOpacity(0.06)
-                                            : Colors.white.withOpacity(0.55),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                            color: Colors.blueGrey
-                                                .withOpacity(0.4),
-                                            width: 1.2),
+                                        color: Colors.blueGrey.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(14),
                                       ),
-                                      child: Row(
+                                      child: const Icon(
+                                          Icons.speaker_notes_off_outlined,
+                                          color: Colors.blueGrey,
+                                          size: 22),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(10),
-                                            decoration: BoxDecoration(
-                                              color: Colors.blueGrey
-                                                  .withOpacity(0.15),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                                Icons.speaker_notes_off_outlined,
-                                                color: Colors.blueGrey,
-                                                size: 22),
-                                          ),
-                                          const SizedBox(width: 14),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(studentName,
-                                                    style: TextStyle(
-                                                        fontFamily: 'Cairo',
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 15,
-                                                        color: isDarkMode
-                                                            ? Colors.white
-                                                            : primaryColor)),
-                                                const SizedBox(height: 2),
-                                                Text("المشرف: $supervisorName",
-                                                    style: TextStyle(
-                                                        fontFamily: 'Cairo',
-                                                        fontSize: 11,
-                                                        color: isDarkMode
-                                                            ? Colors.white60
-                                                            : Colors.black54)),
-                                              ],
-                                            ),
-                                          ),
+                                          Text(studentName,
+                                              style: TextStyle(
+                                                  fontFamily: 'Cairo',
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14.5,
+                                                  color: isDarkMode
+                                                      ? Colors.white
+                                                      : primaryColor)),
+                                          const SizedBox(height: 2),
+                                          Text("المشرف: $supervisorName",
+                                              style: TextStyle(
+                                                  fontFamily: 'Cairo',
+                                                  fontSize: 11.5,
+                                                  color: isDarkMode
+                                                      ? Colors.white60
+                                                      : Colors.black54)),
                                         ],
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               );
                             },
@@ -2914,13 +3028,15 @@ class _DailyDidNotReciteStudentsPageState
     );
   }
 
-  // 🖼️ دالة بناء البوستر تدعم الثيم الفاتح والغامق
   Widget _buildExportablePoster(List<QueryDocumentSnapshot> docs, bool isDark) {
     final bgColor = isDark ? const Color(0xff0f172a) : const Color(0xffffffff);
-    final borderColor = isDark ? const Color(0xff334155) : const Color(0xffe2e8f0);
+    final borderColor =
+        isDark ? const Color(0xff334155) : const Color(0xffe2e8f0);
     final textColor = isDark ? Colors.white : const Color(0xff1e293b);
-    final headerBg = isDark ? const Color(0xff1e293b) : const Color(0xfff1f5f9);
-    final subTextColor = isDark ? const Color(0xff94a3b8) : const Color(0xff64748b);
+    final headerBg =
+        isDark ? const Color(0xff1e293b) : const Color(0xfff1f5f9);
+    final subTextColor =
+        isDark ? const Color(0xff94a3b8) : const Color(0xff64748b);
 
     return Container(
       padding: const EdgeInsets.all(26),
@@ -2968,13 +3084,15 @@ class _DailyDidNotReciteStudentsPageState
             decoration: BoxDecoration(
               color: const Color(0xfff59e0b).withOpacity(0.15),
               borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: const Color(0xfff59e0b).withOpacity(0.5)),
+              border:
+                  Border.all(color: const Color(0xfff59e0b).withOpacity(0.5)),
             ),
             child: Text(
-              "⚠️ قائمة الطلاب الذين حضروا ولم يسْمَعوا - ${widget.targetDate}",
+              "قائمة الطلاب الذين حضروا ولم يسْمَعوا - ${widget.targetDate}",
               style: TextStyle(
                   fontSize: 13,
-                  color: isDark ? const Color(0xfffde68a) : const Color(0xffb45309),
+                  color:
+                      isDark ? const Color(0xfffde68a) : const Color(0xffb45309),
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Cairo'),
             ),
@@ -3012,7 +3130,7 @@ class _DailyDidNotReciteStudentsPageState
                 ],
               ),
               ...docs.map((doc) {
-                var s = doc.data() as Map<String, dynamic>;
+                final s = doc.data() as Map<String, dynamic>;
                 return TableRow(children: [
                   Padding(
                     padding: const EdgeInsets.all(10),
@@ -3039,7 +3157,7 @@ class _DailyDidNotReciteStudentsPageState
           ),
           const SizedBox(height: 18),
           Text(
-            "يرجى من أولياء الأمور الكرام الحرص على إعداد وتسميع المقرر بالبيت 📖",
+            "يرجى من أولياء الأمور الكرام الحرص على إعداد وتسميع المقرر بالبيت",
             textAlign: TextAlign.center,
             style: TextStyle(
                 color: subTextColor, fontSize: 11, fontFamily: 'Cairo'),

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -12,33 +11,24 @@ class ArchivedStudentSessionsPage extends StatefulWidget {
   State<ArchivedStudentSessionsPage> createState() => _ArchivedStudentSessionsPageState();
 }
 
-class _ArchivedStudentSessionsPageState extends State<ArchivedStudentSessionsPage> with SingleTickerProviderStateMixin {
-  final Color primaryNavy = const Color(0xff0f172a);
+class _ArchivedStudentSessionsPageState extends State<ArchivedStudentSessionsPage> {
+  final Color primaryColor = const Color(0xff425c75);
+  final Color deepNavy = const Color(0xff0f172a);
   final Color accentGold = const Color(0xffd4af37);
-  final Color neonCyan = const Color(0xff06b6d4);
-  final Color softBlue = const Color(0xff3b82f6);
+  final Color softGold = const Color(0xffccb273);
+  final Color emeraldGreen = const Color(0xff16a34a);
+  final Color crimsonRed = const Color(0xffef4444);
 
   // 🎯 حل مشكلة اختفاء الكيبورد: استخدام ValueNotifier و FocusNode مستقلين
   final ValueNotifier<String> _searchNotifier = ValueNotifier<String>('');
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
-  late AnimationController _bgController;
-  late Animation<double> _bgAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 5))..repeat(reverse: true);
-    _bgAnimation = Tween<double>(begin: -15, end: 25).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine));
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
     _searchNotifier.dispose();
-    _bgController.dispose();
     super.dispose();
   }
 
@@ -52,66 +42,75 @@ class _ArchivedStudentSessionsPageState extends State<ArchivedStudentSessionsPag
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
-        title: Text(
-          "أرشيف جلسات الطلاب 📜",
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            color: isDark ? Colors.white : const Color(0xff1e293b),
-            fontFamily: 'Cairo',
-            fontSize: 19,
-            letterSpacing: 0.5,
-          ),
-        ),
         centerTitle: true,
-        iconTheme: IconThemeData(color: isDark ? Colors.white : const Color(0xff1e293b)),
+        iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
+        title: Column(
+          children: [
+            Text(
+              "أرشيف جلسات الطلاب",
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                color: isDark ? Colors.white : primaryColor,
+                fontFamily: 'Cairo',
+                fontSize: 18.5,
+              ),
+            ),
+            Text(
+              "سجل الحضور والمتابعة حسب الدورات",
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: isDark ? softGold : primaryColor.withOpacity(0.68),
+                fontFamily: 'Cairo',
+                fontSize: 10.5,
+              ),
+            ),
+          ],
+        ),
       ),
       body: Stack(
         children: [
-          // 🌌 خلفية متدرجة زجاجية متحركة
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDark
-                    ? [const Color(0xff090d16), const Color(0xff0f172a), const Color(0xff1e293b)]
-                    : [const Color(0xfff8fafc), const Color(0xffe2e8f0), const Color(0xffcbd5e1)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          // 🌌 خلفية متدرجة ثابتة وسريعة الأداء
+          RepaintBoundary(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark
+                      ? [const Color(0xff090d16), const Color(0xff111b2e), const Color(0xff0b1120)]
+                      : [const Color(0xfff4f7fb), const Color(0xffe9eff6), const Color(0xfff7f2e4)],
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                ),
               ),
             ),
           ),
 
-          AnimatedBuilder(
-            animation: _bgAnimation,
-            builder: (context, child) {
-              return Stack(
-                children: [
-                  Positioned(
-                    top: -40 + _bgAnimation.value,
-                    right: -60 - (_bgAnimation.value / 2),
-                    child: Container(
-                      width: 280,
-                      height: 280,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isDark ? accentGold.withOpacity(0.09) : accentGold.withOpacity(0.18),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 120 - _bgAnimation.value,
-                    left: -80 + _bgAnimation.value,
-                    child: Container(
-                      width: 320,
-                      height: 320,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isDark ? neonCyan.withOpacity(0.08) : softBlue.withOpacity(0.18),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
+          Positioned(
+            top: -55,
+            right: -55,
+            child: IgnorePointer(
+              child: Container(
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: primaryColor.withOpacity(isDark ? 0.20 : 0.08),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 80,
+            left: -75,
+            child: IgnorePointer(
+              child: Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accentGold.withOpacity(isDark ? 0.09 : 0.13),
+                ),
+              ),
+            ),
           ),
 
           SafeArea(
@@ -119,81 +118,94 @@ class _ArchivedStudentSessionsPageState extends State<ArchivedStudentSessionsPag
               children: [
                 const SizedBox(height: 8),
 
-                // 🔍 شريط البحث الذكي الموعد بشكل يمنع إغلاق الكيبورد نهااائياً
+                // 🔍 شريط البحث الذكي مع الحفاظ الكامل على تركيز الكيبورد
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: isDark ? accentGold.withOpacity(0.3) : const Color(0xff1e293b).withOpacity(0.15),
-                            width: 1.2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
-                              blurRadius: 15,
-                              offset: const Offset(0, 5),
-                            )
-                          ],
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xff141e30).withOpacity(0.92) : Colors.white.withOpacity(0.94),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: accentGold.withOpacity(isDark ? 0.35 : 0.45),
+                        width: 1.2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryColor.withOpacity(isDark ? 0.24 : 0.05),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
-                        child: TextField(
-                          controller: _searchController,
-                          focusNode: _searchFocusNode,
-                          style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87),
-                          onChanged: (val) {
-                            _searchNotifier.value = val.trim().toLowerCase();
-                          },
-                          decoration: InputDecoration(
-                            hintText: "ابحث عن اسم طالب أو برقم...",
-                            hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDark ? Colors.white54 : Colors.black45),
-                            prefixIcon: Container(
-                              padding: const EdgeInsets.all(12),
-                              child: Icon(Icons.search_rounded, color: isDark ? accentGold : softBlue, size: 24),
-                            ),
-                            suffixIcon: ValueListenableBuilder<String>(
-                              valueListenable: _searchNotifier,
-                              builder: (context, query, child) {
-                                if (query.isEmpty) return const SizedBox.shrink();
-                                return IconButton(
-                                  icon: Icon(Icons.clear_rounded, color: isDark ? Colors.white54 : Colors.black54),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    _searchNotifier.value = '';
-                                  },
-                                );
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : deepNavy,
+                      ),
+                      onChanged: (val) {
+                        _searchNotifier.value = val.trim().toLowerCase();
+                      },
+                      decoration: InputDecoration(
+                        hintText: "ابحث باسم الطالب أو بالرقم التسلسلي...",
+                        hintStyle: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12.5,
+                          color: isDark ? Colors.white38 : Colors.grey.shade500,
+                        ),
+                        prefixIcon: Container(
+                          margin: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: accentGold.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(Icons.search_rounded, color: accentGold, size: 21),
+                        ),
+                        suffixIcon: ValueListenableBuilder<String>(
+                          valueListenable: _searchNotifier,
+                          builder: (context, query, child) {
+                            if (query.isEmpty) return const SizedBox.shrink();
+                            return IconButton(
+                              icon: Icon(
+                                Icons.close_rounded,
+                                size: 19,
+                                color: isDark ? Colors.white60 : primaryColor,
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                                _searchNotifier.value = '';
                               },
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
+                            );
+                          },
                         ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 13),
                       ),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
 
                 // 📑 محتوى الدورات والتبويبات
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance.collection('cycles').snapshots(),
                     builder: (context, cycleSnap) {
-                      if (cycleSnap.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
+                      if (cycleSnap.connectionState == ConnectionState.waiting && !cycleSnap.hasData) {
+                        return Center(
+                          child: CircularProgressIndicator(color: accentGold, strokeWidth: 2.5),
+                        );
                       }
 
                       if (!cycleSnap.hasData || cycleSnap.data!.docs.isEmpty) {
-                        return _buildEmptyState(isDark, "لا توجد دورات مسجلة في النظام 🚫");
+                        return _buildEmptyState(isDark, "لا توجد دورات مسجلة في النظام حالياً");
                       }
 
-                      var cycleDocs = cycleSnap.data!.docs;
+                      var cycleDocs = cycleSnap.data!.docs.toList();
 
                       // ترتيب الدورات
                       cycleDocs.sort((a, b) {
@@ -210,69 +222,84 @@ class _ArchivedStudentSessionsPageState extends State<ArchivedStudentSessionsPag
                         length: cycleDocs.length,
                         child: Column(
                           children: [
-                            // 📑 شريط الدورات
+                            // 📑 شريط الدورات الأنيق
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 20),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(24),
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                                  child: Container(
-                                    height: 52,
-                                    padding: const EdgeInsets.all(5),
-                                    decoration: BoxDecoration(
-                                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.5),
-                                      borderRadius: BorderRadius.circular(24),
-                                      border: Border.all(color: isDark ? Colors.white12 : Colors.white.withOpacity(0.8)),
-                                    ),
-                                    child: TabBar(
-                                      isScrollable: true,
-                                      physics: const BouncingScrollPhysics(),
-                                      indicator: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: isDark ? [accentGold, Colors.amber.shade700] : [softBlue, const Color(0xff1d4ed8)],
-                                        ),
-                                        borderRadius: BorderRadius.circular(20),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: (isDark ? accentGold : softBlue).withOpacity(0.4),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 3),
-                                          )
-                                        ],
-                                      ),
-                                      labelColor: Colors.white,
-                                      unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
-                                      labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
-                                      tabs: cycleDocs.map((doc) {
-                                        var data = doc.data() as Map<String, dynamic>;
-                                        String cycleName = data['name'] ?? 'دورة بدون اسم';
-                                        bool isClosed = data['isClosed'] == true || data['archived'] == true;
-                                        return Tab(
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                isClosed ? Icons.lock_outline_rounded : Icons.star_rounded,
-                                                size: 15,
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Text(cycleName),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
+                              padding: const EdgeInsets.symmetric(horizontal: 18),
+                              child: Container(
+                                height: 48,
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xff131d2e).withOpacity(0.88) : Colors.white.withOpacity(0.84),
+                                  borderRadius: BorderRadius.circular(22),
+                                  border: Border.all(
+                                    color: isDark ? Colors.white12 : accentGold.withOpacity(0.32),
+                                    width: 1.1,
                                   ),
+                                ),
+                                child: TabBar(
+                                  isScrollable: true,
+                                  tabAlignment: TabAlignment.start,
+                                  dividerColor: Colors.transparent,
+                                  physics: const ClampingScrollPhysics(),
+                                  indicatorSize: TabBarIndicatorSize.tab,
+                                  indicator: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: isDark
+                                          ? [accentGold, const Color(0xffb8921e)]
+                                          : [primaryColor, const Color(0xff2d4154)],
+                                    ),
+                                    borderRadius: BorderRadius.circular(18),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (isDark ? accentGold : primaryColor).withOpacity(0.24),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  labelColor: isDark ? deepNavy : Colors.white,
+                                  unselectedLabelColor: isDark ? Colors.white.withOpacity(0.65) : primaryColor.withOpacity(0.75),
+                                  labelStyle: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12.5,
+                                  ),
+                                  unselectedLabelStyle: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                  tabs: cycleDocs.map((doc) {
+                                    var data = doc.data() as Map<String, dynamic>;
+                                    String cycleName = data['name'] ?? 'دورة بدون اسم';
+                                    bool isClosed = data['isClosed'] == true || data['archived'] == true;
+                                    return Tab(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isClosed ? Icons.inventory_2_rounded : Icons.auto_awesome_rounded,
+                                              size: 14,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(cycleName),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
                                 ),
                               ),
                             ),
 
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
 
                             // 📇 قائمة عرض الطلاب
                             Expanded(
                               child: TabBarView(
-                                physics: const BouncingScrollPhysics(),
+                                physics: const ClampingScrollPhysics(),
                                 children: cycleDocs.map((cycleDoc) {
                                   var data = cycleDoc.data() as Map<String, dynamic>;
                                   String cycleName = data['name'] ?? 'دورة بدون اسم';
@@ -284,9 +311,11 @@ class _ArchivedStudentSessionsPageState extends State<ArchivedStudentSessionsPag
                                     isFirstCycle: isFirstCycle,
                                     searchNotifier: _searchNotifier,
                                     isDark: isDark,
+                                    primaryColor: primaryColor,
+                                    deepNavy: deepNavy,
                                     accentGold: accentGold,
-                                    softBlue: softBlue,
-                                    neonCyan: neonCyan,
+                                    emeraldGreen: emeraldGreen,
+                                    crimsonRed: crimsonRed,
                                   );
                                 }).toList(),
                               ),
@@ -311,18 +340,24 @@ class _ArchivedStudentSessionsPageState extends State<ArchivedStudentSessionsPag
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
-              color: (isDark ? accentGold : softBlue).withOpacity(0.1),
+              color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.85),
               shape: BoxShape.circle,
+              border: Border.all(color: accentGold.withOpacity(0.45), width: 1.2),
             ),
-            child: Icon(Icons.history_toggle_off_rounded, size: 55, color: isDark ? accentGold : softBlue),
+            child: Icon(Icons.auto_stories_rounded, size: 52, color: accentGold),
           ),
           const SizedBox(height: 14),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: isDark ? Colors.white60 : Colors.black54, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 14,
+              color: isDark ? Colors.white70 : primaryColor,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -337,9 +372,11 @@ class CycleStudentsTabContent extends StatelessWidget {
   final bool isFirstCycle;
   final ValueNotifier<String> searchNotifier;
   final bool isDark;
+  final Color primaryColor;
+  final Color deepNavy;
   final Color accentGold;
-  final Color softBlue;
-  final Color neonCyan;
+  final Color emeraldGreen;
+  final Color crimsonRed;
 
   const CycleStudentsTabContent({
     super.key,
@@ -348,9 +385,11 @@ class CycleStudentsTabContent extends StatelessWidget {
     required this.isFirstCycle,
     required this.searchNotifier,
     required this.isDark,
+    required this.primaryColor,
+    required this.deepNavy,
     required this.accentGold,
-    required this.softBlue,
-    required this.neonCyan,
+    required this.emeraldGreen,
+    required this.crimsonRed,
   });
 
   @override
@@ -358,8 +397,8 @@ class CycleStudentsTabContent extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('students').snapshots(),
       builder: (context, studentSnap) {
-        if (studentSnap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+        if (studentSnap.connectionState == ConnectionState.waiting && !studentSnap.hasData) {
+          return Center(child: CircularProgressIndicator(color: accentGold, strokeWidth: 2.5));
         }
 
         // 🎯 قراءة حقل serial الصحيح من قاعدة البيانات
@@ -377,12 +416,12 @@ class CycleStudentsTabContent extends StatelessWidget {
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('sessions').snapshots(),
           builder: (context, sessionSnap) {
-            if (sessionSnap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+            if (sessionSnap.connectionState == ConnectionState.waiting && !sessionSnap.hasData) {
+              return Center(child: CircularProgressIndicator(color: accentGold, strokeWidth: 2.5));
             }
 
             if (!sessionSnap.hasData || sessionSnap.data!.docs.isEmpty) {
-              return _buildEmptyState("لا توجد جلسات مسجلة 📁");
+              return _buildEmptyState("لا توجد جلسات مسجلة في هذه الدورة");
             }
 
             var docs = sessionSnap.data!.docs;
@@ -436,10 +475,11 @@ class CycleStudentsTabContent extends StatelessWidget {
                 }
 
                 if (studentDataMap.isEmpty) {
-                  return _buildEmptyState("لا توجد نتائج تطابق بحثك لهذه الدورة 🔍");
+                  return _buildEmptyState("لا توجد نتائج مطابقة لبحثك في هذه الدورة");
                 }
 
-                List<Map<String, dynamic>> studentsList = studentDataMap.values.toList();
+                List<Map<String, dynamic>> studentsList =
+                  studentDataMap.values.toList();
 
                 // 🔢 **الفرز حسب الرقم التسلسلي (serial) بصرامة**
                 studentsList.sort((a, b) {
@@ -452,162 +492,230 @@ class CycleStudentsTabContent extends StatelessWidget {
                 });
 
                 return ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 5, 20, 25),
+                  physics: const ClampingScrollPhysics(),
+                  cacheExtent: 500,
+                  padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
                   itemCount: studentsList.length,
                   itemBuilder: (context, index) {
                     var student = studentsList[index];
                     String imageUrl = student['imageUrl'] ?? '';
                     int serialNumber = student['serial'];
+                    int total = student['totalSessions'] ?? 0;
+                    int present = student['presentCount'] ?? 0;
+                    int absent = student['absentCount'] ?? 0;
+                    double attendanceRatio = total > 0 ? (present / total).clamp(0.0, 1.0) : 0.0;
 
                     return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            PageRouteBuilder(
-                              pageBuilder: (context, anim1, anim2) => ArchivedStudentDetailSessionsPage(
-                                studentId: student['studentId'],
-                                studentName: student['studentName'],
-                                cycleId: cycleId,
-                                cycleName: cycleName,
-                                isFirstCycle: isFirstCycle,
-                              ),
-                              transitionsBuilder: (context, anim1, anim2, child) => FadeTransition(opacity: anim1, child: child),
-                            ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(26),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(26),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                            child: Container(
-                              padding: const EdgeInsets.all(18),
-                              decoration: BoxDecoration(
-                                color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.65),
-                                borderRadius: BorderRadius.circular(26),
-                                border: Border.all(
-                                  color: isDark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.85),
-                                  width: 1.5,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      child: Material(
+                        color: isDark
+                            ? const Color(0xff141e30).withOpacity(0.90)
+                            : Colors.white.withOpacity(0.94),
+                        borderRadius: BorderRadius.circular(24),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ArchivedStudentDetailSessionsPage(
+                                  studentId: student['studentId'],
+                                  studentName: student['studentName'],
+                                  cycleId: cycleId,
+                                  cycleName: cycleName,
+                                  isFirstCycle: isFirstCycle,
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(isDark ? 0.35 : 0.04),
-                                    blurRadius: 18,
-                                    offset: const Offset(0, 8),
-                                  )
-                                ],
                               ),
-                              child: Row(
-                                children: [
-                                  // 🖼️️ صورة الطالب
-                                  Container(
-                                    padding: const EdgeInsets.all(3),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      gradient: LinearGradient(
-                                        colors: isDark ? [accentGold, softBlue] : [softBlue, neonCyan],
-                                      ),
-                                    ),
-                                    child: CircleAvatar(
-                                      radius: 26,
-                                      backgroundColor: isDark ? const Color(0xff0f172a) : Colors.white,
-                                      backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
-                                      child: imageUrl.isEmpty
-                                          ? Icon(
-                                              Icons.person_rounded,
-                                              color: isDark ? accentGold : softBlue,
-                                              size: 28,
-                                            )
-                                          : null,
-                                    ),
-                                  ),
-
-                                  const SizedBox(width: 14),
-
-                                  // 📝 الاسم والرقم التسلسلي
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            // 🔢 شارة الرقم التسلسلي (serial)
-                                            if (serialNumber != 999999) ...[
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                decoration: BoxDecoration(
-                                                  gradient: LinearGradient(
-                                                    colors: isDark
-                                                        ? [accentGold.withOpacity(0.3), Colors.amber.shade900.withOpacity(0.2)]
-                                                        : [softBlue.withOpacity(0.25), neonCyan.withOpacity(0.2)],
-                                                  ),
-                                                  borderRadius: BorderRadius.circular(10),
-                                                  border: Border.all(
-                                                    color: (isDark ? accentGold : softBlue).withOpacity(0.5),
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  "#$serialNumber",
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.11)
+                                    : accentGold.withOpacity(0.32),
+                                width: 1.2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: primaryColor.withOpacity(isDark ? 0.22 : 0.05),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 15, 16, 13),
+                                  child: Row(
+                                    children: [
+                                      // 🖼 صورة الطالب بإطار ذهبي/كحلي أنيق
+                                      Container(
+                                        padding: const EdgeInsets.all(2.5),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: LinearGradient(
+                                            colors: [accentGold, primaryColor],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                        ),
+                                        child: CircleAvatar(
+                                          radius: 26,
+                                          backgroundColor: isDark ? deepNavy : Colors.white,
+                                          backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+                                          child: imageUrl.isEmpty
+                                              ? Text(
+                                                  (student['studentName'] as String).isNotEmpty
+                                                      ? (student['studentName'] as String).characters.first
+                                                      : 'ط',
                                                   style: TextStyle(
                                                     fontFamily: 'Cairo',
-                                                    fontSize: 12,
                                                     fontWeight: FontWeight.w900,
-                                                    color: isDark ? accentGold : softBlue,
+                                                    fontSize: 18,
+                                                    color: isDark ? accentGold : primaryColor,
+                                                  ),
+                                                )
+                                              : null,
+                                        ),
+                                      ),
+
+                                      const SizedBox(width: 13),
+
+                                      // 📝 الاسم والرقم التسلسلي والإحصاءات
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                if (serialNumber != 999999) ...[
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: accentGold.withOpacity(isDark ? 0.2 : 0.16),
+                                                      borderRadius: BorderRadius.circular(9),
+                                                      border: Border.all(
+                                                        color: accentGold.withOpacity(0.55),
+                                                        width: 1,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      "#$serialNumber",
+                                                      style: TextStyle(
+                                                        fontFamily: 'Cairo',
+                                                        fontSize: 11.5,
+                                                        fontWeight: FontWeight.w900,
+                                                        color: isDark ? accentGold : primaryColor,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                ],
+                                                Expanded(
+                                                  child: Text(
+                                                    student['studentName'],
+                                                    style: TextStyle(
+                                                      fontFamily: 'Cairo',
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 15,
+                                                      color: isDark ? Colors.white : deepNavy,
+                                                    ),
+                                                    overflow: TextOverflow.ellipsis,
                                                   ),
                                                 ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                            ],
-                                            Expanded(
-                                              child: Text(
-                                                student['studentName'],
-                                                style: TextStyle(
-                                                  fontFamily: 'Cairo',
-                                                  fontWeight: FontWeight.w800,
-                                                  fontSize: 15,
-                                                  color: isDark ? Colors.white : const Color(0xff1e293b),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Wrap(
+                                              spacing: 6,
+                                              runSpacing: 5,
+                                              children: [
+                                                _buildStatPill(
+                                                  icon: Icons.layers_rounded,
+                                                  label: "الجلسات: $total",
+                                                  color: isDark ? const Color(0xff93c5fd) : primaryColor,
                                                 ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
+                                                _buildStatPill(
+                                                  icon: Icons.check_circle_rounded,
+                                                  label: "حضور: $present",
+                                                  color: emeraldGreen,
+                                                ),
+                                                if (absent > 0)
+                                                  _buildStatPill(
+                                                    icon: Icons.cancel_rounded,
+                                                    label: "غياب: $absent",
+                                                    color: crimsonRed,
+                                                  ),
+                                              ],
                                             ),
                                           ],
                                         ),
-                                        const SizedBox(height: 8),
-                                        Wrap(
-                                          spacing: 6,
-                                          runSpacing: 4,
-                                          children: [
-                                            _buildPillBadge("الجلسات: ${student['totalSessions']}", isDark ? Colors.blue.shade300 : Colors.blue.shade800),
-                                            _buildPillBadge("حضور: ${student['presentCount']}", Colors.green.shade600),
-                                            if (student['absentCount'] > 0)
-                                              _buildPillBadge("غياب: ${student['absentCount']}", Colors.red.shade600),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  // 🚀 سهم التنقل
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: (isDark ? accentGold : softBlue).withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: (isDark ? accentGold : softBlue).withOpacity(0.3),
                                       ),
-                                    ),
-                                    child: Icon(
-                                      Icons.arrow_forward_ios_rounded,
-                                      color: isDark ? accentGold : softBlue,
-                                      size: 16,
-                                    ),
+
+                                      const SizedBox(width: 8),
+
+                                      // 🚀 زر فتح التفاصيل
+                                      Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? accentGold.withOpacity(0.14)
+                                              : primaryColor.withOpacity(0.08),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: accentGold.withOpacity(0.35),
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          Icons.arrow_forward_ios_rounded,
+                                          color: isDark ? accentGold : primaryColor,
+                                          size: 15,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                ),
+
+                                // 📊 شريط نسبة حضور رفيع وأنيق أسفل البطاقة
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(99),
+                                          child: LinearProgressIndicator(
+                                            value: attendanceRatio,
+                                            minHeight: 5,
+                                            backgroundColor: isDark
+                                                ? Colors.white.withOpacity(0.08)
+                                                : primaryColor.withOpacity(0.09),
+                                            valueColor: AlwaysStoppedAnimation<Color>(
+                                              attendanceRatio >= 0.75
+                                                  ? emeraldGreen
+                                                  : (attendanceRatio >= 0.5 ? accentGold : crimsonRed),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        "${(attendanceRatio * 100).round()}% حضور",
+                                        style: TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark ? Colors.white60 : Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -623,22 +731,33 @@ class CycleStudentsTabContent extends StatelessWidget {
     );
   }
 
-  Widget _buildPillBadge(String label, Color color) {
+  Widget _buildStatPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3), width: 0.8),
+        border: Border.all(color: color.withOpacity(0.28), width: 0.9),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontFamily: 'Cairo',
-          fontSize: 10.5,
-          fontWeight: FontWeight.bold,
-          color: color,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12.5, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 10.5,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -649,18 +768,24 @@ class CycleStudentsTabContent extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
-              color: (isDark ? accentGold : softBlue).withOpacity(0.1),
+              color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.85),
               shape: BoxShape.circle,
+              border: Border.all(color: accentGold.withOpacity(0.45), width: 1.2),
             ),
-            child: Icon(Icons.history_toggle_off_rounded, size: 55, color: isDark ? accentGold : softBlue),
+            child: Icon(Icons.folder_open_rounded, size: 52, color: accentGold),
           ),
           const SizedBox(height: 14),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: isDark ? Colors.white60 : Colors.black54, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 13.5,
+              color: isDark ? Colors.white70 : primaryColor,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),

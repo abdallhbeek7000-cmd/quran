@@ -1,12 +1,13 @@
+import 'dart:core';
 import 'dart:io';
-import 'dart:convert'; 
-import 'dart:ui'; 
+import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http; 
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/theme_provider.dart';
 import '../models/cycle_model.dart';
 import '../models/student_model.dart';
@@ -24,7 +25,8 @@ class AddStudentPage extends StatefulWidget {
   State<AddStudentPage> createState() => _AddStudentPageState();
 }
 
-class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProviderStateMixin {
+class _AddStudentPageState extends State<AddStudentPage>
+    with SingleTickerProviderStateMixin {
   final studentService = StudentService();
   final name = TextEditingController();
   final fatherName = TextEditingController();
@@ -38,17 +40,43 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
   DateTime? birthDate;
   DateTime? startDate;
   bool loading = false;
-  
+
   bool _isLoadingCycle = true;
   bool _isCycleActive = false;
   String _activeCycleId = '';
   String _activeCycleName = '';
 
   String studentType = "new";
-  
+
+  final List<String> _weekDays = const [
+    'السبت',
+    'الأحد',
+    'الإثنين',
+    'الثلاثاء',
+    'الأربعاء',
+    'الخميس',
+    'الجمعة',
+  ];
+
+  final List<String> _periodsList = const [
+    'عصراً',
+    'عالمغرب',
+    'عصراً وعالمغرب',
+  ];
+
+  final Map<String, String> _daySchedules = {};
+  String _bulkPeriod = "عصراً";
+
+  List<String> get _orderedSelectedDays {
+    final days = _daySchedules.keys.toList();
+    days.sort((a, b) => _weekDays.indexOf(a).compareTo(_weekDays.indexOf(b)));
+    return days;
+  }
+
   String selectedNationality = "سوري";
-  final List<Map<String, dynamic>> nationalities = [
-    {'name': 'سوري', 'flag': 'custom'}, 
+
+  final List<Map<String, String>> nationalities = [
+    {'name': 'سوري', 'flag': 'custom'},
     {'name': 'فلسطيني', 'flag': '🇵🇸'},
     {'name': 'أردني', 'flag': '🇯🇴'},
     {'name': 'لبناني', 'flag': '🇱🇧'},
@@ -62,16 +90,27 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
   ];
 
   final List<String> quickGradeSuggestions = const [
-    'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس',
-    'السابع', 'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'البكالوريا', 'جامعي'
+    'الأول',
+    'الثاني',
+    'الثالث',
+    'الرابع',
+    'الخامس',
+    'السادس',
+    'السابع',
+    'الثامن',
+    'التاسع',
+    'العاشر',
+    'الحادي عشر',
+    'البكالوريا',
+    'جامعي'
   ];
 
-  File? _selectedImage; 
-  XFile? _pickerFile; 
+  File? _selectedImage;
+  XFile? _pickerFile;
   final ImagePicker _picker = ImagePicker();
 
   final Color primaryColor = const Color(0xff2d3748);
-  final Color accentGold = const Color(0xffd4af37); 
+  final Color accentGold = const Color(0xffd4af37);
   final Color accentGlow = const Color(0xfff59e0b);
 
   late AnimationController _glowController;
@@ -79,7 +118,9 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _glowController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
+    _glowController = AnimationController(
+            vsync: this, duration: const Duration(seconds: 4))
+        ..repeat(reverse: true);
     _checkActiveCycle();
   }
 
@@ -97,7 +138,61 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
     super.dispose();
   }
 
-  // 🚀 التحقق من الدورة النشطة مرة واحدة فقط لمنع إعادة بناء الصفحة مع الكتابة
+  void _applyQuickDaysPreset(String preset) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _daySchedules.clear();
+      if (preset == 'all') {
+        for (final day in _weekDays) {
+          _daySchedules[day] = _bulkPeriod;
+        }
+      } else if (preset == 'three') {
+        for (final day in const ['السبت', 'الإثنين', 'الأربعاء']) {
+          _daySchedules[day] = _bulkPeriod;
+        }
+      } else if (preset == 'clear') {
+        _daySchedules.clear();
+      }
+    });
+  }
+
+  void _toggleDay(String day) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (_daySchedules.containsKey(day)) {
+        _daySchedules.remove(day);
+      } else {
+        _daySchedules[day] = _bulkPeriod;
+      }
+    });
+  }
+
+  void _setDayPeriod(String day, String period) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _daySchedules[day] = period;
+    });
+  }
+
+  void _cycleDayPeriod(String day) {
+    HapticFeedback.selectionClick();
+    final current = _daySchedules[day] ?? 'عصراً';
+    final nextIndex = (_periodsList.indexOf(current) + 1) % _periodsList.length;
+    setState(() {
+      _daySchedules[day] = _periodsList[nextIndex];
+    });
+  }
+
+  void _applyBulkPeriodToSelected() {
+    HapticFeedback.selectionClick();
+    if (_daySchedules.isEmpty) return;
+    setState(() {
+      for (final day in _daySchedules.keys.toList()) {
+        _daySchedules[day] = _bulkPeriod;
+      }
+    });
+  }
+
   Future<void> _checkActiveCycle() async {
     try {
       var cycleSnap = await FirebaseFirestore.instance
@@ -129,7 +224,7 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
     } catch (e) {
       if (mounted) {
         setState(() {
-          _isCycleActive = true; // الاعتماد على الدورة الممررة كبديل
+          _isCycleActive = true;
           _activeCycleId = widget.cycle.id;
           _activeCycleName = widget.cycle.name;
           _isLoadingCycle = false;
@@ -142,12 +237,12 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
     HapticFeedback.mediumImpact();
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 80, 
+      imageQuality: 80,
     );
     if (pickedFile != null) {
       setState(() {
-        _pickerFile = pickedFile; 
-        _selectedImage = File(pickedFile.path); 
+        _pickerFile = pickedFile;
+        _selectedImage = File(pickedFile.path);
       });
     }
   }
@@ -155,12 +250,14 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
   Future<String> _uploadStudentImageToCloudinary() async {
     if (_pickerFile == null) return '';
     try {
-      var url = Uri.parse('https://api.cloudinary.com/v1_1/dqsrrej2b/image/upload');
+      var url =
+          Uri.parse('https://api.cloudinary.com/v1_1/dqsrrej2b/image/upload');
       final bytes = await _pickerFile!.readAsBytes();
-      
+
       var request = http.MultipartRequest('POST', url)
         ..fields['upload_preset'] = 'rhjrrtqz'
-        ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: _pickerFile!.name));
+        ..files.add(http.MultipartFile.fromBytes('file', bytes,
+            filename: _pickerFile!.name));
 
       var response = await request.send();
       if (response.statusCode == 200) {
@@ -181,13 +278,16 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
         SnackBar(
           elevation: 10,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           backgroundColor: Colors.amber.shade900,
           content: const Row(
             children: [
               Icon(Icons.warning_amber_rounded, color: Colors.white),
               SizedBox(width: 10),
-              Text("يرجى إدخال اسم الطالب ورقم الهاتف كحد أدنى", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+              Text("يرجى إدخال اسم الطالب ورقم الهاتف كحد أدنى",
+                  style: TextStyle(
+                      fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -199,7 +299,8 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
 
     try {
       String serial = '';
-      String prefix = "${widget.cycle.year}${widget.cycle.cycleNumber.toString().padLeft(2, '0')}"; 
+      String prefix =
+          "${widget.cycle.year}${widget.cycle.cycleNumber.toString().padLeft(2, '0')}";
 
       var studentsSnapshot = await FirebaseFirestore.instance
           .collection('students')
@@ -207,7 +308,7 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
           .get(const GetOptions(source: Source.server));
 
       if (studentsSnapshot.docs.isEmpty) {
-        serial = "${prefix}01"; 
+        serial = "${prefix}01";
       } else {
         int maxSerial = 0;
         for (var doc in studentsSnapshot.docs) {
@@ -225,11 +326,16 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
         finalImageUrl = await _uploadStudentImageToCloudinary();
       }
 
+      final orderedDays = _orderedSelectedDays;
+      final Map<String, String> orderedScheduleMap = {
+        for (final day in orderedDays) day: _daySchedules[day] ?? 'عصراً',
+      };
+
       final student = StudentModel(
         id: '',
-        serial: serial, 
+        serial: serial,
         name: name.text.trim(),
-        nationality: selectedNationality, 
+        nationality: selectedNationality,
         fatherName: fatherName.text.trim(),
         motherName: motherName.text.trim(),
         phone: phone.text.trim(),
@@ -240,29 +346,40 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
         studentType: studentType,
         supervisorId: '',
         supervisorName: '',
-        cycleId: _activeCycleId, // 🎯 الحفظ التلقائي للـ cycleId الصحيح والدورة الجديدة
+        cycleId: _activeCycleId,
         cycleName: _activeCycleName,
         startMemorization: startDate?.toString() ?? '',
         memorizedPages: double.tryParse(memorizedPages.text) ?? 0,
-        imageUrl: finalImageUrl, 
+        imageUrl: finalImageUrl,
         archived: false,
         createdAt: DateTime.now().toString(),
       );
 
-      await studentService.addStudent(student);
+      final docRef = await FirebaseFirestore.instance.collection('students').add({
+        ...student.toMap(),
+        'attendanceDays': orderedDays,
+        'scheduleByDay': orderedScheduleMap,
+      });
+
+      if (docRef.id.isNotEmpty) {
+        await docRef.update({'id': docRef.id});
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           elevation: 10,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           backgroundColor: Colors.green.shade700,
           content: const Row(
             children: [
               Icon(Icons.check_circle_rounded, color: Colors.white),
               SizedBox(width: 10),
-              Text("تمت إضافة الطالب بنجاح ✨", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+              Text("تمت إضافة الطالب بنجاح ✨",
+                  style: TextStyle(
+                      fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -271,7 +388,10 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text("خطأ أثناء الإضافة: $e", style: const TextStyle(fontFamily: 'Cairo'))),
+        SnackBar(
+            backgroundColor: Colors.red,
+            content: Text("خطأ أثناء الإضافة: $e",
+                style: const TextStyle(fontFamily: 'Cairo'))),
       );
     } finally {
       if (mounted) setState(() => loading = false);
@@ -284,24 +404,24 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
       child: Container(
         width: 26,
         height: 18,
-        decoration: BoxDecoration(border: Border.all(color: Colors.white60, width: 0.5)),
+        decoration: BoxDecoration(
+            border: Border.all(color: Colors.white60, width: 0.5)),
         child: Column(
           children: [
-            Expanded(child: Container(color: const Color(0xff007A3D))), 
+            Expanded(child: Container(color: const Color(0xff007A3D))),
             Expanded(
-              child: Container(
-                color: Colors.white,
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Icon(Icons.star, color: Color(0xffCE1126), size: 5.5),
-                    Icon(Icons.star, color: Color(0xffCE1126), size: 5.5),
-                    Icon(Icons.star, color: Color(0xffCE1126), size: 5.5),
-                  ],
-                ),
-              )
-            ), 
-            Expanded(child: Container(color: Colors.black)), 
+                child: Container(
+              color: Colors.white,
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Icon(Icons.star, color: Color(0xffCE1126), size: 5.5),
+                  Icon(Icons.star, color: Color(0xffCE1126), size: 5.5),
+                  Icon(Icons.star, color: Color(0xffCE1126), size: 5.5),
+                ],
+              ),
+            )),
+            Expanded(child: Container(color: Colors.black)),
           ],
         ),
       ),
@@ -317,33 +437,45 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
     }
 
     return Scaffold(
-      extendBodyBehindAppBar: true, 
-      backgroundColor: isDarkMode ? const Color(0xff0a0f1d) : const Color(0xfff8fafc),
+      extendBodyBehindAppBar: true,
+      backgroundColor:
+          isDarkMode ? const Color(0xff0a0f1d) : const Color(0xfff8fafc),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.transparent, 
-        title: Text("إضافة طالب جديد", style: TextStyle(fontWeight: FontWeight.w800, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 19)),
-        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
+        backgroundColor: Colors.transparent,
+        title: Text("إضافة طالب جديد",
+            style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: isDarkMode ? Colors.white : primaryColor,
+                fontFamily: 'Cairo',
+                fontSize: 19)),
+        iconTheme:
+            IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         centerTitle: true,
       ),
       body: Stack(
         children: [
-          // 🎨 1. خلفية متدرجة حديثة
           Container(
             width: double.infinity,
             height: double.infinity,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isDarkMode
-                    ? [const Color(0xff0a0f1d), const Color(0xff151f32), const Color(0xff0a0f1d)]
-                    : [const Color(0xfff1f5f9), const Color(0xffe2e8f0), const Color(0xffcbd5e1)],
+                    ? [
+                        const Color(0xff0a0f1d),
+                        const Color(0xff151f32),
+                        const Color(0xff0a0f1d)
+                      ]
+                    : [
+                        const Color(0xfff1f5f9),
+                        const Color(0xffe2e8f0),
+                        const Color(0xffcbd5e1)
+                      ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
             ),
           ),
-          
-          // ✨ 2. هالات ضوئية عائمة خلف الكروت
           AnimatedBuilder(
             animation: _glowController,
             builder: (context, child) {
@@ -369,7 +501,8 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                       height: 320,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: accentGold.withOpacity(isDarkMode ? 0.12 : 0.18),
+                        color:
+                            accentGold.withOpacity(isDarkMode ? 0.12 : 0.18),
                       ),
                     ),
                   ),
@@ -377,8 +510,6 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
               );
             },
           ),
-
-          // 🏢 3. المحتوى الفعلي
           SafeArea(
             child: !_isCycleActive
                 ? Center(
@@ -388,24 +519,41 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.event_busy_rounded, size: 70, color: Colors.orangeAccent),
+                          const Icon(Icons.event_busy_rounded,
+                              size: 70, color: Colors.orangeAccent),
                           const SizedBox(height: 15),
-                          Text("لا توجد دورة نشطة حالياً 🚫", style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor)),
+                          Text("لا توجد دورة نشطة حالياً 🚫",
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDarkMode
+                                      ? Colors.white
+                                      : primaryColor)),
                           const SizedBox(height: 8),
-                          Text("تم إغلاق الدورة، لا يمكنك إضافة طلاب جدد حتى فتح دورة جديدة.", textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Cairo', fontSize: 12.5, color: isDarkMode ? Colors.white60 : Colors.black54)),
+                          Text(
+                              "تم إغلاق الدورة، لا يمكنك إضافة طلاب جدد حتى فتح دورة جديدة.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 12.5,
+                                  color: isDarkMode
+                                      ? Colors.white60
+                                      : Colors.black54)),
                         ],
                       ),
                     ),
                   )
                 : SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 10),
                     child: Column(
                       children: [
-                        // 🌟 1. هيدر اختيار الصورة الملكي
                         _buildCreativeCard(
                           isDarkMode: isDarkMode,
-                          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 24, horizontal: 20),
                           child: Center(
                             child: Column(
                               children: [
@@ -418,7 +566,12 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         gradient: SweepGradient(
-                                          colors: [accentGold, accentGlow, Colors.amberAccent, accentGold],
+                                          colors: [
+                                            accentGold,
+                                            accentGlow,
+                                            Colors.amberAccent,
+                                            accentGold
+                                          ],
                                         ),
                                         boxShadow: [
                                           BoxShadow(
@@ -431,10 +584,19 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                                     ),
                                     CircleAvatar(
                                       radius: 58,
-                                      backgroundColor: isDarkMode ? const Color(0xff151f32) : Colors.white,
-                                      backgroundImage: _selectedImage != null ? FileImage(_selectedImage!) : null,
+                                      backgroundColor: isDarkMode
+                                          ? const Color(0xff151f32)
+                                          : Colors.white,
+                                      backgroundImage: _selectedImage != null
+                                          ? FileImage(_selectedImage!)
+                                          : null,
                                       child: _selectedImage == null
-                                          ? Icon(Icons.person_add_alt_1_rounded, size: 50, color: isDarkMode ? Colors.white38 : Colors.grey[400])
+                                          ? Icon(
+                                              Icons.person_add_alt_1_rounded,
+                                              size: 50,
+                                              color: isDarkMode
+                                                  ? Colors.white38
+                                                  : Colors.grey[400])
                                           : null,
                                     ),
                                     Positioned(
@@ -444,18 +606,30 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                                         color: Colors.transparent,
                                         child: InkWell(
                                           onTap: _pickImage,
-                                          borderRadius: BorderRadius.circular(30),
+                                          borderRadius:
+                                              BorderRadius.circular(30),
                                           child: Container(
                                             padding: const EdgeInsets.all(10),
                                             decoration: BoxDecoration(
                                               shape: BoxShape.circle,
-                                              gradient: LinearGradient(colors: [accentGlow, accentGold]),
-                                              border: Border.all(color: Colors.white, width: 2.5),
+                                              gradient: LinearGradient(colors: [
+                                                accentGlow,
+                                                accentGold
+                                              ]),
+                                              border: Border.all(
+                                                  color: Colors.white,
+                                                  width: 2.5),
                                               boxShadow: [
-                                                BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10)
+                                                BoxShadow(
+                                                    color: Colors.black
+                                                        .withOpacity(0.3),
+                                                    blurRadius: 10)
                                               ],
                                             ),
-                                            child: const Icon(Icons.camera_alt_rounded, size: 18, color: Colors.white),
+                                            child: const Icon(
+                                                Icons.camera_alt_rounded,
+                                                size: 18,
+                                                color: Colors.white),
                                           ),
                                         ),
                                       ),
@@ -464,43 +638,60 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
-                                  name.text.isEmpty ? "اسم الطالب الجديد" : name.text,
+                                  name.text.isEmpty
+                                      ? "اسم الطالب الجديد"
+                                      : name.text,
                                   style: TextStyle(
                                     fontFamily: 'Cairo',
                                     fontWeight: FontWeight.bold,
                                     fontSize: 17,
-                                    color: isDarkMode ? Colors.white : primaryColor,
+                                    color:
+                                        isDarkMode ? Colors.white : primaryColor,
                                   ),
                                 ),
                               ],
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 16),
-
-                        // 📝 2. بطاقة نوع التسجيل
                         _buildSectionHeader(
                           title: "فئة التسجيل",
                           icon: Icons.category_rounded,
                           isDarkMode: isDarkMode,
                           child: DropdownButtonFormField<String>(
                             value: studentType,
-                            dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13.5),
-                            decoration: _buildInputDecoration("نوع الطالب بالحلقة", Icons.badge_outlined, isDarkMode),
+                            dropdownColor: isDarkMode
+                                ? const Color(0xff1e293b)
+                                : Colors.white,
+                            style: TextStyle(
+                                color: isDarkMode ? Colors.white : Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Cairo',
+                                fontSize: 13.5),
+                            decoration: _buildInputDecoration(
+                                "نوع الطالب بالحلقة",
+                                Icons.badge_outlined,
+                                isDarkMode),
                             items: const [
-                              DropdownMenuItem(value: "new", child: Text("طالب جديد")),
-                              DropdownMenuItem(value: "old", child: Text("طالب قديم")),
-                              DropdownMenuItem(value: "completed", child: Text("طالب خاتم لكتاب الله 👑")),
+                              DropdownMenuItem(
+                                  value: "new", child: Text("طالب جديد")),
+                              DropdownMenuItem(
+                                  value: "old", child: Text("طالب قديم")),
+                              DropdownMenuItem(
+                                  value: "completed",
+                                  child: Text("طالب خاتم لكتاب الله 👑")),
                             ],
                             onChanged: (v) => setState(() => studentType = v!),
                           ),
                         ),
-
                         const SizedBox(height: 16),
-
-                        // 👤 3. البيانات الشخصية
+                        _buildSectionHeader(
+                          title: "جدول الدوام وتخصيص كل يوم",
+                          icon: Icons.calendar_month_rounded,
+                          isDarkMode: isDarkMode,
+                          child: _buildAttendanceScheduleSection(isDarkMode),
+                        ),
+                        const SizedBox(height: 16),
                         _buildSectionHeader(
                           title: "المعلومات الشخصية",
                           icon: Icons.person_rounded,
@@ -509,69 +700,108 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                             children: [
                               TextField(
                                 controller: name,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                decoration: _buildInputDecoration("اسم الطالب الكامل", Icons.account_circle_outlined, isDarkMode),
+                                style: TextStyle(
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration(
+                                    "اسم الطالب الكامل",
+                                    Icons.account_circle_outlined,
+                                    isDarkMode),
                                 onChanged: (_) => setState(() {}),
                               ),
                               const SizedBox(height: 14),
-
                               DropdownButtonFormField<String>(
                                 value: selectedNationality,
-                                dropdownColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                                decoration: _buildInputDecoration("الجنسية", Icons.flag_outlined, isDarkMode),
+                                dropdownColor: isDarkMode
+                                    ? const Color(0xff1e293b)
+                                    : Colors.white,
+                                style: TextStyle(
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black,
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.bold),
+                                decoration: _buildInputDecoration(
+                                    "الجنسية",
+                                    Icons.flag_outlined,
+                                    isDarkMode),
                                 items: nationalities.map((nat) {
                                   return DropdownMenuItem<String>(
                                     value: nat['name'],
                                     child: Row(
                                       children: [
-                                        nat['flag'] == 'custom' 
-                                            ? _buildSyrianRevolutionFlag() 
-                                            : Text(nat['flag'], style: const TextStyle(fontSize: 18)),
+                                        nat['flag'] == 'custom'
+                                            ? _buildSyrianRevolutionFlag()
+                                            : Text(nat['flag'] ?? '',
+                                                style: const TextStyle(
+                                                    fontSize: 18)),
                                         const SizedBox(width: 10),
-                                        Text(nat['name']),
+                                        Text(nat['name'] ?? ''),
                                       ],
                                     ),
                                   );
                                 }).toList(),
-                                onChanged: (v) => setState(() => selectedNationality = v!),
+                                onChanged: (v) =>
+                                    setState(() => selectedNationality = v!),
                               ),
                               const SizedBox(height: 14),
-
                               Row(
                                 children: [
                                   Expanded(
                                     child: TextField(
                                       controller: fatherName,
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                      decoration: _buildInputDecoration("اسم الأب", Icons.face_rounded, isDarkMode),
+                                      style: TextStyle(
+                                          color: isDarkMode
+                                              ? Colors.white
+                                              : Colors.black,
+                                          fontWeight: FontWeight.bold,
+                                          fontFamily: 'Cairo'),
+                                      decoration: _buildInputDecoration(
+                                          "اسم الأب",
+                                          Icons.face_rounded,
+                                          isDarkMode),
                                     ),
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: TextField(
                                       controller: motherName,
-                                      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                      decoration: _buildInputDecoration("اسم الأم", Icons.face_3_rounded, isDarkMode),
+                                      style: TextStyle(
+                                          color: isDarkMode
+                                              ? Colors.white
+                                              : Colors.black,
+                                          fontWeight: FontWeight.bold,
+                                          fontFamily: 'Cairo'),
+                                      decoration: _buildInputDecoration(
+                                          "اسم الأم",
+                                          Icons.face_3_rounded,
+                                          isDarkMode),
                                     ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 14),
-
                               TextField(
                                 controller: phone,
                                 keyboardType: TextInputType.phone,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                decoration: _buildInputDecoration("رقم هاتف ولي الأمر", Icons.phone_android_rounded, isDarkMode),
+                                style: TextStyle(
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration(
+                                    "رقم هاتف ولي الأمر",
+                                    Icons.phone_android_rounded,
+                                    isDarkMode),
                               ),
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 16),
-
-                        // 🏫 4. قسم الدراسة والصف
                         _buildSectionHeader(
                           title: "الدراسة والسكن",
                           icon: Icons.school_rounded,
@@ -581,14 +811,27 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                             children: [
                               TextField(
                                 controller: schoolGrade,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                decoration: _buildInputDecoration("الصف الدراسي (كتابة حرّة)", Icons.edit_note_rounded, isDarkMode),
+                                style: TextStyle(
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration(
+                                    "الصف الدراسي (كتابة حرّة)",
+                                    Icons.edit_note_rounded,
+                                    isDarkMode),
                               ),
                               const SizedBox(height: 12),
-
-                              Text("اختيار سريع للصف:", style: TextStyle(fontSize: 11.5, color: isDarkMode ? Colors.white60 : Colors.black54, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                              Text("اختيار سريع للصف:",
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: isDarkMode
+                                          ? Colors.white60
+                                          : Colors.black54,
+                                      fontFamily: 'Cairo',
+                                      fontWeight: FontWeight.bold)),
                               const SizedBox(height: 8),
-
                               SizedBox(
                                 height: 42,
                                 child: ListView.builder(
@@ -596,17 +839,34 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                                   physics: const BouncingScrollPhysics(),
                                   itemCount: quickGradeSuggestions.length,
                                   itemBuilder: (context, index) {
-                                    final suggestion = quickGradeSuggestions[index];
-                                    final isSelected = schoolGrade.text.trim() == suggestion;
+                                    final suggestion =
+                                        quickGradeSuggestions[index];
+                                    final isSelected =
+                                        schoolGrade.text.trim() == suggestion;
                                     return Padding(
                                       padding: const EdgeInsets.only(left: 8),
                                       child: ChoiceChip(
-                                        label: Text(suggestion, style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: isSelected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87), fontWeight: isSelected ? FontWeight.bold : FontWeight.w600)),
+                                        label: Text(suggestion,
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontFamily: 'Cairo',
+                                                color: isSelected
+                                                    ? Colors.white
+                                                    : (isDarkMode
+                                                        ? Colors.white70
+                                                        : Colors.black87),
+                                                fontWeight: isSelected
+                                                    ? FontWeight.bold
+                                                    : FontWeight.w600)),
                                         selected: isSelected,
                                         selectedColor: accentGlow,
-                                        backgroundColor: isDarkMode ? const Color(0xff1e293b) : const Color(0xffe2e8f0),
+                                        backgroundColor: isDarkMode
+                                            ? const Color(0xff1e293b)
+                                            : const Color(0xffe2e8f0),
                                         elevation: isSelected ? 4 : 0,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12)),
                                         onSelected: (bool selected) {
                                           if (selected) {
                                             setState(() {
@@ -620,26 +880,35 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                                 ),
                               ),
                               const SizedBox(height: 14),
-
                               TextField(
                                 controller: address,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                decoration: _buildInputDecoration("مكان السكن / العنوان", Icons.location_on_rounded, isDarkMode),
+                                style: TextStyle(
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration(
+                                    "مكان السكن / العنوان",
+                                    Icons.location_on_rounded,
+                                    isDarkMode),
                               ),
                               const SizedBox(height: 14),
-
                               TextField(
                                 controller: fatherJob,
-                                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                decoration: _buildInputDecoration("عمل الأب", Icons.work_rounded, isDarkMode),
+                                style: TextStyle(
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo'),
+                                decoration: _buildInputDecoration("عمل الأب",
+                                    Icons.work_rounded, isDarkMode),
                               ),
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 16),
-
-                        // 📅 5. قسم التواريخ ومستوى الحفظ
                         _buildSectionHeader(
                           title: "التواريخ ومستوى الحفظ",
                           icon: Icons.history_edu_rounded,
@@ -650,30 +919,50 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                                 TextField(
                                   controller: memorizedPages,
                                   keyboardType: TextInputType.number,
-                                  style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                                  decoration: _buildInputDecoration("عدد الصفحات المحفوظة مسبقاً", Icons.menu_book_rounded, isDarkMode),
+                                  style: TextStyle(
+                                      color: isDarkMode
+                                          ? Colors.white
+                                          : Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                      fontFamily: 'Cairo'),
+                                  decoration: _buildInputDecoration(
+                                      "عدد الصفحات المحفوظة مسبقاً",
+                                      Icons.menu_book_rounded,
+                                      isDarkMode),
                                 ),
                                 const SizedBox(height: 14),
                               ],
                               Row(
                                 children: [
-                                  Expanded(child: _buildDatePickerCard(
-                                    label: birthDate == null ? "تاريخ الميلاد" : birthDate.toString().split(" ")[0],
+                                  Expanded(
+                                      child: _buildDatePickerCard(
+                                    label: birthDate == null
+                                        ? "تاريخ الميلاد"
+                                        : birthDate.toString().split(" ")[0],
                                     icon: Icons.cake_rounded,
                                     isDarkMode: isDarkMode,
                                     onTap: () async {
-                                      final picked = await _selectDate(context, DateTime(1990), isDarkMode);
-                                      if (picked != null) setState(() => birthDate = picked);
+                                      final picked = await _selectDate(
+                                          context, DateTime(1990), isDarkMode);
+                                      if (picked != null) {
+                                        setState(() => birthDate = picked);
+                                      }
                                     },
                                   )),
                                   const SizedBox(width: 10),
-                                  Expanded(child: _buildDatePickerCard(
-                                    label: startDate == null ? "بدء الحفظ" : startDate.toString().split(" ")[0],
+                                  Expanded(
+                                      child: _buildDatePickerCard(
+                                    label: startDate == null
+                                        ? "بدء الحفظ"
+                                        : startDate.toString().split(" ")[0],
                                     icon: Icons.play_arrow_rounded,
                                     isDarkMode: isDarkMode,
                                     onTap: () async {
-                                      final picked = await _selectDate(context, DateTime(2010), isDarkMode);
-                                      if (picked != null) setState(() => startDate = picked);
+                                      final picked = await _selectDate(
+                                          context, DateTime(2010), isDarkMode);
+                                      if (picked != null) {
+                                        setState(() => startDate = picked);
+                                      }
                                     },
                                   )),
                                 ],
@@ -681,10 +970,7 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 28),
-
-                        // 🚀 6. زر الحفظ
                         SizedBox(
                           width: double.infinity,
                           height: 58,
@@ -694,19 +980,26 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                               backgroundColor: Colors.transparent,
                               shadowColor: Colors.transparent,
                               padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20)),
                             ),
                             child: Ink(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
-                                  colors: isDarkMode 
+                                  colors: isDarkMode
                                       ? [accentGlow, accentGold]
-                                      : [const Color(0xff3b82f6), const Color(0xff1d4ed8)],
+                                      : [
+                                          const Color(0xff3b82f6),
+                                          const Color(0xff1d4ed8)
+                                        ],
                                 ),
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: (isDarkMode ? accentGlow : Colors.blue).withOpacity(0.4),
+                                    color: (isDarkMode
+                                            ? accentGlow
+                                            : Colors.blue)
+                                        .withOpacity(0.4),
                                     blurRadius: 18,
                                     offset: const Offset(0, 6),
                                   )
@@ -715,15 +1008,22 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
                               child: Container(
                                 alignment: Alignment.center,
                                 child: loading
-                                    ? const CircularProgressIndicator(color: Colors.white)
+                                    ? const CircularProgressIndicator(
+                                        color: Colors.white)
                                     : const Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
-                                          Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 22),
+                                          Icon(Icons.person_add_alt_1_rounded,
+                                              color: Colors.white, size: 22),
                                           SizedBox(width: 10),
                                           Text(
                                             "حفظ وإضافة الطالب",
-                                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
+                                            style: TextStyle(
+                                                fontSize: 17,
+                                                fontWeight: FontWeight.bold,
+                                                fontFamily: 'Cairo',
+                                                color: Colors.white),
                                           ),
                                         ],
                                       ),
@@ -741,7 +1041,360 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
     );
   }
 
-  Widget _buildCreativeCard({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero}) {
+  Widget _buildAttendanceScheduleSection(bool isDarkMode) {
+    final selectedDays = _orderedSelectedDays;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              "اختيار سريع للأيام:",
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Cairo',
+                color: isDarkMode ? Colors.white60 : Colors.black54,
+              ),
+            ),
+            const Spacer(),
+            _buildPresetChip(
+              label: "3 أيام",
+              isDarkMode: isDarkMode,
+              onTap: () => _applyQuickDaysPreset('three'),
+            ),
+            const SizedBox(width: 6),
+            _buildPresetChip(
+              label: "كل الأسبوع",
+              isDarkMode: isDarkMode,
+              onTap: () => _applyQuickDaysPreset('all'),
+            ),
+            const SizedBox(width: 6),
+            _buildPresetChip(
+              label: "مسح",
+              isDarkMode: isDarkMode,
+              onTap: () => _applyQuickDaysPreset('clear'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _weekDays.map((day) {
+            final bool isSelected = _daySchedules.containsKey(day);
+            return InkWell(
+              onTap: () => _toggleDay(day),
+              borderRadius: BorderRadius.circular(14),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? accentGlow
+                      : (isDarkMode
+                          ? Colors.black.withOpacity(0.25)
+                          : Colors.white.withOpacity(0.6)),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isSelected
+                        ? accentGlow
+                        : (isDarkMode ? Colors.white12 : Colors.white70),
+                    width: 1.3,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isSelected) ...[
+                      const Icon(Icons.check_rounded,
+                          size: 15, color: Colors.white),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(
+                      day,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12.5,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.w600,
+                        color: isSelected
+                            ? Colors.white
+                            : (isDarkMode ? Colors.white70 : Colors.black87),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.2)
+                : Colors.white.withOpacity(0.45),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDarkMode ? Colors.white10 : Colors.white70,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    "فترة للأيام الجديدة / السريعة:",
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Cairo',
+                      color: isDarkMode ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (selectedDays.isNotEmpty)
+                    InkWell(
+                      onTap: _applyBulkPeriodToSelected,
+                      borderRadius: BorderRadius.circular(10),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        child: Text(
+                          "تطبيق على المحددة",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Cairo',
+                            color: isDarkMode ? accentGold : primaryColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: _periodsList.map((period) {
+                  final bool isSelected = _bulkPeriod == period;
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                          left: period == 'عصراً وعالمغرب' ? 0 : 6),
+                      child: InkWell(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _bulkPeriod = period);
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 8, horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? (isDarkMode ? accentGold : primaryColor)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected
+                                  ? (isDarkMode ? accentGold : primaryColor)
+                                  : (isDarkMode
+                                      ? Colors.white12
+                                      : Colors.black12),
+                            ),
+                          ),
+                          child: Text(
+                            period,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDarkMode
+                                      ? Colors.white70
+                                      : Colors.black87),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (selectedDays.isEmpty)
+          Text(
+            "اختر يوماً أو أكثر لتخصيص فترته (عصراً، عالمغرب، أو عصراً وعالمغرب).",
+            style: TextStyle(
+              fontSize: 11.5,
+              fontFamily: 'Cairo',
+              color: isDarkMode ? Colors.white54 : Colors.black54,
+            ),
+          )
+        else ...[
+          Text(
+            "تخصيص فترة كل يوم لحاله:",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Cairo',
+              color: isDarkMode ? accentGold : primaryColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...selectedDays.map((day) {
+            final currentPeriod = _daySchedules[day] ?? 'عصراً';
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? Colors.black.withOpacity(0.25)
+                    : Colors.white.withOpacity(0.65),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDarkMode ? Colors.white12 : Colors.white70,
+                ),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 68,
+                    child: Text(
+                      day,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: isDarkMode ? Colors.white : primaryColor,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: _periodsList.map((period) {
+                          final active = currentPeriod == period;
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: InkWell(
+                              onTap: () => _setDayPeriod(day, period),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 9, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: active
+                                      ? accentGlow
+                                      : (isDarkMode
+                                          ? Colors.white.withOpacity(0.05)
+                                          : Colors.white.withOpacity(0.5)),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: active
+                                        ? accentGlow
+                                        : (isDarkMode
+                                            ? Colors.white12
+                                            : Colors.black12),
+                                  ),
+                                ),
+                                child: Text(
+                                  period,
+                                  style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 11,
+                                    fontWeight: active
+                                        ? FontWeight.bold
+                                        : FontWeight.w600,
+                                    color: active
+                                        ? Colors.white
+                                        : (isDarkMode
+                                            ? Colors.white70
+                                            : Colors.black87),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: "تبديل الفترة",
+                    icon: Icon(
+                      Icons.sync_rounded,
+                      size: 18,
+                      color: isDarkMode ? accentGold : primaryColor,
+                    ),
+                    onPressed: () => _cycleDayPeriod(day),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: "إزالة اليوم",
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: Colors.redAccent,
+                    ),
+                    onPressed: () => _toggleDay(day),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPresetChip({
+    required String label,
+    required bool isDarkMode,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.35),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 10.5,
+            fontWeight: FontWeight.bold,
+            color: isDarkMode ? accentGold : primaryColor,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreativeCard(
+      {required Widget child,
+      required bool isDarkMode,
+      EdgeInsetsGeometry padding = EdgeInsets.zero}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
@@ -749,10 +1402,14 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.65),
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white.withOpacity(0.65),
             borderRadius: BorderRadius.circular(28),
             border: Border.all(
-              color: isDarkMode ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.8),
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.12)
+                  : Colors.white.withOpacity(0.8),
               width: 1.5,
             ),
             boxShadow: [
@@ -769,7 +1426,11 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
     );
   }
 
-  Widget _buildSectionHeader({required String title, required IconData icon, required Widget child, required bool isDarkMode}) {
+  Widget _buildSectionHeader(
+      {required String title,
+      required IconData icon,
+      required Widget child,
+      required bool isDarkMode}) {
     return _buildCreativeCard(
       isDarkMode: isDarkMode,
       padding: const EdgeInsets.all(20),
@@ -781,65 +1442,100 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: (isDarkMode ? accentGold : primaryColor).withOpacity(0.12),
+                  color: (isDarkMode ? accentGold : primaryColor)
+                      .withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
+                child: Icon(icon,
+                    color: isDarkMode ? accentGold : primaryColor, size: 20),
               ),
               const SizedBox(width: 10),
-              Text(title, style: TextStyle(color: isDarkMode ? Colors.white : primaryColor, fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo')),
+              Text(title,
+                  style: TextStyle(
+                      color: isDarkMode ? Colors.white : primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      fontFamily: 'Cairo')),
             ],
           ),
-          Divider(height: 24, color: isDarkMode ? Colors.white12 : Colors.black12),
+          Divider(
+              height: 24, color: isDarkMode ? Colors.white12 : Colors.black12),
           child,
         ],
       ),
     );
   }
 
-  InputDecoration _buildInputDecoration(String label, IconData icon, bool isDarkMode) {
+  InputDecoration _buildInputDecoration(
+      String label, IconData icon, bool isDarkMode) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: isDarkMode ? Colors.white60 : Colors.black54, fontWeight: FontWeight.w600, fontSize: 12.5, fontFamily: 'Cairo'),
-      prefixIcon: Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
+      labelStyle: TextStyle(
+          color: isDarkMode ? Colors.white60 : Colors.black54,
+          fontWeight: FontWeight.w600,
+          fontSize: 12.5,
+          fontFamily: 'Cairo'),
+      prefixIcon:
+          Icon(icon, color: isDarkMode ? accentGold : primaryColor, size: 20),
       filled: true,
-      fillColor: isDarkMode ? Colors.black.withOpacity(0.25) : Colors.white.withOpacity(0.5), 
+      fillColor: isDarkMode
+          ? Colors.black.withOpacity(0.25)
+          : Colors.white.withOpacity(0.5),
       contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16), 
-        borderSide: BorderSide(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(
+            color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16), 
-        borderSide: BorderSide(color: isDarkMode ? accentGold : primaryColor, width: 1.8),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(
+            color: isDarkMode ? accentGold : primaryColor, width: 1.8),
       ),
     );
   }
 
-  Widget _buildDatePickerCard({required String label, required IconData icon, required bool isDarkMode, required VoidCallback onTap}) {
+  Widget _buildDatePickerCard(
+      {required String label,
+      required IconData icon,
+      required bool isDarkMode,
+      required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
-          color: isDarkMode ? Colors.black.withOpacity(0.25) : Colors.white.withOpacity(0.5),
-          border: Border.all(color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
+          color: isDarkMode
+              ? Colors.black.withOpacity(0.25)
+              : Colors.white.withOpacity(0.5),
+          border: Border.all(
+              color: isDarkMode ? Colors.white12 : Colors.white70, width: 1.2),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: isDarkMode ? accentGold : primaryColor),
+            Icon(icon,
+                size: 20, color: isDarkMode ? accentGold : primaryColor),
             const SizedBox(width: 8),
-            Expanded(child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white70 : Colors.black87, fontFamily: 'Cairo'), overflow: TextOverflow.ellipsis)),
+            Expanded(
+                child: Text(label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isDarkMode ? Colors.white70 : Colors.black87,
+                        fontFamily: 'Cairo'),
+                    overflow: TextOverflow.ellipsis)),
           ],
         ),
       ),
     );
   }
 
-  Future<DateTime?> _selectDate(BuildContext context, DateTime initial, bool isDarkMode) async {
+  Future<DateTime?> _selectDate(
+      BuildContext context, DateTime initial, bool isDarkMode) async {
     return await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
@@ -854,7 +1550,8 @@ class _AddStudentPageState extends State<AddStudentPage> with SingleTickerProvid
               surface: isDarkMode ? const Color(0xff1e293b) : Colors.white,
               onSurface: isDarkMode ? Colors.white : Colors.black,
             ),
-            dialogBackgroundColor: isDarkMode ? const Color(0xff1e293b) : Colors.white,
+            dialogBackgroundColor:
+                isDarkMode ? const Color(0xff1e293b) : Colors.white,
           ),
           child: child!,
         );

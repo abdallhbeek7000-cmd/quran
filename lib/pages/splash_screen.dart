@@ -28,7 +28,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     // ⏳ إعداد أنيميشن سريع وخفيف جُداً لا يرهق معالج الهاتف
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1000),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -41,12 +41,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    // 🚀 الانتقال السريع بعد 2 ثانية فقط لراحة المستخدم
+    // 🚀 الانتقال السريع بعد 1.2 ثانية لراحة المستخدم وتنسيق فتح الإشعارات
     _navigateToNextScreen();
   }
 
   Future<void> _navigateToNextScreen() async {
-    await Future.delayed(const Duration(milliseconds: 2000));
+    await Future.delayed(const Duration(milliseconds: 1200));
 
     final prefs = await SharedPreferences.getInstance();
     final bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
@@ -62,7 +62,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     // 🚀 انتقال خفيف وسريع بدون استهلاك الذاكرة
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 400),
+        transitionDuration: const Duration(milliseconds: 350),
         pageBuilder: (context, animation, secondaryAnimation) => targetPage,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);

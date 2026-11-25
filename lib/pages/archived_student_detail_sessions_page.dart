@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -24,26 +23,11 @@ class ArchivedStudentDetailSessionsPage extends StatefulWidget {
   State<ArchivedStudentDetailSessionsPage> createState() => _ArchivedStudentDetailSessionsPageState();
 }
 
-class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetailSessionsPage> with SingleTickerProviderStateMixin {
-  final Color primaryNavy = const Color(0xff1e293b);
+class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetailSessionsPage> {
+  final Color primaryNavy = const Color(0xff0f172a);
   final Color primaryColor = const Color(0xff425c75);
   final Color accentGold = const Color(0xffd4af37);
-
-  late AnimationController _bgController;
-  late Animation<double> _bgAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
-    _bgAnimation = Tween<double>(begin: -10, end: 20).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOutSine));
-  }
-
-  @override
-  void dispose() {
-    _bgController.dispose();
-    super.dispose();
-  }
+  final Color softGold = const Color(0xffccb273);
 
   DateTime _parseDate(String dateStr) {
     try {
@@ -76,23 +60,35 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
 
   String _getJuzName(int juzNum) {
     switch (juzNum) {
-      case 30: return "جزء عمَّ 👶";
-      case 29: return "جزء تبارك 📖";
-      case 28: return "قد سمع 📜";
-      case 27: return "الذاريات 🌟";
-      case 26: return "الأحقاف ✨";
-      default: return "";
+      case 30:
+        return "جزء عمَّ";
+      case 29:
+        return "جزء تبارك";
+      case 28:
+        return "قد سمع";
+      case 27:
+        return "الذاريات";
+      case 26:
+        return "الأحقاف";
+      default:
+        return "";
     }
   }
 
   Color _getRatingColor(String? rating) {
     switch (rating) {
-      case "ممتاز": return Colors.green;
-      case "جيد جداً": return Colors.teal;
-      case "جيد": return Colors.orange;
-      case "مقبول": return Colors.blueGrey;
-      case "ضعيف": return Colors.red;
-      default: return Colors.blue;
+      case "ممتاز":
+        return const Color(0xff16a34a);
+      case "جيد جداً":
+        return const Color(0xff0d9488);
+      case "جيد":
+        return const Color(0xffd97706);
+      case "مقبول":
+        return const Color(0xff475569);
+      case "ضعيف":
+        return const Color(0xffef4444);
+      default:
+        return primaryColor;
     }
   }
 
@@ -102,52 +98,79 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: isDarkMode ? const Color(0xff121212) : const Color(0xfff1f5f9),
+      backgroundColor: isDarkMode ? const Color(0xff090d16) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
+        centerTitle: true,
+        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
         title: Column(
           children: [
-            Text(widget.studentName, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', fontSize: 16)),
-            Text("أرشيف: ${widget.cycleName}", style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDarkMode ? accentGold : primaryNavy.withOpacity(0.8))),
+            Text(
+              widget.studentName,
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                color: isDarkMode ? Colors.white : primaryColor,
+                fontFamily: 'Cairo',
+                fontSize: 16.5,
+              ),
+            ),
+            Text(
+              "أرشيف: ${widget.cycleName}",
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+                color: isDarkMode ? softGold : primaryColor.withOpacity(0.75),
+              ),
+            ),
           ],
         ),
-        iconTheme: IconThemeData(color: isDarkMode ? Colors.white : primaryColor),
-        centerTitle: true,
       ),
       body: Stack(
         children: [
-          Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDarkMode
-                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
-                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          RepaintBoundary(
+            child: Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode
+                      ? [const Color(0xff090d16), const Color(0xff111b2e), const Color(0xff0b1120)]
+                      : [const Color(0xfff4f7fb), const Color(0xffe9eff6), const Color(0xfff7f2e4)],
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                ),
               ),
             ),
           ),
-          AnimatedBuilder(
-            animation: _bgAnimation,
-            builder: (context, child) {
-              return Stack(
-                children: [
-                  Positioned(
-                    top: -20 + _bgAnimation.value,
-                    left: -50 - (_bgAnimation.value / 2),
-                    child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? accentGold.withOpacity(0.08) : accentGold.withOpacity(0.12))),
-                  ),
-                  Positioned(
-                    bottom: 100 - _bgAnimation.value,
-                    right: -60 + _bgAnimation.value,
-                    child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: isDarkMode ? primaryColor.withOpacity(0.15) : primaryColor.withOpacity(0.2))),
-                  ),
-                ],
-              );
-            },
+          Positioned(
+            top: -50,
+            right: -50,
+            child: IgnorePointer(
+              child: Container(
+                width: 240,
+                height: 240,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: primaryColor.withOpacity(isDarkMode ? 0.20 : 0.08),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 90,
+            left: -70,
+            child: IgnorePointer(
+              child: Container(
+                width: 270,
+                height: 270,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accentGold.withOpacity(isDarkMode ? 0.09 : 0.13),
+                ),
+              ),
+            ),
           ),
           SafeArea(
             child: FutureBuilder<DocumentSnapshot>(
@@ -162,7 +185,11 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
                 return StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance.collection('sessions').snapshots(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                    if (!snapshot.hasData) {
+                      return Center(
+                        child: CircularProgressIndicator(color: accentGold, strokeWidth: 2.5),
+                      );
+                    }
 
                     final allDocs = snapshot.data!.docs;
 
@@ -203,8 +230,9 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
                     });
 
                     return ListView.builder(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 30),
+                      physics: const ClampingScrollPhysics(),
+                      cacheExtent: 500,
+                      padding: const EdgeInsets.only(left: 18, right: 18, top: 8, bottom: 30),
                       itemCount: filteredDocs.length,
                       itemBuilder: (context, index) {
                         final session = filteredDocs[index];
@@ -231,7 +259,7 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
 
     String sessionDateRaw = data['date'] ?? '';
     String dayName = _getArabicDayName(sessionDateRaw);
-    String displayDate = dayName.isNotEmpty ? "$dayName، $sessionDateRaw" : sessionDateRaw;
+    String displayDate = dayName.isNotEmpty ? "$dayName • $sessionDateRaw" : sessionDateRaw;
 
     String actualCreatedAt = data['actualCreatedAt']?.toString() ?? '';
     String actualEditedAt = data['actualEditedAt']?.toString() ?? '';
@@ -263,35 +291,52 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
     List<Widget> activeBoxes = [];
     if (!didNotRecite && !isAbsent && !isExam) {
       if (isCompletedStudent && fRev.isNotEmpty) {
-        activeBoxes.add(_buildGridInfoBox(Icons.verified_user_rounded, "مراجعة الختمة الشاملة", fRev, isDarkMode ? Colors.tealAccent : Colors.teal, isDarkMode));
+        activeBoxes.add(_buildGridInfoBox(Icons.verified_user_rounded, "مراجعة الختمة الشاملة", fRev, const Color(0xff0d9488), isDarkMode));
       } else {
-        if (nMemo.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.star_rounded, "الحفظ الجديد", nMemo, Colors.amber, isDarkMode));
-        if (nRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.menu_book_rounded, "مراجعة جديد", nRev, isDarkMode ? Colors.tealAccent : Colors.teal, isDarkMode));
-        if (fRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.history_toggle_off_rounded, "مراجعة قديم", fRev, Colors.blueGrey, isDarkMode));
+        if (nMemo.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.star_rounded, "الحفظ الجديد", nMemo, accentGold, isDarkMode));
+        if (nRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.menu_book_rounded, "مراجعة جديد", nRev, const Color(0xff0d9488), isDarkMode));
+        if (fRev.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.history_toggle_off_rounded, "مراجعة قديم", fRev, primaryColor, isDarkMode));
       }
-      if (sight.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.chrome_reader_mode_rounded, "قراءة نظراً", sight, Colors.indigoAccent, isDarkMode));
+      if (sight.isNotEmpty) activeBoxes.add(_buildGridInfoBox(Icons.chrome_reader_mode_rounded, "قراءة نظراً", sight, const Color(0xff6366f1), isDarkMode));
     }
 
     String juzChipTitle = _getJuzName(selectedJuz);
+    final Color headerAccent = isAbsent
+        ? const Color(0xffef4444)
+        : (isExam ? const Color(0xff0d9488) : (didNotRecite ? const Color(0xff64748b) : accentGold));
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: 18),
       child: _buildGlassContainer(
         isDarkMode: isDarkMode,
-        customBorderColor: isAbsent ? Colors.red.withOpacity(0.4) : (isExam ? Colors.teal.withOpacity(0.4) : (didNotRecite ? Colors.blueGrey.withOpacity(0.4) : null)),
+        customBorderColor: isAbsent
+            ? const Color(0xffef4444).withOpacity(0.45)
+            : (isExam
+                ? const Color(0xff0d9488).withOpacity(0.45)
+                : (didNotRecite
+                    ? const Color(0xff64748b).withOpacity(0.4)
+                    : accentGold.withOpacity(isDarkMode ? 0.25 : 0.35))),
         child: Column(
           children: [
+            Container(
+              height: 4,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [headerAccent, headerAccent.withOpacity(0.35)],
+                ),
+              ),
+            ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
                 color: isAbsent
-                    ? Colors.red.withOpacity(isDarkMode ? 0.2 : 0.15)
+                    ? const Color(0xffef4444).withOpacity(isDarkMode ? 0.14 : 0.08)
                     : (isExam
-                        ? Colors.teal.withOpacity(isDarkMode ? 0.2 : 0.15)
+                        ? const Color(0xff0d9488).withOpacity(isDarkMode ? 0.14 : 0.08)
                         : (didNotRecite
-                            ? Colors.blueGrey.withOpacity(isDarkMode ? 0.2 : 0.15)
-                            : (isDarkMode ? Colors.white.withOpacity(0.05) : primaryColor.withOpacity(0.05)))),
-                borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+                            ? const Color(0xff64748b).withOpacity(isDarkMode ? 0.14 : 0.08)
+                            : (isDarkMode ? Colors.white.withOpacity(0.03) : primaryColor.withOpacity(0.04)))),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,32 +344,62 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            isAbsent ? Icons.event_busy : (isExam ? Icons.workspace_premium : (didNotRecite ? Icons.speaker_notes_off_outlined : Icons.calendar_today)),
-                            size: 16,
-                            color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (didNotRecite ? Colors.blueGrey : (isDarkMode ? accentGold : primaryColor))),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            "الجلسة #$sessionNumber | $displayDate",
-                            style: TextStyle(fontWeight: FontWeight.bold, color: isAbsent ? Colors.redAccent : (isExam ? Colors.teal : (didNotRecite ? Colors.blueGrey : (isDarkMode ? Colors.white : primaryColor))), fontFamily: 'Cairo', fontSize: 13),
-                          ),
-                        ],
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: accentGold.withOpacity(isDarkMode ? 0.2 : 0.16),
+                                borderRadius: BorderRadius.circular(9),
+                                border: Border.all(color: accentGold.withOpacity(0.5)),
+                              ),
+                              child: Text(
+                                "#$sessionNumber",
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  color: isDarkMode ? accentGold : primaryColor,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                displayDate,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: isAbsent
+                                      ? const Color(0xffef4444)
+                                      : (isExam
+                                          ? const Color(0xff0d9488)
+                                          : (didNotRecite
+                                              ? const Color(0xff64748b)
+                                              : (isDarkMode ? Colors.white : primaryNavy))),
+                                  fontFamily: 'Cairo',
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 6),
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           if (juzChipTitle.isNotEmpty && !isAbsent && !isExam) ...[
-                            _buildBadge(juzChipTitle, Colors.purple),
+                            _buildBadge(juzChipTitle, const Color(0xff7c3aed)),
                             const SizedBox(width: 4),
                           ],
                           if (isAbsent)
-                            _buildBadge("غائب ❌", Colors.redAccent)
+                            _buildBadge("غائب", const Color(0xffef4444))
                           else if (isExam)
-                            _buildBadge("اختبار 📝", Colors.teal)
+                            _buildBadge("اختبار", const Color(0xff0d9488))
                           else if (didNotRecite)
-                            _buildBadge("بدون تسميع ℹ️", Colors.blueGrey)
+                            _buildBadge("بدون تسميع", const Color(0xff64748b)),
                         ],
                       ),
                     ],
@@ -359,25 +434,41 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
                   if (actualCreatedAt.isNotEmpty || actualEditedAt.isNotEmpty) ...[
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(isDarkMode ? 0.12 : 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.amber.withOpacity(0.4), width: 1),
+                        color: accentGold.withOpacity(isDarkMode ? 0.11 : 0.09),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: accentGold.withOpacity(0.4), width: 1),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.access_time_filled_rounded, color: Colors.amber, size: 16),
+                          Icon(Icons.schedule_rounded, color: accentGold, size: 17),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 if (actualCreatedAt.isNotEmpty)
-                                  Text("تاريخ ووقت الإدخال الفعلي: $actualCreatedAt", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.amberAccent : Colors.orange.shade900)),
+                                  Text(
+                                    "تاريخ ووقت الإدخال الفعلي: $actualCreatedAt",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      fontFamily: 'Cairo',
+                                      color: isDarkMode ? softGold : primaryColor,
+                                    ),
+                                  ),
                                 if (actualEditedAt.isNotEmpty)
-                                  Text("تاريخ آخر تعديل: $actualEditedAt", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDarkMode ? Colors.orangeAccent : Colors.deepOrange.shade800)),
+                                  Text(
+                                    "تاريخ آخر تعديل: $actualEditedAt",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      fontFamily: 'Cairo',
+                                      color: isDarkMode ? accentGold : const Color(0xffb45309),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -397,7 +488,7 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
                     ],
                   ],
 
-                  Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                  Divider(color: isDarkMode ? Colors.white12 : Colors.black12, height: 20),
 
                   if (!isAbsent && !isExam && !didNotRecite) ...[
                     if (activeBoxes.isNotEmpty) ...[
@@ -415,16 +506,16 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
                             ],
                           ),
                         ),
-                      Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                      Divider(color: isDarkMode ? Colors.white12 : Colors.black12, height: 20),
                     ],
 
                     if (nHw.isNotEmpty || nRevHw.isNotEmpty || oRevHw.isNotEmpty || oldHw.isNotEmpty) ...[
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(13),
                         decoration: BoxDecoration(
-                          color: accentGold.withOpacity(isDarkMode ? 0.08 : 0.05),
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: accentGold.withOpacity(0.3)),
+                          color: accentGold.withOpacity(isDarkMode ? 0.08 : 0.06),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: accentGold.withOpacity(0.35)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -433,7 +524,15 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
                               children: [
                                 Icon(Icons.assignment_outlined, size: 16, color: accentGold),
                                 const SizedBox(width: 6),
-                                Text(isCompletedStudent ? "المقدار المطلوب للمرة القادمة:" : "الواجب القادم:", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                Text(
+                                  isCompletedStudent ? "المقدار المطلوب للمرة القادمة:" : "الواجب القادم:",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDarkMode ? Colors.white : primaryNavy,
+                                    fontWeight: FontWeight.w800,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -444,51 +543,67 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
                           ],
                         ),
                       ),
-                      Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                      Divider(color: isDarkMode ? Colors.white12 : Colors.black12, height: 20),
                     ],
                   ],
 
                   if (data['religiousActivities'] != null && data['religiousActivities'].toString().trim().isNotEmpty) ...[
                     _buildMinimalistDetailRow(Icons.mosque_outlined, "الأنشطة الدينية", data['religiousActivities'], isDarkMode),
-                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    Divider(color: isDarkMode ? Colors.white12 : Colors.black12, height: 20),
                   ],
 
                   if (!didNotRecite && selectedJuz == 0) ...[
                     _buildMinimalistDetailRow(
                       Icons.analytics_outlined,
                       "إجمالي الحفظ للختمة",
-                      isCompletedStudent ? "604 صفحة (مكتملة ✨)" : (data['total_memorized_pages'] != null ? "${data['total_memorized_pages']} صفحة" : "---"),
+                      isCompletedStudent ? "604 صفحة (مكتملة)" : (data['total_memorized_pages'] != null ? "${data['total_memorized_pages']} صفحة" : "---"),
                       isDarkMode,
                     ),
-                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    Divider(color: isDarkMode ? Colors.white12 : Colors.black12, height: 20),
                   ],
 
                   if (data['studentStatus'] != null && data['studentStatus'].toString().trim().isNotEmpty && !isAbsent && !isExam) ...[
                     _buildMinimalistDetailRow(Icons.mood, "حالة الطالب", data['studentStatus'], isDarkMode),
-                    Divider(color: isDarkMode ? Colors.white24 : Colors.black12, height: 20),
+                    Divider(color: isDarkMode ? Colors.white12 : Colors.black12, height: 20),
                   ],
 
                   if (isExam && !isAbsent) ...[
                     Container(
                       width: double.infinity,
                       margin: const EdgeInsets.symmetric(vertical: 5),
-                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
+                      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 15),
                       decoration: BoxDecoration(
-                        color: isDarkMode ? Colors.teal.withOpacity(0.12) : Colors.teal.shade50.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.teal.withOpacity(0.4), width: 1),
+                        color: const Color(0xff0d9488).withOpacity(isDarkMode ? 0.14 : 0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xff0d9488).withOpacity(0.4), width: 1),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.workspace_premium, color: Colors.teal, size: 32),
+                          const Icon(Icons.workspace_premium_rounded, color: Color(0xff0d9488), size: 32),
                           const SizedBox(width: 12),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text("نتيجة الاختبار النهائي للجلسة", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.grey[800], fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                              const SizedBox(height: 4),
-                              Text("${data['examScore'] ?? '0'} / 100", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.tealAccent : Colors.teal.shade900, fontFamily: 'Cairo')),
+                              Text(
+                                "نتيجة الاختبار النهائي للجلسة",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDarkMode ? Colors.white70 : primaryColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                "${data['examScore'] ?? '0'} / 100",
+                                style: TextStyle(
+                                  fontSize: 23,
+                                  fontWeight: FontWeight.w900,
+                                  color: isDarkMode ? const Color(0xff5eead4) : const Color(0xff0f766e),
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -500,26 +615,42 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
                     Container(
                       width: double.infinity,
                       margin: const EdgeInsets.symmetric(vertical: 5),
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(13),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(isDarkMode ? 0.12 : 0.08),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                        color: const Color(0xffef4444).withOpacity(isDarkMode ? 0.12 : 0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xffef4444).withOpacity(0.35)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.info_outline, color: Colors.redAccent, size: 16),
+                              const Icon(Icons.info_outline_rounded, color: Color(0xffef4444), size: 17),
                               const SizedBox(width: 6),
-                              Text("نوع الغياب: $absenceType", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontFamily: 'Cairo', fontSize: 13)),
+                              Text(
+                                "نوع الغياب: $absenceType",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xffef4444),
+                                  fontFamily: 'Cairo',
+                                  fontSize: 13,
+                                ),
+                              ),
                             ],
                           ),
                           if (absenceReason.isNotEmpty) ...[
                             const SizedBox(height: 6),
-                            Text("السبب: $absenceReason", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white70 : Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
-                          ]
+                            Text(
+                              "السبب: $absenceReason",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDarkMode ? Colors.white70 : primaryNavy,
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -544,8 +675,26 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("• $label: ", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white54 : Colors.black54, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-          Expanded(child: Text(value, style: TextStyle(fontSize: 12.5, color: isDarkMode ? Colors.white : Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.bold))),
+          Text(
+            "• $label: ",
+            style: TextStyle(
+              fontSize: 12,
+              color: isDarkMode ? Colors.white60 : primaryColor.withOpacity(0.8),
+              fontFamily: 'Cairo',
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: isDarkMode ? Colors.white : primaryNavy,
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -556,9 +705,9 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
       padding: const EdgeInsets.all(12),
       width: double.infinity,
       decoration: BoxDecoration(
-        color: isDarkMode ? Colors.black.withOpacity(0.2) : const Color(0xfff8fafc).withOpacity(0.6),
+        color: isDarkMode ? Colors.white.withOpacity(0.03) : primaryColor.withOpacity(0.04),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDarkMode ? Colors.white12 : const Color(0xffe2e8f0), width: 0.8),
+        border: Border.all(color: isDarkMode ? Colors.white12 : accentGold.withOpacity(0.28), width: 0.9),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -567,14 +716,31 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
             children: [
               Icon(icon, size: 15, color: iconColor),
               const SizedBox(width: 6),
-              Expanded(child: Text(title, style: TextStyle(fontSize: 11, color: isDarkMode ? Colors.white60 : Colors.grey[700], fontWeight: FontWeight.bold, fontFamily: 'Cairo'), overflow: TextOverflow.ellipsis)),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDarkMode ? Colors.white60 : Colors.grey.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Cairo',
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
             val.trim().isEmpty ? '---' : val,
-            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : primaryColor, fontFamily: 'Cairo', height: 1.4),
-          )
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : primaryColor,
+              fontFamily: 'Cairo',
+              height: 1.4,
+            ),
+          ),
         ],
       ),
     );
@@ -586,16 +752,24 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 2),
-          child: Icon(icon, size: 17, color: isDarkMode ? accentGold : primaryColor.withOpacity(0.6)),
+          child: Icon(icon, size: 17, color: isDarkMode ? accentGold : primaryColor.withOpacity(0.75)),
         ),
         const SizedBox(width: 8),
-        Text("$label: ", style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white60 : Colors.grey[700], fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+        Text(
+          "$label: ",
+          style: TextStyle(
+            fontSize: 12,
+            color: isDarkMode ? Colors.white60 : Colors.grey.shade700,
+            fontFamily: 'Cairo',
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         Expanded(
           child: Text(
             value.trim().isEmpty ? '---' : value,
             style: TextStyle(
               fontSize: 13,
-              color: isBold ? (isDarkMode ? Colors.white : primaryColor) : (isDarkMode ? Colors.white70 : Colors.black87),
+              color: isBold ? (isDarkMode ? Colors.white : primaryColor) : (isDarkMode ? Colors.white70 : primaryNavy),
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
               fontFamily: 'Cairo',
             ),
@@ -605,30 +779,33 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
     );
   }
 
-  Widget _buildGlassContainer({required Widget child, required bool isDarkMode, EdgeInsetsGeometry padding = EdgeInsets.zero, Color? customColor, Color? customBorderColor}) {
+  Widget _buildGlassContainer({
+    required Widget child,
+    required bool isDarkMode,
+    EdgeInsetsGeometry padding = EdgeInsets.zero,
+    Color? customColor,
+    Color? customBorderColor,
+  }) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(25),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: customColor ?? (isDarkMode ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.4)),
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: customBorderColor ?? (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.6)),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.02),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: customColor ?? (isDarkMode ? const Color(0xff141e30).withOpacity(0.92) : Colors.white.withOpacity(0.94)),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: customBorderColor ?? (isDarkMode ? Colors.white.withOpacity(0.11) : accentGold.withOpacity(0.32)),
+            width: 1.2,
           ),
-          child: child,
+          boxShadow: [
+            BoxShadow(
+              color: primaryColor.withOpacity(isDarkMode ? 0.24 : 0.05),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
+        child: child,
       ),
     );
   }
@@ -638,19 +815,24 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.5),
+        color: isDarkMode ? Colors.white.withOpacity(0.03) : primaryColor.withOpacity(0.04),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: isDarkMode ? Colors.white12 : Colors.black12),
+        border: Border.all(color: isDarkMode ? Colors.white12 : accentGold.withOpacity(0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.comment, size: 16, color: isDarkMode ? accentGold : primaryColor),
+          Icon(Icons.comment_outlined, size: 16, color: isDarkMode ? accentGold : primaryColor),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               "ملاحظات: $notes",
-              style: TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic, color: isDarkMode ? Colors.white70 : Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 12.5,
+                color: isDarkMode ? Colors.white70 : primaryNavy,
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -660,9 +842,21 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
 
   Widget _buildBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(color: color.withOpacity(0.9), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 4)]),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.45), width: 0.9),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+          fontFamily: 'Cairo',
+        ),
+      ),
     );
   }
 
@@ -675,12 +869,17 @@ class _ArchivedStudentDetailSessionsPageState extends State<ArchivedStudentDetai
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.history_toggle_off_rounded, size: 70, color: isDarkMode ? accentGold.withOpacity(0.6) : primaryColor.withOpacity(0.4)),
-            const SizedBox(height: 15),
+            Icon(Icons.history_toggle_off_rounded, size: 64, color: accentGold),
+            const SizedBox(height: 14),
             Text(
               "لا يوجد سجل جلسات لهذا الطالب في هذه الدورة",
               textAlign: TextAlign.center,
-              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 14, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: isDarkMode ? Colors.white70 : primaryColor,
+                fontSize: 14,
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),

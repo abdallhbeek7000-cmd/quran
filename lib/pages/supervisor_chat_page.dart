@@ -1332,6 +1332,7 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final screenWidth = MediaQuery.of(context).size.width;
+    final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -1565,7 +1566,7 @@ class _SupervisorChatPageState extends State<SupervisorChatPage> {
 
           Column(
             children: [
-              const SizedBox(height: kToolbarHeight + 28),
+              SizedBox(height: topPadding + 74 + 10),
 
               // 🗂️ شريط فلترة سريع للوسائط والرسائل المميزة
               SizedBox(

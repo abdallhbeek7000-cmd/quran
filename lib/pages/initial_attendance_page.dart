@@ -102,9 +102,10 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
             .get(),
       ]);
 
-      final attendanceSnap = results[0] as DocumentSnapshot<Map<String, dynamic>>;
-      final leaveSnap = results[1] as QuerySnapshot<Map<String, dynamic>>;
-      final studentsSnap = results[2] as QuerySnapshot<Map<String, dynamic>>;
+        final attendanceSnap =
+          results[0] as DocumentSnapshot<Map<String, dynamic>>;
+        final leaveSnap = results[1] as QuerySnapshot<Map<String, dynamic>>;
+        final studentsSnap = results[2] as QuerySnapshot<Map<String, dynamic>>;
 
       // 1. تفقد اليوم
       if (attendanceSnap.exists && attendanceSnap.data() != null) {
@@ -128,7 +129,8 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
         final sId = lData['studentId']?.toString() ?? '';
         final rawDate = lData['date']?.toString() ?? '';
         if (sId.isNotEmpty && _normalizeDate(rawDate) == normToday) {
-          approvedLeaveMap[sId] = lData['reason']?.toString() ?? 'طلب استئذان مقبول';
+          approvedLeaveMap[sId] =
+              lData['reason']?.toString() ?? 'طلب استئذان مقبول';
         }
       }
 
@@ -136,15 +138,20 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
       final List<Map<String, dynamic>> activeList = [];
       for (final doc in studentsSnap.docs) {
         final data = doc.data();
-        final bool isArchived = data['archived'] == true || data['isArchived'] == true;
+        final bool isArchived =
+            data['archived'] == true || data['isArchived'] == true;
         final bool isStopped = data['isStopped'] == true;
         final String status = data['status']?.toString().toLowerCase() ?? '';
-        if (isArchived || isStopped || status == 'stopped' || status == 'archived') {
+        if (isArchived ||
+            isStopped ||
+            status == 'stopped' ||
+            status == 'archived') {
           continue;
         }
 
         final studentId = doc.id;
-        if (approvedLeaveMap.containsKey(studentId) && !attendanceData.containsKey(studentId)) {
+        if (approvedLeaveMap.containsKey(studentId) &&
+            !attendanceData.containsKey(studentId)) {
           attendanceData[studentId] = {
             'status': 'absent',
             'absenceType': 'بعذر',
@@ -158,11 +165,13 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
           ...data,
           '_nameLower': (data['name'] ?? '').toString().toLowerCase(),
           '_serialLower': (data['serial'] ?? '').toString().toLowerCase(),
-          '_serialInt': int.tryParse(data['serial']?.toString() ?? '') ?? 99999999,
+          '_serialInt':
+              int.tryParse(data['serial']?.toString() ?? '') ?? 99999999,
         });
       }
 
-      activeList.sort((a, b) => (a['_serialInt'] as int).compareTo(b['_serialInt'] as int));
+      activeList.sort(
+          (a, b) => (a['_serialInt'] as int).compareTo(b['_serialInt'] as int));
 
       if (mounted) {
         setState(() {
@@ -201,9 +210,12 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                     child: BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 14),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xff1e293b).withOpacity(0.88) : Colors.white.withOpacity(0.92),
+                          color: isDark
+                              ? const Color(0xff1e293b).withOpacity(0.88)
+                              : Colors.white.withOpacity(0.92),
                           borderRadius: BorderRadius.circular(22),
                           border: Border.all(
                             color: Colors.greenAccent.withOpacity(0.6),
@@ -225,7 +237,8 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                 color: Colors.green.withOpacity(0.2),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 28),
+                              child: const Icon(Icons.check_circle_rounded,
+                                  color: Colors.greenAccent, size: 28),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -239,7 +252,8 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                       fontFamily: 'Cairo',
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
-                                      color: isDark ? Colors.white : primaryColor,
+                                      color:
+                                          isDark ? Colors.white : primaryColor,
                                     ),
                                   ),
                                   Text(
@@ -247,7 +261,9 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                     style: TextStyle(
                                       fontFamily: 'Cairo',
                                       fontSize: 12,
-                                      color: isDark ? Colors.white70 : Colors.black87,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.black87,
                                     ),
                                   ),
                                 ],
@@ -285,7 +301,8 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
           builder: (context, setDialogState) {
             return Dialog(
               backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(28),
                 child: BackdropFilter(
@@ -293,10 +310,14 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                   child: Container(
                     padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xff1e293b).withOpacity(0.9) : Colors.white.withOpacity(0.92),
+                      color: isDark
+                          ? const Color(0xff1e293b).withOpacity(0.9)
+                          : Colors.white.withOpacity(0.92),
                       borderRadius: BorderRadius.circular(28),
                       border: Border.all(
-                        color: isDark ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.85),
+                        color: isDark
+                            ? Colors.white.withOpacity(0.15)
+                            : Colors.white.withOpacity(0.85),
                         width: 1.5,
                       ),
                       boxShadow: [
@@ -319,7 +340,8 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                 color: Colors.redAccent.withOpacity(0.15),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.event_busy_rounded, color: Colors.redAccent, size: 26),
+                              child: const Icon(Icons.event_busy_rounded,
+                                  color: Colors.redAccent, size: 26),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -331,7 +353,9 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                     style: TextStyle(
                                       fontFamily: 'Cairo',
                                       fontSize: 12,
-                                      color: isDark ? Colors.white54 : Colors.black54,
+                                      color: isDark
+                                          ? Colors.white54
+                                          : Colors.black54,
                                     ),
                                   ),
                                   Text(
@@ -340,7 +364,8 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                       fontFamily: 'Cairo',
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
-                                      color: isDark ? Colors.white : primaryColor,
+                                      color:
+                                          isDark ? Colors.white : primaryColor,
                                     ),
                                   ),
                                 ],
@@ -351,23 +376,38 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                         const SizedBox(height: 20),
                         Text(
                           "نوع الغياب:",
-                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white70 : Colors.black87),
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color:
+                                  isDark ? Colors.white70 : Colors.black87),
                         ),
                         const SizedBox(height: 10),
                         Row(
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => setDialogState(() => selectedType = 'بدون عذر'),
+                                onTap: () => setDialogState(
+                                    () => selectedType = 'بدون عذر'),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 180),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: selectedType == 'بدون عذر' ? Colors.redAccent : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.5)),
+                                    color: selectedType == 'بدون عذر'
+                                        ? Colors.redAccent
+                                        : (isDark
+                                            ? Colors.white.withOpacity(0.05)
+                                            : Colors.white.withOpacity(0.5)),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: selectedType == 'بدون عذر' ? Colors.redAccent : (isDark ? Colors.white12 : Colors.black12),
+                                      color: selectedType == 'بدون عذر'
+                                          ? Colors.redAccent
+                                          : (isDark
+                                              ? Colors.white12
+                                              : Colors.black12),
                                     ),
                                   ),
                                   child: Text(
@@ -375,7 +415,11 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                     style: TextStyle(
                                       fontFamily: 'Cairo',
                                       fontWeight: FontWeight.bold,
-                                      color: selectedType == 'بدون عذر' ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                      color: selectedType == 'بدون عذر'
+                                          ? Colors.white
+                                          : (isDark
+                                              ? Colors.white70
+                                              : Colors.black87),
                                     ),
                                   ),
                                 ),
@@ -384,16 +428,26 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => setDialogState(() => selectedType = 'بعذر'),
+                                onTap: () =>
+                                    setDialogState(() => selectedType = 'بعذر'),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 180),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: selectedType == 'بعذر' ? Colors.orange : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.5)),
+                                    color: selectedType == 'بعذر'
+                                        ? Colors.orange
+                                        : (isDark
+                                            ? Colors.white.withOpacity(0.05)
+                                            : Colors.white.withOpacity(0.5)),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: selectedType == 'بعذر' ? Colors.orange : (isDark ? Colors.white12 : Colors.black12),
+                                      color: selectedType == 'بعذر'
+                                          ? Colors.orange
+                                          : (isDark
+                                              ? Colors.white12
+                                              : Colors.black12),
                                     ),
                                   ),
                                   child: Text(
@@ -401,7 +455,11 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                     style: TextStyle(
                                       fontFamily: 'Cairo',
                                       fontWeight: FontWeight.bold,
-                                      color: selectedType == 'بعذر' ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                      color: selectedType == 'بعذر'
+                                          ? Colors.white
+                                          : (isDark
+                                              ? Colors.white70
+                                              : Colors.black87),
                                     ),
                                   ),
                                 ),
@@ -413,27 +471,49 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                           const SizedBox(height: 18),
                           Text(
                             "سبب الغياب بعذر:",
-                            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white70 : Colors.black87),
+                            style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: isDark
+                                    ? Colors.white70
+                                    : Colors.black87),
                           ),
                           const SizedBox(height: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 2),
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.black.withOpacity(0.25) : Colors.white.withOpacity(0.75),
+                              color: isDark
+                                  ? Colors.black.withOpacity(0.25)
+                                  : Colors.white.withOpacity(0.75),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: isDark ? Colors.white12 : Colors.white),
+                              border: Border.all(
+                                  color:
+                                      isDark ? Colors.white12 : Colors.white),
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
                                 value: selectedReason,
                                 isExpanded: true,
-                                dropdownColor: isDark ? const Color(0xff1e293b) : Colors.white,
-                                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87, fontSize: 13),
+                                dropdownColor: isDark
+                                    ? const Color(0xff1e293b)
+                                    : Colors.white,
+                                style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : Colors.black87,
+                                    fontSize: 13),
                                 items: excuseReasons.map((reason) {
-                                  return DropdownMenuItem(value: reason, child: Text(reason));
+                                  return DropdownMenuItem(
+                                      value: reason, child: Text(reason));
                                 }).toList(),
                                 onChanged: (val) {
-                                  if (val != null) setDialogState(() => selectedReason = val);
+                                  if (val != null) {
+                                    setDialogState(() => selectedReason = val);
+                                  }
                                 },
                               ),
                             ),
@@ -445,7 +525,11 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                             Expanded(
                               child: TextButton(
                                 onPressed: () => Navigator.pop(ctx),
-                                child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.grey)),
+                                child: const Text("إلغاء",
+                                    style: TextStyle(
+                                        fontFamily: 'Cairo',
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey)),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -453,21 +537,29 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: primaryColor,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14)),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
                                 ),
                                 onPressed: () {
                                   setState(() {
                                     attendanceData[studentId] = {
                                       'status': 'absent',
                                       'absenceType': selectedType,
-                                      'reason': selectedType == 'بعذر' ? selectedReason : 'غياب بدون عذر',
+                                      'reason': selectedType == 'بعذر'
+                                          ? selectedReason
+                                          : 'غياب بدون عذر',
                                       'isManual': true,
                                     };
                                   });
                                   Navigator.pop(ctx);
                                 },
-                                child: const Text("تأكيد الغياب", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+                                child: const Text("تأكيد الغياب",
+                                    style: TextStyle(
+                                        fontFamily: 'Cairo',
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white)),
                               ),
                             ),
                           ],
@@ -484,16 +576,15 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
     );
   }
 
-  // ⚡ حفظ سريع بدفعة واحدة (WriteBatch) دون انتظار تسلسلي بطيء
+  // ⚡ حفظ سريع بدفعة واحدة (WriteBatch) مع دعم العطلة الفردية بدون احتسابها بالحضور أو الغياب
   Future<void> _saveAttendance(bool isDark) async {
     setState(() => isSaving = true);
     try {
       final firestore = FirebaseFirestore.instance;
       final WriteBatch batch = firestore.batch();
 
-      final DocumentReference attendanceDoc = firestore
-          .collection('daily_attendance')
-          .doc(dailyDocId);
+      final DocumentReference attendanceDoc =
+          firestore.collection('daily_attendance').doc(dailyDocId);
 
       batch.set(attendanceDoc, {
         'date': todayDate,
@@ -508,9 +599,10 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
       int absentCount = 0;
       int presentCount = 0;
+      int holidayCount = 0;
 
-      final List<String> presentIdsToCheck = [];
-      final List<Map<String, dynamic>> absentNotifications = [];
+      final List<String> nonAbsentIdsToCheck = [];
+      final List<Map<String, String>> absentNotifications = [];
 
       for (final entry in attendanceData.entries) {
         final String studentId = entry.key;
@@ -520,7 +612,28 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
         if (status == 'present') {
           presentCount++;
-          presentIdsToCheck.add(customSessionId);
+          nonAbsentIdsToCheck.add(customSessionId);
+        } else if (status == 'holiday') {
+          holidayCount++;
+          nonAbsentIdsToCheck.add(customSessionId);
+          final sData = studentById[studentId];
+          final sessionRef = firestore.collection('sessions').doc(customSessionId);
+          batch.set(sessionRef, {
+            'studentId': studentId,
+            'studentName': sData?['name'] ?? 'طالب',
+            'supervisorId': sData?['supervisorId'] ?? '',
+            'supervisorName': sData?['supervisorName'] ?? 'المشرف',
+            'cycleId': widget.cycle.id,
+            'date': todayDate,
+            'absent': false,
+            'isHoliday': true,
+            'sessionType': 'holiday',
+            'status': 'عطلة',
+            'title': 'عطلة',
+            'note': 'عطلة',
+            'notes': 'عطلة',
+            'timestamp': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
         } else if (status == 'absent') {
           absentCount++;
           final String absenceType = record['absenceType'] ?? 'بدون عذر';
@@ -528,7 +641,8 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
           final sData = studentById[studentId];
 
           if (sData != null) {
-            final sessionRef = firestore.collection('sessions').doc(customSessionId);
+            final sessionRef =
+                firestore.collection('sessions').doc(customSessionId);
             batch.set(sessionRef, {
               'studentId': studentId,
               'studentName': sData['name'] ?? 'طالب',
@@ -537,6 +651,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
               'cycleId': widget.cycle.id,
               'date': todayDate,
               'absent': true,
+              'isHoliday': false,
               'absenceType': absenceType,
               'absenceReason': reason,
               'isExam': false,
@@ -545,7 +660,8 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
               'nearReview': '',
               'farReview': '',
               'homework': '',
-              'notes': 'تم توثيق الغياب تلقائياً من التفتيش المبدئي ($absenceType: $reason).',
+              'notes':
+                  'تم توثيق الغياب تلقائياً من التفتيش المبدئي ($absenceType: $reason).',
               'timestamp': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
 
@@ -559,10 +675,11 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
         }
       }
 
-      // فحص جلسات الغياب السابقة للطلاب الحاضرين بالتوازي دفعة واحدة
-      if (presentIdsToCheck.isNotEmpty) {
+      // حذف أي سجل غياب سابق إذا تم تحويل الطالب إلى حاضر أو عطلة
+      if (nonAbsentIdsToCheck.isNotEmpty) {
         final existingSnaps = await Future.wait(
-          presentIdsToCheck.map((id) => firestore.collection('sessions').doc(id).get()),
+          nonAbsentIdsToCheck
+              .map((id) => firestore.collection('sessions').doc(id).get()),
         );
         for (final docSnap in existingSnaps) {
           if (docSnap.exists && (docSnap.data()?['absent'] == true)) {
@@ -573,12 +690,13 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
       await batch.commit();
 
-      // إرسال الإشعارات بالتوازي في الخلفية دون تأخير التنقل
+      // إرسال إشعارات الغياب فقط (بدون إرسال إشعار غياب للعطلة)
       for (final item in absentNotifications) {
         NotificationService.sendAndSaveNotification(
           studentId: item['studentId']!,
           title: "تنبيه غياب 🔴",
-          body: "تم تسجيل غياب ولدكم (${item['name']}) اليوم ($todayDate) - الحالة: ${item['absenceType']} (${item['reason']}).",
+          body:
+              "تم تسجيل غياب ولدكم (${item['name']}) اليوم ($todayDate) - الحالة: ${item['absenceType']} (${item['reason']}).",
           type: "absence_alert",
           context: context,
         ).catchError((e) => debugPrint("فشل إرسال إشعار الغياب: $e"));
@@ -587,7 +705,7 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
       if (!mounted) return;
       _showTopGlassNotification(
         "تم حفظ التفقد المبدئي بنجاح 🎉",
-        "حاضر: $presentCount | غائب: $absentCount",
+        "حاضر: $presentCount | غائب: $absentCount | عطلة: $holidayCount",
         isDark,
       );
       Navigator.pop(context);
@@ -596,7 +714,8 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.redAccent,
-          content: Text("حدث خطأ أثناء الحفظ: $e", style: const TextStyle(fontFamily: 'Cairo')),
+          content: Text("حدث خطأ أثناء الحفظ: $e",
+              style: const TextStyle(fontFamily: 'Cairo')),
         ),
       );
     } finally {
@@ -617,13 +736,17 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
+      backgroundColor:
+          isDark ? const Color(0xff121212) : const Color(0xfff1f5f9),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
         title: Text(
           "تسجيل الحضور المبدئي 📋",
-          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : primaryColor, fontFamily: 'Cairo'),
+          style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : primaryColor,
+              fontFamily: 'Cairo'),
         ),
         centerTitle: true,
         iconTheme: IconThemeData(color: isDark ? Colors.white : primaryColor),
@@ -636,21 +759,31 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isDark
-                    ? [const Color(0xff0f172a), const Color(0xff1e293b), const Color(0xff0f172a)]
-                    : [const Color(0xffe2e8f0), const Color(0xffcfdef3), const Color(0xffe0eafc)],
+                    ? [
+                        const Color(0xff0f172a),
+                        const Color(0xff1e293b),
+                        const Color(0xff0f172a)
+                      ]
+                    : [
+                        const Color(0xffe2e8f0),
+                        const Color(0xffcfdef3),
+                        const Color(0xffe0eafc)
+                      ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
             ),
           ),
-
           SafeArea(
             child: isLoading
-                ? Center(child: CircularProgressIndicator(color: isDark ? accentGold : primaryColor))
+                ? Center(
+                    child: CircularProgressIndicator(
+                        color: isDark ? accentGold : primaryColor))
                 : Column(
                     children: [
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
                         child: Column(
                           children: [
                             ClipRRect(
@@ -660,35 +793,54 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                 child: Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.45),
+                                    color: isDark
+                                        ? Colors.white.withOpacity(0.05)
+                                        : Colors.white.withOpacity(0.45),
                                     borderRadius: BorderRadius.circular(22),
-                                    border: Border.all(color: isDark ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.75), width: 1.5),
+                                    border: Border.all(
+                                        color: isDark
+                                            ? Colors.white.withOpacity(0.12)
+                                            : Colors.white.withOpacity(0.75),
+                                        width: 1.5),
                                   ),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Row(
                                         children: [
-                                          Icon(Icons.today_rounded, color: isDark ? accentGold : primaryColor),
+                                          Icon(Icons.today_rounded,
+                                              color: isDark
+                                                  ? accentGold
+                                                  : primaryColor),
                                           const SizedBox(width: 10),
                                           Text(
                                             "التاريخ: $todayDate",
-                                            style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : primaryColor),
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontFamily: 'Cairo',
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : primaryColor),
                                           ),
                                         ],
                                       ),
                                       Text(
                                         "الدورة: ${widget.cycle.name}",
-                                        style: TextStyle(fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : Colors.black87),
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            fontFamily: 'Cairo',
+                                            fontWeight: FontWeight.w600,
+                                            color: isDark
+                                                ? Colors.white70
+                                                : Colors.black87),
                                       ),
                                     ],
                                   ),
                                 ),
                               ),
                             ),
-
                             const SizedBox(height: 12),
-
                             TextField(
                               controller: _searchController,
                               onChanged: (val) {
@@ -696,14 +848,27 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                   searchQuery = val.trim().toLowerCase();
                                 });
                               },
-                              style: TextStyle(fontFamily: 'Cairo', color: isDark ? Colors.white : Colors.black87),
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  color:
+                                      isDark ? Colors.white : Colors.black87),
                               decoration: InputDecoration(
-                                hintText: "ابحث باسم الطالب أو رقمه التسلسلي...",
-                                hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: isDark ? Colors.white54 : Colors.black45),
-                                prefixIcon: Icon(Icons.search_rounded, color: isDark ? accentGold : primaryColor),
+                                hintText:
+                                    "ابحث باسم الطالب أو رقمه التسلسلي...",
+                                hintStyle: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 13,
+                                    color: isDark
+                                        ? Colors.white54
+                                        : Colors.black45),
+                                prefixIcon: Icon(Icons.search_rounded,
+                                    color: isDark ? accentGold : primaryColor),
                                 suffixIcon: searchQuery.isNotEmpty
                                     ? IconButton(
-                                        icon: Icon(Icons.clear, color: isDark ? Colors.white54 : Colors.black54),
+                                        icon: Icon(Icons.clear,
+                                            color: isDark
+                                                ? Colors.white54
+                                                : Colors.black54),
                                         onPressed: () {
                                           _searchController.clear();
                                           setState(() => searchQuery = '');
@@ -711,75 +876,130 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                       )
                                     : null,
                                 filled: true,
-                                fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.65),
+                                fillColor: isDark
+                                    ? Colors.white.withOpacity(0.06)
+                                    : Colors.white.withOpacity(0.65),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(20),
-                                  borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.white),
+                                  borderSide: BorderSide(
+                                      color: isDark
+                                          ? Colors.white12
+                                          : Colors.white),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(20),
-                                  borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.white.withOpacity(0.75)),
+                                  borderSide: BorderSide(
+                                      color: isDark
+                                          ? Colors.white12
+                                          : Colors.white.withOpacity(0.75)),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(20),
-                                  borderSide: BorderSide(color: isDark ? accentGold : primaryColor, width: 1.5),
+                                  borderSide: BorderSide(
+                                      color:
+                                          isDark ? accentGold : primaryColor,
+                                      width: 1.5),
                                 ),
                               ),
                             ),
                           ],
                         ),
                       ),
-
                       Expanded(
                         child: _allActiveStudents.isEmpty
                             ? const Center(
-                                child: Text("لا يوجد طلاب نشطون مسجلون بالدورة الحالية.", style: TextStyle(fontFamily: 'Cairo')),
+                                child: Text(
+                                    "لا يوجد طلاب نشطون مسجلون بالدورة الحالية.",
+                                    style: TextStyle(fontFamily: 'Cairo')),
                               )
                             : filteredStudents.isEmpty
                                 ? const Center(
-                                    child: Text("لا يطابق بحثك أي طالب مسجل 🔍", style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
+                                    child: Text(
+                                        "لا يطابق بحثك أي طالب مسجل 🔍",
+                                        style: TextStyle(
+                                            fontFamily: 'Cairo',
+                                            fontSize: 14)),
                                   )
                                 : ListView.builder(
                                     physics: const BouncingScrollPhysics(),
-                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 20, vertical: 10),
                                     itemCount: filteredStudents.length,
                                     itemBuilder: (context, index) {
                                       final student = filteredStudents[index];
-                                      final String studentId = student['id'] as String;
+                                      final String studentId =
+                                          student['id'] as String;
 
-                                      final bool isPreApproved = approvedLeaveMap.containsKey(studentId);
-                                      final String leaveReason = approvedLeaveMap[studentId] ?? 'طلب استئذان مقبول';
+                                      final bool isPreApproved =
+                                          approvedLeaveMap
+                                              .containsKey(studentId);
+                                      final String leaveReason =
+                                          approvedLeaveMap[studentId] ??
+                                              'طلب استئذان مقبول';
 
-                                      final currentRecord = attendanceData[studentId] ?? {};
-                                      final String currentStatus = currentRecord['status'] ?? 'none';
-                                      final String absenceType = currentRecord['absenceType'] ?? '';
-                                      final String reason = currentRecord['reason'] ?? '';
+                                      final currentRecord =
+                                          attendanceData[studentId] ?? {};
+                                      final String currentStatus =
+                                          currentRecord['status'] ?? 'none';
+                                      final bool isHoliday =
+                                          currentStatus == 'holiday';
+                                      final String absenceType =
+                                          currentRecord['absenceType'] ?? '';
+                                      final String reason =
+                                          currentRecord['reason'] ?? '';
 
                                       return RepaintBoundary(
                                         child: Container(
-                                          margin: const EdgeInsets.only(bottom: 12),
-                                          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                                          margin:
+                                              const EdgeInsets.only(bottom: 12),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 14, vertical: 10),
                                           decoration: BoxDecoration(
-                                            color: isPreApproved
-                                                ? Colors.orange.withOpacity(0.15)
-                                                : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.68)),
-                                            borderRadius: BorderRadius.circular(20),
+                                            color: isHoliday
+                                                ? accentGold.withOpacity(0.14)
+                                                : (isPreApproved
+                                                    ? Colors.orange
+                                                        .withOpacity(0.15)
+                                                    : (isDark
+                                                        ? Colors.white
+                                                            .withOpacity(0.05)
+                                                        : Colors.white
+                                                            .withOpacity(0.68))),
+                                            borderRadius:
+                                                BorderRadius.circular(20),
                                             border: Border.all(
-                                              color: isPreApproved
-                                                  ? Colors.orange.withOpacity(0.6)
-                                                  : (isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.8)),
-                                              width: isPreApproved ? 1.5 : 1.2,
+                                              color: isHoliday
+                                                  ? accentGold.withOpacity(0.75)
+                                                  : (isPreApproved
+                                                      ? Colors.orange
+                                                          .withOpacity(0.6)
+                                                      : (isDark
+                                                          ? Colors.white
+                                                              .withOpacity(0.1)
+                                                          : Colors.white
+                                                              .withOpacity(
+                                                                  0.8))),
+                                              width: (isHoliday || isPreApproved)
+                                                  ? 1.5
+                                                  : 1.2,
                                             ),
                                           ),
                                           child: Row(
                                             children: [
                                               if (student['serial'] != null)
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  margin: const EdgeInsets.only(left: 8),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4),
+                                                  margin: const EdgeInsets.only(
+                                                      left: 8),
                                                   decoration: BoxDecoration(
-                                                    color: primaryColor.withOpacity(0.15),
-                                                    borderRadius: BorderRadius.circular(8),
+                                                    color: primaryColor
+                                                        .withOpacity(0.15),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
                                                   ),
                                                   child: Text(
                                                     "#${student['serial']}",
@@ -787,119 +1007,315 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                                       fontFamily: 'Cairo',
                                                       fontSize: 11,
                                                       fontWeight: FontWeight.bold,
-                                                      color: isDark ? accentGold : primaryColor,
+                                                      color: isDark
+                                                          ? accentGold
+                                                          : primaryColor,
                                                     ),
                                                   ),
                                                 ),
-
                                               CircleAvatar(
                                                 radius: 20,
-                                                backgroundColor: primaryColor.withOpacity(0.15),
-                                                backgroundImage: student['imageUrl'] != null && student['imageUrl'].toString().isNotEmpty
-                                                    ? NetworkImage(student['imageUrl'])
+                                                backgroundColor: primaryColor
+                                                    .withOpacity(0.15),
+                                                backgroundImage: student[
+                                                            'imageUrl'] !=
+                                                        null &&
+                                                    student['imageUrl']
+                                                        .toString()
+                                                        .isNotEmpty
+                                                    ? NetworkImage(
+                                                        student['imageUrl'])
                                                     : null,
-                                                child: (student['imageUrl'] == null || student['imageUrl'].toString().isEmpty)
-                                                    ? Icon(Icons.person, color: isDark ? Colors.white : primaryColor)
+                                                child: (student['imageUrl'] ==
+                                                            null ||
+                                                        student['imageUrl']
+                                                            .toString()
+                                                            .isEmpty)
+                                                    ? Icon(Icons.person,
+                                                        color: isDark
+                                                            ? Colors.white
+                                                            : primaryColor)
                                                     : null,
                                               ),
                                               const SizedBox(width: 10),
                                               Expanded(
                                                 child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     Row(
                                                       children: [
                                                         Expanded(
                                                           child: Text(
-                                                            student['name'] ?? 'طالب',
-                                                            style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: isDark ? Colors.white : primaryColor),
-                                                            overflow: TextOverflow.ellipsis,
+                                                            student['name'] ??
+                                                                'طالب',
+                                                            style: TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                                fontFamily:
+                                                                    'Cairo',
+                                                                color: isDark
+                                                                    ? Colors
+                                                                        .white
+                                                                    : primaryColor),
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
                                                           ),
                                                         ),
-                                                        if (isPreApproved) ...[
-                                                          const SizedBox(width: 4),
-                                                          const Icon(Icons.verified_user_rounded, color: Colors.orange, size: 14),
+                                                        if (isPreApproved &&
+                                                            !isHoliday) ...[
+                                                          const SizedBox(
+                                                              width: 4),
+                                                          const Icon(
+                                                              Icons
+                                                                  .verified_user_rounded,
+                                                              color:
+                                                                  Colors.orange,
+                                                              size: 14),
                                                         ]
                                                       ],
                                                     ),
-                                                    if (isPreApproved)
+                                                    if (isHoliday)
+                                                      Text(
+                                                        "عطلة 🌴 (غير محتسب)",
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontFamily: 'Cairo',
+                                                          color: isDark
+                                                              ? accentGold
+                                                              : const Color(
+                                                                  0xff9a6b00),
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow:
+                                                            TextOverflow.ellipsis,
+                                                      )
+                                                    else if (isPreApproved)
                                                       Text(
                                                         "مستأذن مسبقاً 📄: $leaveReason",
                                                         style: const TextStyle(
                                                           fontSize: 11,
                                                           fontFamily: 'Cairo',
                                                           color: Colors.orange,
-                                                          fontWeight: FontWeight.bold,
+                                                          fontWeight:
+                                                              FontWeight.bold,
                                                         ),
                                                         maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
+                                                        overflow:
+                                                            TextOverflow.ellipsis,
                                                       )
-                                                    else if (currentStatus == 'absent' && absenceType.isNotEmpty)
+                                                    else if (currentStatus ==
+                                                            'absent' &&
+                                                        absenceType.isNotEmpty)
                                                       Text(
                                                         "$absenceType: $reason",
                                                         style: TextStyle(
                                                           fontSize: 11,
                                                           fontFamily: 'Cairo',
-                                                          color: absenceType == 'بعذر' ? Colors.orange : Colors.redAccent,
-                                                          fontWeight: FontWeight.bold,
+                                                          color: absenceType ==
+                                                                  'بعذر'
+                                                              ? Colors.orange
+                                                              : Colors
+                                                                  .redAccent,
+                                                          fontWeight:
+                                                              FontWeight.bold,
                                                         ),
                                                         maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
+                                                        overflow:
+                                                            TextOverflow.ellipsis,
                                                       )
                                                     else
                                                       Text(
                                                         "المشرف: ${student['supervisorName'] ?? 'غير محدد'}",
-                                                        style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: isDark ? Colors.white54 : Colors.black54),
+                                                        style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontFamily: 'Cairo',
+                                                            color: isDark
+                                                                ? Colors.white54
+                                                                : Colors
+                                                                    .black54),
                                                       ),
                                                   ],
                                                 ),
                                               ),
-
                                               Row(
                                                 children: [
+                                                  // زر الحاضر ✅
                                                   InkWell(
                                                     onTap: () {
                                                       setState(() {
-                                                        if (currentStatus == 'present') {
-                                                          attendanceData.remove(studentId);
+                                                        if (currentStatus ==
+                                                            'present') {
+                                                          attendanceData
+                                                              .remove(studentId);
                                                         } else {
-                                                          attendanceData[studentId] = {
+                                                          attendanceData[
+                                                                  studentId] = {
                                                             'status': 'present',
                                                             'isManual': true,
                                                           };
                                                         }
                                                       });
                                                     },
-                                                    borderRadius: BorderRadius.circular(12),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
                                                     child: Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 9,
+                                                          vertical: 8),
                                                       decoration: BoxDecoration(
-                                                        color: currentStatus == 'present' ? Colors.green : Colors.transparent,
-                                                        borderRadius: BorderRadius.circular(12),
-                                                        border: Border.all(color: currentStatus == 'present' ? Colors.green : (isDark ? Colors.white24 : Colors.black26)),
+                                                        color: currentStatus ==
+                                                                'present'
+                                                            ? Colors.green
+                                                            : Colors.transparent,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(12),
+                                                        border: Border.all(
+                                                            color: currentStatus ==
+                                                                    'present'
+                                                                ? Colors.green
+                                                                : (isDark
+                                                                    ? Colors
+                                                                        .white24
+                                                                    : Colors
+                                                                        .black26)),
                                                       ),
-                                                      child: Icon(Icons.check_circle_rounded, size: 18, color: currentStatus == 'present' ? Colors.white : Colors.green),
+                                                      child: Icon(
+                                                          Icons
+                                                              .check_circle_rounded,
+                                                          size: 18,
+                                                          color: currentStatus ==
+                                                                  'present'
+                                                              ? Colors.white
+                                                              : Colors.green),
                                                     ),
                                                   ),
-                                                  const SizedBox(width: 8),
+                                                  const SizedBox(width: 6),
 
+                                                  // زر الغياب ❌
                                                   InkWell(
                                                     onTap: () {
-                                                      if (currentStatus == 'absent') {
-                                                        setState(() => attendanceData.remove(studentId));
+                                                      if (currentStatus ==
+                                                          'absent') {
+                                                        setState(() =>
+                                                            attendanceData
+                                                                .remove(studentId));
                                                       } else {
-                                                        _showAbsenceDialog(studentId, student['name'] ?? 'طالب', isDark);
+                                                        _showAbsenceDialog(
+                                                            studentId,
+                                                            student['name'] ??
+                                                                'طالب',
+                                                            isDark);
                                                       }
                                                     },
-                                                    borderRadius: BorderRadius.circular(12),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
                                                     child: Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 9,
+                                                          vertical: 8),
                                                       decoration: BoxDecoration(
-                                                        color: currentStatus == 'absent' ? (absenceType == 'بعذر' ? Colors.orange : Colors.redAccent) : Colors.transparent,
-                                                        borderRadius: BorderRadius.circular(12),
-                                                        border: Border.all(color: currentStatus == 'absent' ? (absenceType == 'بعذر' ? Colors.orange : Colors.redAccent) : (isDark ? Colors.white24 : Colors.black26)),
+                                                        color: currentStatus ==
+                                                                'absent'
+                                                            ? (absenceType ==
+                                                                    'بعذر'
+                                                                ? Colors.orange
+                                                                : Colors
+                                                                    .redAccent)
+                                                            : Colors.transparent,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(12),
+                                                        border: Border.all(
+                                                            color: currentStatus ==
+                                                                    'absent'
+                                                                ? (absenceType ==
+                                                                        'بعذر'
+                                                                    ? Colors
+                                                                        .orange
+                                                                    : Colors
+                                                                        .redAccent)
+                                                                : (isDark
+                                                                    ? Colors
+                                                                        .white24
+                                                                    : Colors
+                                                                        .black26)),
                                                       ),
-                                                      child: Icon(Icons.cancel_rounded, size: 18, color: currentStatus == 'absent' ? Colors.white : Colors.redAccent),
+                                                      child: Icon(
+                                                          Icons.cancel_rounded,
+                                                          size: 18,
+                                                          color: currentStatus ==
+                                                                  'absent'
+                                                              ? Colors.white
+                                                              : Colors
+                                                                  .redAccent),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+
+                                                  // زر العطلة الفورية 🌴
+                                                  Tooltip(
+                                                    message: "عطلة",
+                                                    child: InkWell(
+                                                      onTap: () {
+                                                        setState(() {
+                                                          if (isHoliday) {
+                                                            attendanceData
+                                                                .remove(
+                                                                    studentId);
+                                                          } else {
+                                                            attendanceData[
+                                                                    studentId] = {
+                                                              'status':
+                                                                  'holiday',
+                                                              'isHoliday': true,
+                                                              'isManual': true,
+                                                            };
+                                                          }
+                                                        });
+                                                      },
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                      child: Container(
+                                                        padding: const EdgeInsets
+                                                            .symmetric(
+                                                            horizontal: 9,
+                                                            vertical: 8),
+                                                        decoration: BoxDecoration(
+                                                          color: isHoliday
+                                                              ? accentGold
+                                                              : Colors
+                                                                  .transparent,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(12),
+                                                          border: Border.all(
+                                                              color: isHoliday
+                                                                  ? accentGold
+                                                                  : (isDark
+                                                                      ? Colors
+                                                                          .white24
+                                                                      : Colors
+                                                                          .black26)),
+                                                        ),
+                                                        child: Icon(
+                                                            Icons
+                                                                .beach_access_rounded,
+                                                            size: 18,
+                                                            color: isHoliday
+                                                                ? Colors.black
+                                                                : accentGold),
+                                                      ),
                                                     ),
                                                   ),
                                                 ],
@@ -911,7 +1327,6 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                                     },
                                   ),
                       ),
-
                       Padding(
                         padding: const EdgeInsets.all(20),
                         child: SizedBox(
@@ -920,16 +1335,29 @@ class _InitialAttendancePageState extends State<InitialAttendancePage> {
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: primaryColor,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18)),
                               elevation: 4,
                             ),
-                            onPressed: isSaving ? null : () => _saveAttendance(isDark),
+                            onPressed:
+                                isSaving ? null : () => _saveAttendance(isDark),
                             icon: isSaving
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                : const Icon(Icons.save_rounded, color: Colors.white),
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.save_rounded,
+                                    color: Colors.white),
                             label: Text(
-                              isSaving ? "جاري الحفظ..." : "حفظ التفقد المبدئي 🚀",
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
+                              isSaving
+                                  ? "جاري الحفظ..."
+                                  : "حفظ التفقد المبدئي 🚀",
+                              style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'Cairo',
+                                  color: Colors.white),
                             ),
                           ),
                         ),

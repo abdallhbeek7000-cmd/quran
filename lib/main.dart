@@ -2,16 +2,16 @@ import 'dart:ui';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; 
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; 
-import 'package:firebase_messaging/firebase_messaging.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:provider/provider.dart'; 
+import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:workmanager/workmanager.dart';
-import 'package:flutter/foundation.dart'; 
+import 'package:flutter/foundation.dart';
 
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -20,21 +20,26 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'firebase_options.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
-import 'pages/splash_screen.dart'; 
-import 'pages/update_checker.dart'; 
+import 'pages/splash_screen.dart';
+import 'pages/update_checker.dart';
 import 'pages/leave_requests_page.dart';
 import 'pages/supervisor_chat_page.dart'; // 💬 تم استيراد صفحة المحادثة
-import 'services/theme_provider.dart'; 
+import 'services/theme_provider.dart';
 import 'services/prayer_service.dart';
-import 'services/cycle_service.dart';  
-import 'models/cycle_model.dart';        
-import 'widgets/offline_wrapper.dart'; 
+import 'services/cycle_service.dart';
+import 'models/cycle_model.dart';
+import 'widgets/offline_wrapper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 const String syncTaskName = "sync_sessions_data_forced";
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+// 🔒 منع تكرار التوجيه لنفس الإشعار وحفظ التوجيه المعلق لحين انتهاء SplashScreen
+Map<String, dynamic>? _pendingNotificationData;
+String? _lastHandledSignature;
+DateTime? _lastHandledTime;
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -105,16 +110,47 @@ Future<void> _showGroupedLocalNotification(RemoteMessage message) async {
   );
 }
 
-// 🚀 دالة التوجيه الذكية والجديدة للإشعارات
-Future<void> _navigateToTargetPage(Map<String, dynamic> data) async {
+// 🚀 دالة التوجيه الذكية والجديدة للإشعارات (محمية من رجوع SplashScreen أو التكرار)
+Future<void> _navigateToTargetPage(Map<String, dynamic> data, {bool fromStartup = false}) async {
+  if (data.isEmpty) return;
+
   String type = data['type']?.toString().toLowerCase() ?? '';
+  String requestId = data['requestId']?.toString() ?? '';
   String studentId = data['chatStudentId']?.toString() ?? data['studentId']?.toString() ?? '';
+
+  String signature = '$type|$requestId|$studentId';
+  final now = DateTime.now();
+  if (_lastHandledSignature == signature &&
+      _lastHandledTime != null &&
+      now.difference(_lastHandledTime!).inSeconds < 3) {
+    return;
+  }
+  _lastHandledSignature = signature;
+  _lastHandledTime = now;
+
+  // إذا كان الفتح من إغلاق كامل (SplashScreen)، ننتظر قليلاً حتى يكتمل تحميل الشاشة الرئيسية ثم نفتح الصفحة فوقها
+  if (fromStartup) {
+    _pendingNotificationData = Map<String, dynamic>.from(data);
+    await Future.delayed(const Duration(milliseconds: 1400));
+    if (_pendingNotificationData == null) return;
+    data = _pendingNotificationData!;
+    _pendingNotificationData = null;
+    type = data['type']?.toString().toLowerCase() ?? '';
+    studentId = data['chatStudentId']?.toString() ?? data['studentId']?.toString() ?? '';
+  } else {
+    _pendingNotificationData = null;
+  }
+
+  final navState = navigatorKey.currentState;
+  if (navState == null) {
+    _pendingNotificationData = Map<String, dynamic>.from(data);
+    return;
+  }
 
   if (type == 'chat' && studentId.isNotEmpty) {
     try {
-      // 1. جلب بيانات الطالب لضمان الاسم والمشرف التابع له
       var studentDoc = await FirebaseFirestore.instance.collection('students').doc(studentId).get();
-      
+
       String studentName = "الطالب";
       String supervisorId = data['supervisorId']?.toString() ?? '';
 
@@ -128,7 +164,6 @@ Future<void> _navigateToTargetPage(Map<String, dynamic> data) async {
 
       String chatId = studentId;
 
-      // 2. الفتح المباشر لصفحة الشات
       navigatorKey.currentState?.push(
         MaterialPageRoute(
           builder: (_) => SupervisorChatPage(
@@ -162,15 +197,15 @@ void main() async {
   };
 
   PlatformDispatcher.instance.onError = (error, stack) {
-    return true; 
+    return true;
   };
 
   WidgetsFlutterBinding.ensureInitialized();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent, 
-      statusBarIconBrightness: Brightness.dark, 
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
     ),
   );
 
@@ -198,14 +233,14 @@ void main() async {
     try {
       const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
       final InitializationSettings initSettings = InitializationSettings(android: initializationSettingsAndroid);
-      
+
       await flutterLocalNotificationsPlugin.initialize(
         initSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
           if (response.payload != null && response.payload!.isNotEmpty) {
             try {
               Map<String, dynamic> data = jsonDecode(response.payload!);
-              _navigateToTargetPage(data);
+              _navigateToTargetPage(data, fromStartup: false);
             } catch (_) {}
           }
         },
@@ -224,13 +259,13 @@ void main() async {
     try {
       await Workmanager().initialize(
         callbackDispatcher,
-        isInDebugMode: false, 
+        isInDebugMode: false,
       );
 
       await Workmanager().registerPeriodicTask(
         "periodic_sync_id_01",
         syncTaskName,
-        frequency: const Duration(minutes: 15), 
+        frequency: const Duration(minutes: 15),
         constraints: Constraints(networkType: NetworkType.connected),
       );
     } catch (_) {}
@@ -274,10 +309,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
+
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       _setupInteractedMessage();
-      
+
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         _showGroupedLocalNotification(message);
       });
@@ -303,6 +338,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _triggerInstantSyncIfOnline();
+      if (_pendingNotificationData != null) {
+        final pending = _pendingNotificationData!;
+        _pendingNotificationData = null;
+        _navigateToTargetPage(pending, fromStartup: false);
+      }
     }
   }
 
@@ -320,25 +360,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
       if (initialMessage != null) {
-        _handleNotificationTap(initialMessage);
+        _navigateToTargetPage(initialMessage.data, fromStartup: true);
       }
 
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+      FirebaseMessaging.onMessageOpenedApp.listen((message) => _handleNotificationTap(message));
     } catch (_) {}
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    _navigateToTargetPage(message.data);
+    _navigateToTargetPage(message.data, fromStartup: false);
   }
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    const Color primaryColor = Color(0xff425c75); 
-    const Color accentGold = Color(0xffd4af37); 
+    const Color primaryColor = Color(0xff425c75);
+    const Color accentGold = Color(0xffd4af37);
 
     return MaterialApp(
-      navigatorKey: navigatorKey, 
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: "معهد الشيخ سعيد العبدالله",
       themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
@@ -349,23 +389,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [
-        Locale('ar', 'AE'), 
+        Locale('ar', 'AE'),
       ],
-      locale: const Locale('ar', 'AE'), 
+      locale: const Locale('ar', 'AE'),
 
       theme: ThemeData(
-        fontFamily: 'Cairo', 
+        fontFamily: 'Cairo',
         brightness: Brightness.light,
         primaryColor: primaryColor,
-        scaffoldBackgroundColor: const Color(0xfff1f5f9), 
+        scaffoldBackgroundColor: const Color(0xfff1f5f9),
         colorScheme: const ColorScheme.light(
           primary: primaryColor,
           secondary: accentGold,
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent, 
+          backgroundColor: Colors.transparent,
           foregroundColor: primaryColor,
-          centerTitle: true, 
+          centerTitle: true,
           elevation: 0,
         ),
         dialogTheme: DialogThemeData(
@@ -380,19 +420,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       ),
 
       darkTheme: ThemeData(
-        fontFamily: 'Cairo', 
+        fontFamily: 'Cairo',
         brightness: Brightness.dark,
         primaryColor: primaryColor,
-        scaffoldBackgroundColor: const Color(0xff121212), 
+        scaffoldBackgroundColor: const Color(0xff121212),
         colorScheme: const ColorScheme.dark(
           primary: accentGold,
           secondary: primaryColor,
         ),
         cardTheme: const CardThemeData(
-          color: Color(0xff1e293b), 
+          color: Color(0xff1e293b),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent, 
+          backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
           centerTitle: true,
           elevation: 0,
@@ -409,13 +449,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       ),
 
       home: const SplashScreen(),
-        
+
       onGenerateRoute: (settings) {
         if (settings.name == '/home') {
           final args = (settings.arguments as Map<String, dynamic>?) ?? {'uid': '', 'role': ''};
-          
+
           return MaterialPageRoute(
-            builder: (context) => OfflineWrapper( 
+            builder: (context) => OfflineWrapper(
               child: HomePage(
                 uid: args['uid'],
                 role: args['role'],
